@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -11,8 +12,11 @@ export default function Home() {
             Listen to your EPUBs, PDFs, and text files with natural voices. No
             subscriptions. No locked features. Just your books, read aloud.
           </p>
-          <span className="button">Coming soon to the App Store</span>
-          <small className="subnote">Made for iPhone · iOS 18 or later</small>
+          <div className="hero-actions">
+            <Link className="button" href="/reader">Open FreeReader</Link>
+            <span className="store-note">Coming soon to the App Store</span>
+          </div>
+          <small className="subnote">Now in your browser · iPhone app coming soon</small>
         </div>
         <div className="hero-shot" aria-label="FreeReader app preview">
           <Image

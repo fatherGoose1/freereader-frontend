@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   description:
     "FreeReader turns EPUBs, PDFs, and text files into audiobooks on your iPhone, for free.",
   icons: { icon: "/icon.svg" },
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({

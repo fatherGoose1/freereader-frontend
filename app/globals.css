@@ -5,3 +5,7 @@
 .hero-shot img{width:100%;height:auto;border-radius:52px}
 .hero-shot::before{content:"";position:absolute;inset:-8% -14%;background:radial-gradient(closest-side,rgba(242,154,114,.35),rgba(242,154,114,0) 72%);z-index:-1;pointer-events:none}
 @media(max-width:760px){.hero-shot{width:min(320px,88vw)}}
+.legal-callout{background:var(--cream);border:1px solid var(--line);border-left:4px solid var(--coral);border-radius:12px;padding:16px 20px;margin:26px 0 8px}
+.legal-callout strong{display:block;margin-bottom:6px}
+.legal-callout p{margin:0}
+.hero-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px}.hero-actions .button{margin-top:0}.store-note{color:var(--muted);font-size:13px;font-weight:650}

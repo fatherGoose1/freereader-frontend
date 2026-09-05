@@ -5,10 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --experimental-strip-types --test app/reader/*.test.ts"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "epubjs": "^0.3.93",
+    "mammoth": "^1.12.2",
     "next": "^16.2.10",
+    "onnxruntime-web": "^1.29.0",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -17,5 +23,10 @@
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
     "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "epubjs": {
+      "@xmldom/xmldom": "^0.8.11"
+    }
   }
 }
