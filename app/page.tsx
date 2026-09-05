@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import CtaButton from "./components/CtaButton";
 
 export default function Home() {
   return (
@@ -13,7 +14,7 @@ export default function Home() {
             subscriptions. No locked features. Just your books, read aloud.
           </p>
           <div className="hero-actions">
-            <Link className="button" href="/reader">Open FreeReader</Link>
+            <CtaButton />
             <span className="store-note">Coming soon to the App Store</span>
           </div>
           <small className="subnote">Now in your browser · iPhone app coming soon</small>
