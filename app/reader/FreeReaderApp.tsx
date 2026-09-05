@@ -263,6 +263,7 @@ export default function FreeReaderApp() {
     if (!url.trim()) return;
     setBusy(true);
     setMessage("Trying the page directly in your browser...");
+    await new Promise((resolve) => setTimeout(resolve, 50));
     const started = Date.now();
     try {
       const { parsed, sourceUrl } = await parseWebLink(url);
@@ -777,7 +778,7 @@ export default function FreeReaderApp() {
         <div className={styles.actions}>
           <button onClick={() => openGutenbergBrowser()}>Browse Free Books</button>
           <button onClick={() => setPanel("url")}>Web Link</button>
-          <label className={styles.primaryAction}>+ Add Book
+          <label className={styles.primaryAction} title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)">+ Add Book
             <input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} />
           </label>
         </div>
@@ -801,7 +802,7 @@ export default function FreeReaderApp() {
           <span className={styles.sidebarLabel}>Add reading</span>
           <button onClick={() => openGutenbergBrowser()}><span className={styles.sidebarIcon}>G</span> Free Books</button>
           <button onClick={() => setPanel("url")}><span className={styles.sidebarIcon}>W</span> Web Link</button>
-          <label><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} /></label>
+          <label title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)"><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} /></label>
           <div className={styles.privacyNote}><strong>Private by design</strong><span>Books, reading positions, and audio stay in this browser.</span></div>
         </aside>
         <section className={styles.shelf}>
