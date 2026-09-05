@@ -897,7 +897,7 @@ export default function FreeReaderApp() {
             <span className={styles.kicker}>Import from Web</span><h2>Import reading from the web</h2>
             <p>Paste an article URL. FreeReader tries the page directly first and uses the configured article fallback only if browser access is blocked.</p>
             <label className={styles.fieldLabel}>Article URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
-            <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>Import link</button></div>
+            <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Import link"}</button></div>
             <div className={styles.modalPrivacy}>Imported content is processed and stored only on this device.</div>
           </form>
         </div>

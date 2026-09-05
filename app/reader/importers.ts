@@ -299,10 +299,15 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
     "subscribe to continue", "subscription required", "already a subscriber", "sign in to continue",
     "log in to continue", "register to continue", "this content is for subscribers", "purchase a subscription",
   ].some((phrase) => bodyText.toLowerCase().includes(phrase))) throw new Error("This article appears to require a login or subscription.");
+  const embedTitle = sourceUrl.hostname === "embed.reddit.com"
+    ? normalize(document.querySelector("shreddit-embed-title")?.textContent ?? "")
+    : "";
   const readable = new Readability(document, { charThreshold: 200 }).parse();
   if (!readable?.content) throw new Error("The page does not contain enough readable article text.");
+  const title = embedTitle
+    || normalize(readable.title ?? "")
+    || sourceUrl.hostname.replace(/^www\./, "");
   const article = new DOMParser().parseFromString(readable.content, "text/html");
-  const title = normalize(readable.title ?? "") || sourceUrl.hostname.replace(/^www\./, "");
   const builder = new BookBuilder();
   builder.chapter(title);
   let previous = "";
@@ -347,8 +352,31 @@ export async function parseFile(file: File): Promise<ParsedBook> {
   return parsed;
 }
 
+function contentUrl(url: URL): URL {
+  const transformed = new URL(url.toString());
+  const host = transformed.hostname.toLowerCase();
+  const segments = transformed.pathname.split("/").filter(Boolean);
+  if (
+    (host === "reddit.com" || host.endsWith(".reddit.com"))
+    && host !== "embed.reddit.com"
+    && segments.includes("comments")
+  ) {
+    transformed.protocol = "https:";
+    transformed.hostname = "embed.reddit.com";
+    transformed.search = "";
+    transformed.hash = "";
+    return transformed;
+  }
+  if (host === "github.com" && segments.length >= 5 && segments[2] === "blob") {
+    transformed.searchParams.delete("raw");
+    transformed.searchParams.set("raw", "1");
+    transformed.hash = "";
+  }
+  return transformed;
+}
+
 export async function parseWebLink(rawUrl: string): Promise<{ parsed: ParsedBook; sourceUrl: string }> {
-  const sourceUrl = new URL(rawUrl.includes("://") ? rawUrl : `https://${rawUrl}`);
+  const sourceUrl = contentUrl(new URL(rawUrl.includes("://") ? rawUrl : `https://${rawUrl}`));
   if (!/^https?:$/.test(sourceUrl.protocol) || sourceUrl.username || sourceUrl.password) throw new Error("Enter a valid public web address.");
   try {
     const response = await fetch(sourceUrl, { headers: { Accept: "text/html,text/markdown,text/plain" } });

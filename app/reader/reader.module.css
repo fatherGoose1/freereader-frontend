@@ -359,6 +359,7 @@
   animation: addSpin .7s linear infinite;
 }
 @keyframes addSpin { to { transform: rotate(360deg); } }
+.primaryAction .addSpinner { border-color: rgba(255, 255, 255, .4); border-top-color: #fff; }
 
 .readerTop {
   position: sticky;
