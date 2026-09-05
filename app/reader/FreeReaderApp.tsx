@@ -18,6 +18,7 @@ import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { synthesize, VOICES, type Voice } from "./tts";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
+import posthog from "posthog-js";
 import styles from "./reader.module.css";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | null;
@@ -195,6 +196,7 @@ export default function FreeReaderApp() {
 
   useEffect(() => {
     recordTelemetry("app_launch");
+    posthog.capture("app_launched");
     Promise.all([listBooks(), listFolders()])
       .then(([storedBooks, storedFolders]) => {
         setBooks(storedBooks);
@@ -221,6 +223,13 @@ export default function FreeReaderApp() {
         ...documentProperties(book),
         duration_seconds: (Date.now() - started) / 1000,
       });
+      posthog.capture("import_completed", {
+        file_type: book.format,
+        file_size_bytes: book.size,
+        block_count: book.blocks.length,
+        chapter_count: book.chapters.length,
+        duration_seconds: (Date.now() - started) / 1000,
+      });
       if (gutenbergId) {
         recordTelemetry("gutenberg_import_completed", {
           ...documentProperties(book),
@@ -238,6 +247,13 @@ export default function FreeReaderApp() {
         error_category: failureCategory(error),
         duration_seconds: (Date.now() - started) / 1000,
       });
+      posthog.capture("import_failed", {
+        file_type: fileTypeOf(file.name),
+        file_size_bytes: file.size,
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
     } finally {
       setBusy(false);
     }
@@ -267,6 +283,14 @@ export default function FreeReaderApp() {
         ...documentProperties(book),
         duration_seconds: (Date.now() - started) / 1000,
       });
+      posthog.capture("import_completed", {
+        file_type: book.format,
+        file_size_bytes: book.size,
+        block_count: book.blocks.length,
+        chapter_count: book.chapters.length,
+        source: "url",
+        duration_seconds: (Date.now() - started) / 1000,
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The link could not be imported.");
       recordTelemetry("import_failed", {
@@ -274,6 +298,12 @@ export default function FreeReaderApp() {
         error_category: failureCategory(error),
         duration_seconds: (Date.now() - started) / 1000,
       });
+      posthog.capture("import_failed", {
+        file_type: "html",
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
     } finally {
       setBusy(false);
     }
@@ -282,7 +312,10 @@ export default function FreeReaderApp() {
   async function searchGutenberg(search = query, bookshelfId = category) {
     setBusy(true);
     setMessage("Loading Project Gutenberg directly...");
-    if (search.trim()) recordTelemetry("gutenberg_search", { query_length: search.trim().length });
+    if (search.trim()) {
+      recordTelemetry("gutenberg_search", { query_length: search.trim().length });
+      posthog.capture("gutenberg_search", { query_length: search.trim().length });
+    }
     try {
       setGutenberg(await browseGutenberg(search, search.trim() ? undefined : bookshelfId));
       setMessage("Project Gutenberg results are fetched directly and are not stored until imported.");
@@ -307,6 +340,11 @@ export default function FreeReaderApp() {
         file_size_bytes: file.size,
         duration_seconds: (Date.now() - started) / 1000,
       });
+      posthog.capture("gutenberg_book_imported", {
+        gutenberg_id: book.id,
+        file_size_bytes: file.size,
+        duration_seconds: (Date.now() - started) / 1000,
+      });
       await importDocument(file, `gutenberg:${book.id}`, book.id);
     } catch (error) {
       recordTelemetry("gutenberg_download_failed", {
@@ -314,6 +352,7 @@ export default function FreeReaderApp() {
         error_category: failureCategory(error),
         duration_seconds: (Date.now() - started) / 1000,
       });
+      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
       setMessage(error instanceof Error ? error.message : "The Gutenberg book could not be imported.");
       setBusy(false);
     } finally {
@@ -408,6 +447,12 @@ export default function FreeReaderApp() {
           offset_seconds: offset,
           speed: book.position.speed,
         });
+        posthog.capture("playback_started", {
+          file_type: book.format,
+          block_count: book.blocks.length,
+          chapter_count: book.chapters.length,
+          speed: book.position.speed,
+        });
       }
       const info = audioTelemetry.current;
       if (info && !playableBooks.current.has(book.id)) {
@@ -422,6 +467,13 @@ export default function FreeReaderApp() {
           time_to_first_playable_seconds: (Date.now() - playStarted) / 1000,
           spoken_seconds: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : info.duration,
           cache_bytes: blob.size,
+        });
+        posthog.capture("first_playable_audio", {
+          model: "supertonic_3",
+          ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
+          inference_steps: steps,
+          audio_source: info.cached ? "cache" : "generated",
+          time_to_first_playable_seconds: (Date.now() - playStarted) / 1000,
         });
       }
     } catch (error) {
@@ -538,15 +590,26 @@ export default function FreeReaderApp() {
     setOrganizingBook(null);
     setMessage(`${book.title} was removed from this browser.`);
     recordTelemetry("document_deleted", { document_id: book.id });
+    posthog.capture("document_deleted", {
+      file_type: book.format,
+      file_size_bytes: book.size,
+    });
   }
 
   function openBook(book: LibraryBook) {
     setSelected(book);
     recordTelemetry("document_opened", documentProperties(book));
+    posthog.capture("document_opened", {
+      file_type: book.format,
+      file_size_bytes: book.size,
+      block_count: book.blocks.length,
+      chapter_count: book.chapters.length,
+    });
   }
 
   function openGutenbergBrowser() {
     recordTelemetry("gutenberg_browse_opened");
+    posthog.capture("gutenberg_browse_opened");
     setPanel("gutenberg");
     if (!gutenberg.length) void searchGutenberg("");
   }
@@ -674,18 +737,18 @@ export default function FreeReaderApp() {
           <div className={styles.voicePopover}>
             <div className={styles.settingsTitle}><strong>Voice Settings</strong><button onClick={() => setPanel(null)}>Done</button></div>
             <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
-              <select value={voice} onChange={(event) => { audioRef.current?.pause(); setPlaying(false); setVoice(event.target.value as Voice); audioBlock.current = null; }}>
+              <select value={voice} onChange={(event) => { audioRef.current?.pause(); setPlaying(false); setVoice(event.target.value as Voice); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
                 {VOICES.map((value) => <option key={value} value={value}>{voiceNames[value]}</option>)}
               </select>
             </label>
             <div className={styles.qualitySetting}><span>Speaking Rate</span><div>
               {[[0.8, "0.8x"], [0.9, "0.9x"], [1, "1x"], [1.1, "1.1x"], [1.2, "1.2x"]].map(([value, label]) => (
-                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { audioRef.current?.pause(); setPlaying(false); setSpeechRate(Number(value)); audioBlock.current = null; }}>{label}</button>
+                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { audioRef.current?.pause(); setPlaying(false); setSpeechRate(Number(value)); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
               ))}
             </div></div>
             <div className={styles.qualitySetting}><span>Quality</span><div>
               {[[5, "Low"], [8, "Medium"], [12, "High"]].map(([value, label]) => (
-                <button key={value} className={steps === value ? styles.qualityActive : ""} onClick={() => { audioRef.current?.pause(); setPlaying(false); setSteps(Number(value)); audioBlock.current = null; }}>{label}</button>
+                <button key={value} className={steps === value ? styles.qualityActive : ""} onClick={() => { audioRef.current?.pause(); setPlaying(false); setSteps(Number(value)); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "quality_steps", value: Number(value) }); }}>{label}</button>
               ))}
             </div></div>
             <small>Higher quality takes longer to generate. Changes apply to new passages.</small>
