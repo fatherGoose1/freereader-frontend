@@ -17,6 +17,7 @@ import {
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { synthesize, VOICES, type Voice } from "./tts";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
+import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
 import styles from "./reader.module.css";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | null;
@@ -30,6 +31,34 @@ const gutenbergCategories = [
   [649, "Classics"], [644, "Adventure"], [640, "Mystery"], [639, "Romance"],
   [638, "Sci-Fi & Fantasy"], [636, "Young Readers"], [643, "Biographies"], [637, "Poetry"],
 ] as const;
+
+function failureCategory(error: unknown): string {
+  const text = error instanceof Error ? error.message.toLowerCase() : "";
+  if (/login|subscription|private|restricted/.test(text)) return "restricted";
+  if (/timeout/.test(text)) return "timeout";
+  if (/larger|limit|too large/.test(text)) return "file_too_large";
+  if (/storage/.test(text)) return "storage";
+  if (/no readable|not contain enough|empty/.test(text)) return "insufficient_content";
+  if (/choose an|enter a valid|unsupported|could not be imported|could not be reached/.test(text)) return "unsupported";
+  if (/fetch|network|unavailable|failed \(/.test(text)) return "network";
+  if (/parse|readable text|invalid/.test(text)) return "conversion";
+  return "unknown";
+}
+
+function fileTypeOf(name: string): string {
+  const extension = name.split(".").pop()?.toLowerCase() ?? "";
+  return ["epub", "pdf", "txt", "docx", "html", "md"].includes(extension) ? extension : "txt";
+}
+
+function documentProperties(book: LibraryBook): TelemetryProperties {
+  return {
+    document_id: book.id,
+    file_type: book.format,
+    file_size_bytes: book.size,
+    block_count: book.blocks.length,
+    chapter_count: book.chapters.length,
+  };
+}
 
 function wordCount(book: LibraryBook): number {
   return book.blocks.reduce((total, block) => total + block.text.split(/\s+/).length, 0);
@@ -123,6 +152,10 @@ export default function FreeReaderApp() {
   const audioUrl = useRef<string | null>(null);
   const pendingAudio = useRef(new Map<string, Promise<Blob>>());
   const generationEpoch = useRef(0);
+  const audioTelemetry = useRef<{ provider: string; cached: boolean; duration: number } | null>(null);
+  const playedBooks = useRef(new Set<string>());
+  const playableBooks = useRef(new Set<string>());
+  const audioProvider = useRef("");
   const PAGE_CHAR_LIMIT = 900;
   const [page, setPage] = useState({ bookId: "", start: 0 });
   const pageStarts = useMemo(() => {
@@ -161,6 +194,7 @@ export default function FreeReaderApp() {
   const lastPositionSave = useRef(0);
 
   useEffect(() => {
+    recordTelemetry("app_launch");
     Promise.all([listBooks(), listFolders()])
       .then(([storedBooks, storedFolders]) => {
         setBooks(storedBooks);
@@ -172,9 +206,10 @@ export default function FreeReaderApp() {
     return () => { if (audioUrl.current) URL.revokeObjectURL(audioUrl.current); };
   }, []);
 
-  async function importDocument(file: File, sourceIdentifier?: string) {
+  async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
     setMessage(`Reading ${file.name} locally...`);
+    const started = Date.now();
     try {
       const parsed = await parseFile(file);
       const book = makeBook(parsed, file.name, file.size, sourceIdentifier, activeFolderId ?? undefined);
@@ -182,8 +217,27 @@ export default function FreeReaderApp() {
       setBooks((current) => [book, ...current]);
       setPanel(null);
       setMessage(`${book.title} was added to your private library.`);
+      recordTelemetry("import_completed", {
+        ...documentProperties(book),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      if (gutenbergId) {
+        recordTelemetry("gutenberg_import_completed", {
+          ...documentProperties(book),
+          gutenberg_id: gutenbergId,
+          source: "project_gutenberg",
+          import_success: 1,
+          duration_seconds: (Date.now() - started) / 1000,
+        });
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The document could not be imported.");
+      recordTelemetry("import_failed", {
+        file_type: fileTypeOf(file.name),
+        file_size_bytes: file.size,
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
     } finally {
       setBusy(false);
     }
@@ -193,6 +247,7 @@ export default function FreeReaderApp() {
     if (!url.trim()) return;
     setBusy(true);
     setMessage("Trying the page directly in your browser...");
+    const started = Date.now();
     try {
       const { parsed, sourceUrl } = await parseWebLink(url);
       const snapshot = new Blob([parsed.blocks.map((block) => block.text).join("\n\n")], { type: "text/plain" });
@@ -208,8 +263,17 @@ export default function FreeReaderApp() {
       setPanel(null);
       setUrl("");
       setMessage(`${book.title} was saved for offline reading.`);
+      recordTelemetry("import_completed", {
+        ...documentProperties(book),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The link could not be imported.");
+      recordTelemetry("import_failed", {
+        file_type: "html",
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
     } finally {
       setBusy(false);
     }
@@ -218,6 +282,7 @@ export default function FreeReaderApp() {
   async function searchGutenberg(search = query, bookshelfId = category) {
     setBusy(true);
     setMessage("Loading Project Gutenberg directly...");
+    if (search.trim()) recordTelemetry("gutenberg_search", { query_length: search.trim().length });
     try {
       setGutenberg(await browseGutenberg(search, search.trim() ? undefined : bookshelfId));
       setMessage("Project Gutenberg results are fetched directly and are not stored until imported.");
@@ -229,13 +294,26 @@ export default function FreeReaderApp() {
   }
 
   async function importGutenberg(book: GutenbergBook) {
+    recordTelemetry("gutenberg_book_selected", { gutenberg_id: book.id });
     setBusy(true);
     setImportingBookId(book.id);
     setMessage(`Downloading ${book.title} directly from Project Gutenberg...`);
+    const started = Date.now();
+    recordTelemetry("gutenberg_download_started", { gutenberg_id: book.id });
     try {
       const file = await downloadGutenbergBook(book);
-      await importDocument(file, `gutenberg:${book.id}`);
+      recordTelemetry("gutenberg_download_completed", {
+        gutenberg_id: book.id,
+        file_size_bytes: file.size,
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      await importDocument(file, `gutenberg:${book.id}`, book.id);
     } catch (error) {
+      recordTelemetry("gutenberg_download_failed", {
+        gutenberg_id: book.id,
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
       setMessage(error instanceof Error ? error.message : "The Gutenberg book could not be imported.");
       setBusy(false);
     } finally {
@@ -264,7 +342,10 @@ export default function FreeReaderApp() {
   async function ensureAudio(book: LibraryBook, index: number): Promise<Blob> {
     const key = audioCacheKey(book, index);
     const cached = await getAudio(key);
-    if (cached) return cached;
+    if (cached) {
+      audioTelemetry.current = { provider: audioProvider.current, cached: true, duration: 0 };
+      return cached;
+    }
     const existing = pendingAudio.current.get(key);
     if (existing) return existing;
     const block = book.blocks[index];
@@ -276,7 +357,9 @@ export default function FreeReaderApp() {
         setMessage(status);
         setTtsProgress(undefined);
       }
-    }, block.isHeading, speechRate).then(async ({ blob }) => {
+    }, block.isHeading, speechRate).then(async ({ blob, duration, provider }) => {
+      audioProvider.current = provider;
+      audioTelemetry.current = { provider, cached: false, duration };
       await saveAudio(key, blob);
       return blob;
     }).finally(() => pendingAudio.current.delete(key));
@@ -301,6 +384,7 @@ export default function FreeReaderApp() {
     if (!audio || !book.blocks[index]) return;
     setBusy(true);
     setPlaying(true);
+    const playStarted = Date.now();
     try {
       const blob = await ensureAudio(book, index);
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
@@ -316,6 +400,30 @@ export default function FreeReaderApp() {
       const positioned = positionBook(book, index, offset);
       updateBook(positioned);
       await audio.play();
+      if (!playedBooks.current.has(book.id)) {
+        playedBooks.current.add(book.id);
+        recordTelemetry("playback_first_started", {
+          document_id: book.id,
+          block_index: index,
+          offset_seconds: offset,
+          speed: book.position.speed,
+        });
+      }
+      const info = audioTelemetry.current;
+      if (info && !playableBooks.current.has(book.id)) {
+        playableBooks.current.add(book.id);
+        recordTelemetry("first_playable_audio", {
+          document_id: book.id,
+          model: "supertonic_3",
+          ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
+          language: "en",
+          inference_steps: steps,
+          audio_source: info.cached ? "cache" : "generated",
+          time_to_first_playable_seconds: (Date.now() - playStarted) / 1000,
+          spoken_seconds: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : info.duration,
+          cache_bytes: blob.size,
+        });
+      }
     } catch (error) {
       setPlaying(false);
       setMessage(error instanceof Error ? error.message : "Local speech generation failed.");
@@ -429,6 +537,18 @@ export default function FreeReaderApp() {
     setBooks((current) => current.filter((value) => value.id !== book.id));
     setOrganizingBook(null);
     setMessage(`${book.title} was removed from this browser.`);
+    recordTelemetry("document_deleted", { document_id: book.id });
+  }
+
+  function openBook(book: LibraryBook) {
+    setSelected(book);
+    recordTelemetry("document_opened", documentProperties(book));
+  }
+
+  function openGutenbergBrowser() {
+    recordTelemetry("gutenberg_browse_opened");
+    setPanel("gutenberg");
+    if (!gutenberg.length) void searchGutenberg("");
   }
 
   async function createFolder() {
@@ -592,7 +712,7 @@ export default function FreeReaderApp() {
       <header className={styles.libraryHero}>
         <div><span className={styles.kicker}>On this device</span><h1>FreeReader</h1></div>
         <div className={styles.actions}>
-          <button onClick={() => { setPanel("gutenberg"); if (!gutenberg.length) void searchGutenberg(""); }}>Browse Free Books</button>
+          <button onClick={() => openGutenbergBrowser()}>Browse Free Books</button>
           <button onClick={() => setPanel("url")}>Web Link</button>
           <label className={styles.primaryAction}>+ Add Book
             <input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} />
@@ -616,7 +736,7 @@ export default function FreeReaderApp() {
             );
           })}
           <span className={styles.sidebarLabel}>Add reading</span>
-          <button onClick={() => { setPanel("gutenberg"); if (!gutenberg.length) void searchGutenberg(""); }}><span className={styles.sidebarIcon}>G</span> Free Books</button>
+          <button onClick={() => openGutenbergBrowser()}><span className={styles.sidebarIcon}>G</span> Free Books</button>
           <button onClick={() => setPanel("url")}><span className={styles.sidebarIcon}>W</span> Web Link</button>
           <label><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} /></label>
           <div className={styles.privacyNote}><strong>Private by design</strong><span>Books, reading positions, and audio stay in this browser.</span></div>
@@ -650,7 +770,7 @@ export default function FreeReaderApp() {
                 const progress = readingProgress(book);
                 return (
                   <article key={book.id} className={styles.bookCard}>
-                    <button className={styles.bookOpen} onClick={() => setSelected(book)}>
+                    <button className={styles.bookOpen} onClick={() => openBook(book)}>
                       <span className={`${styles.cover} ${styles[`cover${index % 4}`]}`}><small>{book.format}</small></span>
                       <span className={styles.bookInfo}>
                         <strong>{book.title}</strong>
