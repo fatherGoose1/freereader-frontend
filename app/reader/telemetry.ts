@@ -5,6 +5,8 @@ const APP_VERSION = "1.0.0";
 const APP_BUILD = "1";
 const QUEUE_KEY = "freereaderTelemetryQueue";
 const INSTALL_KEY = "freereaderTelemetryInstallationID";
+const SESSION_KEY = "freereaderTelemetrySession";
+const SESSION_DURATION_MS = 2 * 60 * 60 * 1_000;
 const MAX_QUEUE = 500;
 const BATCH_SIZE = 100;
 
@@ -39,6 +41,11 @@ interface QueuedEvent {
   device_model: string;
   hardware_model: string;
   properties: TelemetryProperties;
+}
+
+interface TelemetrySession {
+  id: string;
+  startedAt: number;
 }
 
 function persistentId(): string {
@@ -80,6 +87,7 @@ function saveQueue(events: QueuedEvent[]) {
 }
 
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let activeSession: TelemetrySession | null = null;
 
 export function recordTelemetry(eventName: string, properties: TelemetryProperties = {}) {
   if (!TRANSMITTED_EVENTS.has(eventName)) return;
@@ -87,7 +95,7 @@ export function recordTelemetry(eventName: string, properties: TelemetryProperti
   const queued: QueuedEvent = {
     event_id: crypto.randomUUID(),
     installation_id: persistentId(),
-    session_id: sessionIdentifier(),
+    session_id: sessionIdentifier(eventName === "app_launch"),
     event_name: eventName,
     schema_version: 1,
     occurred_at: new Date().toISOString(),
@@ -104,17 +112,32 @@ export function recordTelemetry(eventName: string, properties: TelemetryProperti
   flushTimer ??= setTimeout(() => { flushTimer = null; void flush(); }, 2_000);
 }
 
-function sessionIdentifier(): string {
+function persistedSession(): TelemetrySession | null {
   try {
-    let id = sessionStorage.getItem("freereaderTelemetrySessionID");
-    if (!id) {
-      id = crypto.randomUUID();
-      sessionStorage.setItem("freereaderTelemetrySessionID", id);
-    }
-    return id;
+    const stored = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as Partial<TelemetrySession> | null;
+    if (typeof stored?.id !== "string" || typeof stored.startedAt !== "number") return null;
+    return { id: stored.id, startedAt: stored.startedAt };
   } catch {
-    return crypto.randomUUID();
+    return null;
   }
+}
+
+function sessionIdentifier(appEntry = false): string {
+  if (activeSession && !appEntry) return activeSession.id;
+
+  const now = Date.now();
+  const previous = persistedSession() ?? activeSession;
+  const age = previous ? now - previous.startedAt : SESSION_DURATION_MS;
+  activeSession = previous && age >= 0 && age < SESSION_DURATION_MS
+    ? previous
+    : { id: crypto.randomUUID(), startedAt: now };
+
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(activeSession));
+  } catch {
+    // Keep the session in memory when persistent storage is unavailable.
+  }
+  return activeSession.id;
 }
 
 export function flushTelemetry() {
@@ -157,6 +180,10 @@ async function flush() {
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", flushTelemetry);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushTelemetry();
+    if (document.visibilityState === "hidden") {
+      flushTelemetry();
+    } else {
+      sessionIdentifier(true);
+    }
   });
 }
