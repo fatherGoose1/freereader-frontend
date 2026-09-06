@@ -1,12 +1,12 @@
 import type { LibraryBook, LibraryFolder } from "./types";
 
 const DATABASE = "freereader-web";
-const VERSION = 2;
+const VERSION = 3;
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       if (!request.result.objectStoreNames.contains("books")) {
         request.result.createObjectStore("books", { keyPath: "id" });
       }
@@ -15,6 +15,16 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!request.result.objectStoreNames.contains("folders")) {
         request.result.createObjectStore("folders", { keyPath: "id" });
+      }
+      if (event.oldVersion < 3) {
+        const cursorRequest = request.transaction!.objectStore("books").openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const book = cursor.value as LibraryBook;
+          cursor.update({ ...book, position: { ...book.position, speed: 1 } });
+          cursor.continue();
+        };
       }
     };
     request.onsuccess = () => resolve(request.result);
