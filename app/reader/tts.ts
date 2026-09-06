@@ -263,15 +263,18 @@ export function synthesize(
   status?: TtsStatus,
   isHeading = false,
   speechSpeed = 0.9,
-): Promise<{ blob: Blob; duration: number; provider: string }> {
+): Promise<{ blob: Blob; duration: number; provider: string; generationSeconds: number }> {
   const task = synthesisTail.then(async () => {
     const components = await getComponents(status);
     const style = await loadStyle(voice, components, status);
+    const generationStarted = performance.now();
     const result = await infer(components, style, text, "en", steps, isHeading, speechSpeed, status);
+    const blob = wavBlob(result.samples, components.config.ae.sample_rate);
     return {
-      blob: wavBlob(result.samples, components.config.ae.sample_rate),
+      blob,
       duration: result.duration,
       provider: components.provider,
+      generationSeconds: (performance.now() - generationStarted) / 1000,
     };
   });
   synthesisTail = task.catch(() => undefined);

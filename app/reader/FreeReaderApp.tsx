@@ -169,7 +169,12 @@ export default function FreeReaderApp() {
   const audioUrl = useRef<string | null>(null);
   const pendingAudio = useRef(new Map<string, Promise<Blob>>());
   const generationEpoch = useRef(0);
-  const audioTelemetry = useRef<{ provider: string; cached: boolean; duration: number } | null>(null);
+  const audioTelemetry = useRef<{
+    provider: string;
+    cached: boolean;
+    duration: number;
+    generationSeconds: number;
+  } | null>(null);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
   const audioProvider = useRef("");
@@ -399,7 +404,7 @@ export default function FreeReaderApp() {
     const key = audioCacheKey(book, index);
     const cached = await getAudio(key);
     if (cached) {
-      audioTelemetry.current = { provider: audioProvider.current, cached: true, duration: 0 };
+      audioTelemetry.current = { provider: audioProvider.current, cached: true, duration: 0, generationSeconds: 0 };
       return cached;
     }
     const existing = pendingAudio.current.get(key);
@@ -413,9 +418,9 @@ export default function FreeReaderApp() {
         setMessage(status);
         setTtsProgress(undefined);
       }
-    }, block.isHeading, speechRate).then(async ({ blob, duration, provider }) => {
+    }, block.isHeading, speechRate).then(async ({ blob, duration, provider, generationSeconds }) => {
       audioProvider.current = provider;
-      audioTelemetry.current = { provider, cached: false, duration };
+      audioTelemetry.current = { provider, cached: false, duration, generationSeconds };
       await saveAudio(key, blob);
       return blob;
     }).finally(() => pendingAudio.current.delete(key));
@@ -440,7 +445,6 @@ export default function FreeReaderApp() {
     if (!audio || !book.blocks[index]) return;
     setBusy(true);
     setPlaying(true);
-    const playStarted = Date.now();
     try {
       const blob = await ensureAudio(book, index);
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
@@ -481,7 +485,7 @@ export default function FreeReaderApp() {
           language: "en",
           inference_steps: steps,
           audio_source: info.cached ? "cache" : "generated",
-          time_to_first_playable_seconds: (Date.now() - playStarted) / 1000,
+          time_to_first_playable_seconds: info.generationSeconds,
           spoken_seconds: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : info.duration,
           cache_bytes: blob.size,
         });
@@ -490,7 +494,7 @@ export default function FreeReaderApp() {
           ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
           inference_steps: steps,
           audio_source: info.cached ? "cache" : "generated",
-          time_to_first_playable_seconds: (Date.now() - playStarted) / 1000,
+          time_to_first_playable_seconds: info.generationSeconds,
         });
       }
     } catch (error) {
