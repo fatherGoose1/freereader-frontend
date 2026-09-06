@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --experimental-strip-types --test app/reader/*.test.ts"
+    "test": "tsx --test app/reader/*.test.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -24,6 +24,8 @@
     "@types/node": "^22.15.29",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
+    "linkedom": "^0.18.13",
+    "tsx": "^4.23.13",
     "typescript": "^5.8.3"
   },
   "overrides": {

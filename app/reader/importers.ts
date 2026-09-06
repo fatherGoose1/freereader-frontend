@@ -247,7 +247,9 @@ async function parsePdf(buffer: ArrayBuffer, fallbackTitle: string): Promise<Par
     });
   }
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
+  if (typeof window !== "undefined") {
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
+  }
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
   const builder = new BookBuilder();
   for (let index = 1; index <= pdf.numPages; index += 1) {
@@ -325,8 +327,9 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
     "subscribe to continue", "subscription required", "already a subscriber", "sign in to continue",
     "log in to continue", "register to continue", "this content is for subscribers", "purchase a subscription",
   ].some((phrase) => bodyText.toLowerCase().includes(phrase))) throw new Error("This article appears to require a login or subscription.");
-  const embedTitle = sourceUrl.hostname === "embed.reddit.com"
-    ? normalize(document.querySelector("shreddit-embed-title")?.textContent ?? "")
+  const isRedditEmbed = sourceUrl.hostname === "embed.reddit.com";
+  const embedTitle = isRedditEmbed
+    ? normalize(document.querySelector("shreddit-embed-title, h1")?.textContent ?? "")
     : "";
   const readable = new Readability(document, { charThreshold: 200 }).parse();
   if (!readable?.content) throw new Error("The page does not contain enough readable article text.");
@@ -356,7 +359,9 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
     previous = text;
   }
   const readableCharacters = builder.blocks.reduce((total, block) => total + block.text.length, 0);
-  if (builder.blocks.length < 2 || readableCharacters < 200) throw new Error("The page does not contain enough readable article text.");
+  if (builder.blocks.length < (isRedditEmbed ? 1 : 2) || readableCharacters < (isRedditEmbed ? 20 : 200)) {
+    throw new Error("The page does not contain enough readable article text.");
+  }
   return { title, format: "html", chapters: builder.chapters, blocks: builder.blocks };
 }
 
@@ -394,8 +399,10 @@ function contentUrl(url: URL): URL {
     return transformed;
   }
   if (host === "github.com" && segments.length >= 5 && segments[2] === "blob") {
-    transformed.searchParams.delete("raw");
-    transformed.searchParams.set("raw", "1");
+    transformed.hostname = "raw.githubusercontent.com";
+    transformed.port = "";
+    transformed.pathname = `/${segments[0]}/${segments[1]}/${segments.slice(3).join("/")}`;
+    transformed.search = "";
     transformed.hash = "";
   }
   return transformed;
