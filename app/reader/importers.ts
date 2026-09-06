@@ -231,6 +231,21 @@ async function parseEpub(buffer: ArrayBuffer, fallbackTitle: string): Promise<Pa
 }
 
 async function parsePdf(buffer: ArrayBuffer, fallbackTitle: string): Promise<ParsedBook> {
+  if (!("withResolvers" in Promise)) {
+    Object.defineProperty(Promise, "withResolvers", {
+      configurable: true,
+      writable: true,
+      value: <T,>() => {
+        let resolve!: (value: T | PromiseLike<T>) => void;
+        let reject!: (reason?: unknown) => void;
+        const promise = new Promise<T>((promiseResolve, promiseReject) => {
+          resolve = promiseResolve;
+          reject = promiseReject;
+        });
+        return { promise, resolve, reject };
+      },
+    });
+  }
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;

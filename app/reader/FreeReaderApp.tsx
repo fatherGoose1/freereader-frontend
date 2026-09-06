@@ -21,7 +21,7 @@ import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./tel
 import posthog from "posthog-js";
 import styles from "./reader.module.css";
 
-type Panel = "voice" | "url" | "gutenberg" | "folder" | null;
+type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | null;
 
 const voiceNames: Record<Voice, string> = {
   M1: "Alex", M2: "James", M3: "Robert", M4: "Sam", M5: "Daniel",
@@ -164,6 +164,7 @@ export default function FreeReaderApp() {
   const [playing, setPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioBlock = useRef<number | null>(null);
   const audioUrl = useRef<string | null>(null);
@@ -804,9 +805,15 @@ export default function FreeReaderApp() {
         <div className={styles.actions}>
           <button onClick={() => openGutenbergBrowser()}>Browse Free Books</button>
           <button onClick={() => setPanel("url")}>Web Link</button>
-          <label className={styles.primaryAction} title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)">+ Add Book
+          <label className={`${styles.primaryAction} ${styles.desktopAddAction}`} title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)">+ Add Book
             <input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} />
           </label>
+          <button className={styles.mobileAddButton} aria-label="Add reading" onClick={() => setPanel("add")}>+</button>
+          <input ref={fileInputRef} hidden type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            if (file) void importDocument(file);
+          }} />
         </div>
       </header>
       <div className={styles.libraryLayout}>
@@ -881,6 +888,32 @@ export default function FreeReaderApp() {
           ) : null}
         </section>
       </div>
+      {panel === "add" && (
+        <div className={styles.modalBackdrop} onMouseDown={() => setPanel(null)}>
+          <div className={`${styles.modal} ${styles.addModal}`} onMouseDown={(event) => event.stopPropagation()}>
+            <span className={styles.kicker}>Add Reading</span>
+            <h2>What would you like to add?</h2>
+            <div className={`${styles.folderChoices} ${styles.addChoices}`}>
+              <button onClick={() => { setPanel(null); fileInputRef.current?.click(); }}>
+                <span className={styles.addChoiceIcon}>+</span>
+                <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or Markdown</small></span>
+                <i>&gt;</i>
+              </button>
+              <button onClick={() => openGutenbergBrowser()}>
+                <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}>G</span>
+                <span><strong>Free Books</strong><small>Browse Project Gutenberg</small></span>
+                <i>&gt;</i>
+              </button>
+              <button onClick={() => setPanel("url")}>
+                <span className={`${styles.addChoiceIcon} ${styles.webChoiceIcon}`}>W</span>
+                <span><strong>Web Link</strong><small>Import an article from the web</small></span>
+                <i>&gt;</i>
+              </button>
+            </div>
+            <div className={styles.modalActions}><button onClick={() => setPanel(null)}>Cancel</button></div>
+          </div>
+        </div>
+      )}
       {panel === "folder" && (
         <div className={styles.modalBackdrop} onMouseDown={() => setPanel(null)}>
           <form className={`${styles.modal} ${styles.folderModal}`} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void createFolder(); }}>
