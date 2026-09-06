@@ -33,6 +33,7 @@ export interface LibraryBook {
   chapters: Chapter[];
   blocks: TextBlock[];
   position: ReadingPosition;
+  cover?: Blob;
 }
 
 export interface LibraryFolder {
@@ -49,6 +50,7 @@ export interface ParsedBook {
   format: DocumentFormat;
   chapters: Chapter[];
   blocks: TextBlock[];
+  cover?: Blob;
 }
 
 export interface GutenbergBook {

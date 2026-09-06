@@ -70,6 +70,22 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
 }
 
+function BookCover({ book, index }: { book: LibraryBook; index: number }) {
+  const [source, setSource] = useState<string>();
+  useEffect(() => {
+    if (!book.cover) {
+      setSource(undefined);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(book.cover);
+    setSource(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [book.cover]);
+  return source
+    ? <img className={styles.coverImage} src={source} alt="" />
+    : <span className={`${styles.cover} ${styles[`cover${index % 4}`]}`}><small>{book.format}</small></span>;
+}
+
 function readingProgress(book: LibraryBook, fractionWithinBlock = 0): number {
   const total = wordCount(book);
   if (!total) return 0;
@@ -835,7 +851,7 @@ export default function FreeReaderApp() {
                 return (
                   <article key={book.id} className={styles.bookCard}>
                     <button className={styles.bookOpen} onClick={() => openBook(book)}>
-                      <span className={`${styles.cover} ${styles[`cover${index % 4}`]}`}><small>{book.format}</small></span>
+                      <BookCover book={book} index={index} />
                       <span className={styles.bookInfo}>
                         <strong>{book.title}</strong>
                         {book.author && <span>{book.author}</span>}

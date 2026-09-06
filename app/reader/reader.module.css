@@ -225,6 +225,14 @@
   box-shadow: inset 5px 0 rgba(0, 0, 0, .08), 0 3px 7px rgba(88, 86, 214, .2);
 }
 .cover small { font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.coverImage {
+  flex: none;
+  width: 46px;
+  height: 62px;
+  object-fit: cover;
+  border-radius: 7px;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, .2);
+}
 .cover1 { background: linear-gradient(145deg, #a16ad1, #7041a4); }
 .cover2 { background: linear-gradient(145deg, #429aa0, #247178); }
 .cover3 { background: linear-gradient(145deg, #d27a5b, #a34e33); }

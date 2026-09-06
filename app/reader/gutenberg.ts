@@ -31,12 +31,13 @@ export async function browseGutenberg(query = "", bookshelfId?: number): Promise
     const id = normalizedDetail?.match(/\/(\d+)\.opds/)?.[1];
     if (!id || !normalizedDetail) return [];
     const thumbnail = links.find((link) => link.getAttribute("rel")?.endsWith("/thumbnail"))?.getAttribute("href");
+    const canonicalCover = safeUrl(`/cache/epub/${id}/pg${id}.cover.small.jpg`);
     return [{
       id,
       title: elementText(entry, "title"),
       author: elementText(entry, "content") || undefined,
       detailUrl: normalizedDetail,
-      coverUrl: thumbnail ? safeUrl(thumbnail, response.url) : undefined,
+      coverUrl: (thumbnail && safeUrl(thumbnail, response.url)) || canonicalCover,
     }];
   });
 }
@@ -51,7 +52,7 @@ export async function downloadGutenbergBook(book: GutenbergBook): Promise<File> 
       && link.getAttribute("type") === "application/epub+zip",
   );
   candidates.sort((a, b) => {
-    const rank = (element: Element) => /noimages/i.test(element.getAttribute("href") ?? "") ? 0 : 1;
+    const rank = (element: Element) => /\.images/i.test(element.getAttribute("href") ?? "") ? 0 : 1;
     return rank(a) - rank(b);
   });
   const epubUrl = candidates[0]?.getAttribute("href");

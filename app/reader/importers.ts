@@ -189,6 +189,16 @@ async function parseEpub(buffer: ArrayBuffer, fallbackTitle: string): Promise<Pa
   const book = ePub(buffer);
   await book.ready;
   const metadata = await book.loaded.metadata;
+  let cover: Blob | undefined;
+  try {
+    const coverUrl = await book.coverUrl();
+    if (coverUrl) {
+      const response = await fetch(coverUrl);
+      if (response.ok) cover = await response.blob();
+    }
+  } catch {
+    // A missing or malformed cover should not prevent the book from importing.
+  }
   const builder = new BookBuilder();
   const sections: Section[] = [];
   book.spine.each((item: Section) => sections.push(item));
@@ -216,6 +226,7 @@ async function parseEpub(buffer: ArrayBuffer, fallbackTitle: string): Promise<Pa
     format: "epub",
     chapters: builder.chapters,
     blocks: builder.blocks,
+    cover,
   };
 }
 
