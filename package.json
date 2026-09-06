@@ -14,7 +14,7 @@
     "mammoth": "^1.12.2",
     "next": "^16.2.10",
     "onnxruntime-web": "^1.29.0",
-    "pdfjs-dist": "^6.3.289",
+    "pdfjs-dist": "4.8.69",
     "posthog-js": "^1.427.2",
     "posthog-node": "^5.51.6",
     "react": "^19.0.0",

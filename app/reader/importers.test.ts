@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import test, { before } from "node:test";
+import { Worker } from "node:worker_threads";
 import { DOMParser as LinkeDOMParser } from "linkedom";
 
 const JANE_EYRE = "119-2014-04-09-Jane Eyre.pdf";
@@ -86,6 +89,27 @@ function mockSuccessfulFetch(contentType: string, body: string, calls: string[])
     else Reflect.deleteProperty(globalThis, "fetch");
   };
 }
+
+test("loads the legacy PDF worker without native Promise.withResolvers", async () => {
+  const workerPath = createRequire(import.meta.url).resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  const script = `
+    const { parentPort } = require("node:worker_threads");
+    delete Promise.withResolvers;
+    import(${JSON.stringify(pathToFileURL(workerPath).toString())})
+      .then(() => parentPort.postMessage(typeof Promise.withResolvers))
+      .catch((error) => { throw error; });
+  `;
+  const worker = new Worker(script, { eval: true });
+  try {
+    const result = await new Promise<string>((resolve, reject) => {
+      worker.once("message", resolve);
+      worker.once("error", reject);
+    });
+    assert.equal(result, "function");
+  } finally {
+    await worker.terminate();
+  }
+});
 
 test("imports the Jane Eyre PDF without native Promise.withResolvers", { timeout: 30_000 }, async () => {
   const withResolversDescriptor = Object.getOwnPropertyDescriptor(Promise, "withResolvers");
