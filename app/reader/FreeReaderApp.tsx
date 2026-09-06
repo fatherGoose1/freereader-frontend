@@ -411,9 +411,12 @@ export default function FreeReaderApp() {
     if (existing) return existing;
     const block = book.blocks[index];
     const promise = synthesize(block.text, voice, steps, (status, progress) => {
-      if (status.startsWith("Downloading voice model") || status.startsWith("Preparing voice model")) {
+      if (status.startsWith("Downloading voice model")) {
         setMessage(status);
-        setTtsProgress(progress);
+        setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
+      } else if (status.startsWith("Preparing voice model")) {
+        setMessage(status);
+        setTtsProgress(undefined);
       } else if (status.startsWith("Voice model ready")) {
         setMessage(status);
         setTtsProgress(undefined);
@@ -423,7 +426,10 @@ export default function FreeReaderApp() {
       audioTelemetry.current = { provider, cached: false, duration, generationSeconds };
       await saveAudio(key, blob);
       return blob;
-    }).finally(() => pendingAudio.current.delete(key));
+    }).finally(() => {
+      setTtsProgress(undefined);
+      pendingAudio.current.delete(key);
+    });
     pendingAudio.current.set(key, promise);
     return promise;
   }
