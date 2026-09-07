@@ -1,4 +1,6 @@
-import { getLocalFile, streamToLocalFile } from "./storage";
+import { getLocalFile, putLocalFile } from "./storage";
+import { loadModelSessions } from "./modelSessions";
+import { downloadModel } from "./modelDownload";
 import { normalizeForSpeech } from "./speechText";
 
 const REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
@@ -51,22 +53,15 @@ let synthesisTail: Promise<unknown> = Promise.resolve();
 
 async function cachedAsset(path: string, expectedSize: number, status?: TtsStatus): Promise<Blob> {
   const cachePath = `models/${REVISION}/${path}`;
+  status?.(`Checking model cache: ${path}`);
   const local = await getLocalFile(cachePath);
   if (local?.size === expectedSize) return local;
-  const response = await fetch(`${MODEL_ROOT}/${path}?download=true`);
-  if (!response.ok) throw new Error(`Model download failed (${response.status})`);
-  let downloaded = 0;
-  const tracker = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      downloaded += chunk.byteLength;
-      status?.("Downloading voice model", downloaded / expectedSize);
-      controller.enqueue(chunk);
-    },
-  });
-  const tracked = response.body ? new Response(response.body.pipeThrough(tracker)) : response;
-  const stored = await streamToLocalFile(cachePath, tracked);
-  if (stored.size !== expectedSize) throw new Error(`Incomplete model asset: ${path}`);
-  return stored;
+  status?.(`Downloading voice model: ${path}`, 0);
+  const blob = await downloadModel(`${MODEL_ROOT}/${path}?download=true`, expectedSize,
+    (progress) => status?.(`Downloading voice model: ${path}`, progress));
+  status?.(`Caching voice model: ${path}`, 1);
+  await putLocalFile(cachePath, blob);
+  return blob;
 }
 
 async function jsonAsset<T>(path: string, expectedSize: number, status?: TtsStatus): Promise<T> {
@@ -75,60 +70,46 @@ async function jsonAsset<T>(path: string, expectedSize: number, status?: TtsStat
 
 async function createSessions(
   ort: OrtModule,
-  blobs: Map<string, Blob>,
   provider: "webgpu" | "wasm",
   status?: TtsStatus,
 ): Promise<[Session, Session, Session, Session]> {
-  const names = ["duration_predictor.onnx", "text_encoder.onnx", "vector_estimator.onnx", "vocoder.onnx"];
-  const sessions: Session[] = [];
-  for (let index = 0; index < names.length; index += 1) {
-    status?.(`Preparing voice model: ${names[index].replace(/_/g, " ")}`, (index + 1) / names.length);
-    const blob = blobs.get(`onnx/${names[index]}`)!;
-    const url = URL.createObjectURL(blob);
-    try {
-      sessions.push(await ort.InferenceSession.create(url, {
+  let completed = 0;
+  const sessions = await loadModelSessions(
+    ASSETS.filter(([path]) => path.endsWith(".onnx")),
+    (path, size) => cachedAsset(path, size, (message, progress = 0) => {
+      status?.(message, (completed + size * progress) / TOTAL_MODEL_BYTES);
+    }),
+    async (url, path) => {
+      status?.(`Preparing voice model (${provider}): ${path}`);
+      const session = await ort.InferenceSession.create(url, {
         executionProviders: [provider],
         graphOptimizationLevel: "all",
-      }));
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
+      });
+      completed += ASSETS.find(([name]) => name === path)![1];
+      return session;
+    },
+  );
   return sessions as [Session, Session, Session, Session];
 }
 
 async function initialize(status?: TtsStatus): Promise<Components> {
   const ort = await import("onnxruntime-web/webgpu");
   ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/";
-  const blobs = new Map<string, Blob>();
-  let completed = 0;
-  for (const [path, size] of ASSETS) {
-    const blob = await cachedAsset(path, size, (message, progress = 0) => {
-      const currentBytes = completed + size * progress;
-      status?.(
-        `${message} (${Math.round(currentBytes / 1_000_000)} of ${Math.round(TOTAL_MODEL_BYTES / 1_000_000)} MB)`,
-        currentBytes / TOTAL_MODEL_BYTES,
-      );
-    });
-    blobs.set(path, blob);
-    completed += size;
-    status?.("Downloading voice model", completed / TOTAL_MODEL_BYTES);
-  }
-  const config = JSON.parse(await blobs.get("onnx/tts.json")!.text()) as TtsConfig;
-  const indexer = JSON.parse(await blobs.get("onnx/unicode_indexer.json")!.text()) as number[];
+  const config = await jsonAsset<TtsConfig>("onnx/tts.json", 8_253, status);
+  const indexer = await jsonAsset<number[]>("onnx/unicode_indexer.json", 277_676, status);
   let sessions: [Session, Session, Session, Session];
   let provider: "WebGPU" | "WASM" = "WebGPU";
   if ("gpu" in navigator) {
     try {
-      sessions = await createSessions(ort, blobs, "webgpu", status);
+      sessions = await createSessions(ort, "webgpu", status);
     } catch (error) {
       console.warn("Supertonic WebGPU initialization failed; using WASM", error);
       provider = "WASM";
-      sessions = await createSessions(ort, blobs, "wasm", status);
+      sessions = await createSessions(ort, "wasm", status);
     }
   } else {
     provider = "WASM";
-    sessions = await createSessions(ort, blobs, "wasm", status);
+    sessions = await createSessions(ort, "wasm", status);
   }
   status?.(`Voice model ready with ${provider}`, 1);
   return {
@@ -167,6 +148,10 @@ async function loadStyle(voice: Voice, components: Components, status?: TtsStatu
         dp: new components.ort.Tensor("float32", dp, data.style_dp.dims),
       };
     })();
+    promise = promise.catch((error) => {
+      styles.delete(voice);
+      throw error;
+    });
     styles.set(voice, promise);
   }
   return promise;

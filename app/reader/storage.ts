@@ -2,6 +2,29 @@ import type { LibraryBook, LibraryFolder } from "./types";
 
 const DATABASE = "freereader-web";
 const VERSION = 4;
+const STORAGE_TIMEOUT_MS = 5_000;
+const failedOPFSWrites = new Set<string>();
+
+async function withStorageTimeout<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error("Local storage timed out.");
+      controller.abort(error);
+      reject(error);
+    }, STORAGE_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
+function isModelPath(path: string): boolean {
+  return path.split("/").filter(Boolean)[0] === "models";
+}
 
 type StoredBook = Omit<LibraryBook, "cover"> & {
   cover?: Blob;
@@ -14,10 +37,20 @@ type StoredAsset = {
   type: string;
 };
 
-function openDatabase(): Promise<IDBDatabase> {
+function openDatabase(signal?: AbortSignal): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     const request = indexedDB.open(DATABASE, VERSION);
+    const abort = () => {
+      try { request.transaction?.abort(); } catch { /* Already finished. */ }
+      reject(signal!.reason);
+    };
+    signal?.addEventListener("abort", abort, { once: true });
     request.onupgradeneeded = (event) => {
+      if (signal?.aborted) {
+        request.transaction!.abort();
+        return;
+      }
       if (!request.result.objectStoreNames.contains("books")) {
         request.result.createObjectStore("books", { keyPath: "id" });
       }
@@ -38,17 +71,25 @@ function openDatabase(): Promise<IDBDatabase> {
         };
       }
       if (event.oldVersion < 4) {
-        const cursorRequest = request.transaction!.objectStore("assets").openCursor();
+        const store = request.transaction!.objectStore("assets");
+        const cursorRequest = store.openKeyCursor();
         cursorRequest.onsuccess = () => {
           const cursor = cursorRequest.result;
           if (!cursor) return;
-          if (typeof cursor.key === "string" && /^books\/[^/]+\/source$/.test(cursor.key)) cursor.delete();
+          if (typeof cursor.key === "string" && /^books\/[^/]+\/source$/.test(cursor.key)) store.delete(cursor.primaryKey);
           cursor.continue();
         };
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      signal?.removeEventListener("abort", abort);
+      if (signal?.aborted) request.result.close();
+      else resolve(request.result);
+    };
+    request.onerror = () => {
+      signal?.removeEventListener("abort", abort);
+      reject(request.error);
+    };
   });
 }
 
@@ -56,31 +97,48 @@ async function transact<T>(
   storeName: "books" | "assets" | "folders",
   mode: IDBTransactionMode,
   operation: (store: IDBObjectStore) => IDBRequest<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const database = await openDatabase();
-  return new Promise((resolve, reject) => {
-    let request: IDBRequest<T>;
-    let result: T;
-    const transaction = database.transaction(storeName, mode);
-    const fail = () => {
-      database.close();
-      reject(transaction.error ?? request?.error ?? new Error("Local storage transaction failed."));
-    };
+  const run = async (signal?: AbortSignal): Promise<T> => {
+    const database = await openDatabase(signal);
     try {
-      request = operation(transaction.objectStore(storeName));
-      request.onsuccess = () => { result = request.result; };
-      request.onerror = fail;
-      transaction.oncomplete = () => {
-        database.close();
-        resolve(result);
+      signal?.throwIfAborted();
+      const transaction = database.transaction(storeName, mode);
+      const abort = () => {
+        try { transaction.abort(); } catch { /* Already finished. */ }
       };
-      transaction.onerror = fail;
-      transaction.onabort = fail;
-    } catch (error) {
+      let cancel: () => void;
+      try {
+        return await new Promise<T>((resolve, reject) => {
+          cancel = () => {
+            abort();
+            reject(signal!.reason);
+          };
+          signal?.addEventListener("abort", cancel, { once: true });
+          let result: T;
+          const fail = (error: unknown) => {
+            abort();
+            reject(error ?? new Error("Local storage transaction failed."));
+          };
+          transaction.oncomplete = () => resolve(result);
+          transaction.onerror = () => fail(transaction.error);
+          transaction.onabort = () => fail(signal?.reason ?? transaction.error);
+          try {
+            const request = operation(transaction.objectStore(storeName));
+            request.onsuccess = () => { result = request.result; };
+            request.onerror = () => fail(request.error);
+          } catch (error) {
+            fail(error);
+          }
+        });
+      } finally {
+        signal?.removeEventListener("abort", cancel!);
+      }
+    } finally {
       database.close();
-      reject(error);
     }
-  });
+  };
+  return storeName === "assets" && !signal ? withStorageTimeout(run) : run(signal);
 }
 
 export async function listBooks(): Promise<LibraryBook[]> {
@@ -112,30 +170,27 @@ export function saveFolder(folder: LibraryFolder): Promise<IDBValidKey> {
   return transact("folders", "readwrite", (store) => store.put(folder));
 }
 
-async function rootDirectory(): Promise<FileSystemDirectoryHandle | null> {
-  try {
-    return await navigator.storage.getDirectory();
-  } catch {
-    return null;
-  }
-}
-
-async function fileHandle(path: string, create: boolean): Promise<FileSystemFileHandle | null> {
-  let directory = await rootDirectory();
-  if (!directory) return null;
+async function fileHandle(path: string, create: boolean, signal: AbortSignal): Promise<FileSystemFileHandle> {
+  let directory = await navigator.storage.getDirectory();
+  signal.throwIfAborted();
   const parts = path.split("/").filter(Boolean);
   for (const part of parts.slice(0, -1)) {
     directory = await directory.getDirectoryHandle(part, { create });
+    signal.throwIfAborted();
   }
   return directory.getFileHandle(parts.at(-1)!, { create });
 }
 
 async function storeAsset(path: string, data: Blob): Promise<void> {
-  const stored: StoredAsset = {
-    bytes: new Uint8Array(await data.arrayBuffer()),
-    type: data.type,
-  };
-  await transact("assets", "readwrite", (store) => store.put(stored, path));
+  if (isModelPath(path)) return;
+  await withStorageTimeout(async (signal) => {
+    const stored: StoredAsset = {
+      bytes: new Uint8Array(await data.arrayBuffer()),
+      type: data.type,
+    };
+    signal.throwIfAborted();
+    await transact("assets", "readwrite", (store) => store.put(stored, path), signal);
+  });
 }
 
 function assetBlob(stored?: Blob | StoredAsset): Blob | null {
@@ -145,14 +200,31 @@ function assetBlob(stored?: Blob | StoredAsset): Blob | null {
 }
 
 export async function putLocalFile(path: string, data: Blob): Promise<void> {
+  // OPFS commits on close; ignore failed writes even if a handle exposes an old/partial file.
+  failedOPFSWrites.add(path);
   try {
-    const handle = await fileHandle(path, true);
-    if (handle) {
-      const writable = await handle.createWritable();
-      await writable.write(data);
-      await writable.close();
-      return;
-    }
+    await withStorageTimeout(async (signal) => {
+      const handle = await fileHandle(path, true, signal);
+      signal.throwIfAborted();
+      let writable: FileSystemWritableFileStream | undefined;
+      const abort = () => { void writable?.abort().catch(() => {}); };
+      signal.addEventListener("abort", abort, { once: true });
+      try {
+        writable = await handle.createWritable();
+        signal.throwIfAborted();
+        await writable.write(data);
+        signal.throwIfAborted();
+        await writable.close();
+        signal.throwIfAborted();
+      } catch (error) {
+        abort();
+        throw error;
+      } finally {
+        signal.removeEventListener("abort", abort);
+      }
+    });
+    failedOPFSWrites.delete(path);
+    return;
   } catch {
     // Private browsing may expose OPFS but reject writes.
   }
@@ -165,11 +237,18 @@ export async function putLocalFile(path: string, data: Blob): Promise<void> {
 
 export async function getLocalFile(path: string): Promise<File | Blob | null> {
   try {
-    const handle = await fileHandle(path, false);
-    if (handle) return await handle.getFile();
+    if (!failedOPFSWrites.has(path)) {
+      const file = await withStorageTimeout(async (signal) => {
+        const handle = await fileHandle(path, false, signal);
+        signal.throwIfAborted();
+        return handle.getFile();
+      });
+      if (file.size) return file;
+    }
   } catch {
     // The file may not have been cached yet.
   }
+  if (isModelPath(path)) return null;
   try {
     return assetBlob(await transact<Blob | StoredAsset | undefined>("assets", "readonly", (store) => store.get(path)));
   } catch {
@@ -178,24 +257,8 @@ export async function getLocalFile(path: string): Promise<File | Blob | null> {
 }
 
 export async function streamToLocalFile(path: string, response: Response): Promise<Blob> {
-  let fallbackResponse = response;
-  try {
-    const handle = await fileHandle(path, true);
-    if (handle && response.body) {
-      fallbackResponse = response.clone();
-      const writable = await handle.createWritable();
-      await response.body.pipeTo(writable);
-      return handle.getFile();
-    }
-  } catch {
-    // Keep the cloned response available when an OPFS stream fails partway through.
-  }
-  const blob = await fallbackResponse.blob();
-  try {
-    await storeAsset(path, blob);
-  } catch {
-    // Model initialization can continue without a persistent cache.
-  }
+  const blob = await response.blob();
+  await putLocalFile(path, blob);
   return blob;
 }
 
