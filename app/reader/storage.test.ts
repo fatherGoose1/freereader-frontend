@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { before } from "node:test";
-import { indexedDB as fakeIndexedDB } from "fake-indexeddb";
+import { indexedDB as fakeIndexedDB, IDBObjectStore as FakeIDBObjectStore } from "fake-indexeddb";
 import type { LibraryBook } from "./types";
 
 const DATABASE = "freereader-web";
@@ -48,7 +48,15 @@ test("removes legacy source blobs without deleting reusable assets", async () =>
   assert.deepEqual(keys, ["audio/book/block.wav"]);
 });
 
-test("commits a complete book record before resolving", async () => {
+function containsBlob(value: unknown, seen = new Set<object>()): boolean {
+  if (value instanceof Blob) return true;
+  if (!value || typeof value !== "object" || value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some((child) => containsBlob(child, seen));
+}
+
+test("stores cover artwork without passing Blob data to IndexedDB", async () => {
   const now = new Date().toISOString();
   const book: LibraryBook = {
     id: "stored-book",
@@ -61,8 +69,22 @@ test("commits a complete book record before resolving", async () => {
     chapters: [{ title: "Chapter 1", startBlockIndex: 0 }],
     blocks: [{ index: 0, text: "Readable text", chapterIndex: 0, isHeading: false }],
     position: { blockIndex: 0, offsetSeconds: 0, speed: 1 },
+    cover: new Blob(["cover bytes"], { type: "image/jpeg" }),
   };
 
-  await saveBook(book);
-  assert.deepEqual(await listBooks(), [book]);
+  const originalPut = FakeIDBObjectStore.prototype.put;
+  FakeIDBObjectStore.prototype.put = function (value: unknown, key?: IDBValidKey) {
+    if (containsBlob(value)) throw new DOMException("Error preparing Blob/File data to be stored in object store", "DataCloneError");
+    return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+  };
+  try {
+    await saveBook(book);
+  } finally {
+    FakeIDBObjectStore.prototype.put = originalPut;
+  }
+
+  const [stored] = await listBooks();
+  assert.deepEqual({ ...stored, cover: undefined }, { ...book, cover: undefined });
+  assert.equal(stored.cover?.type, "image/jpeg");
+  assert.equal(await stored.cover?.text(), "cover bytes");
 });

@@ -3,6 +3,12 @@ import type { LibraryBook, LibraryFolder } from "./types";
 const DATABASE = "freereader-web";
 const VERSION = 4;
 
+type StoredBook = Omit<LibraryBook, "cover"> & {
+  cover?: Blob;
+  coverBytes?: Uint8Array<ArrayBuffer>;
+  coverType?: string;
+};
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, VERSION);
@@ -73,12 +79,19 @@ async function transact<T>(
 }
 
 export async function listBooks(): Promise<LibraryBook[]> {
-  const books = await transact<LibraryBook[]>("books", "readonly", (store) => store.getAll());
-  return books.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const books = await transact<StoredBook[]>("books", "readonly", (store) => store.getAll());
+  return books.map(({ cover, coverBytes, coverType, ...book }) => ({
+    ...book,
+    cover: coverBytes ? new Blob([coverBytes], { type: coverType }) : cover,
+  })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function saveBook(book: LibraryBook): Promise<IDBValidKey> {
-  return transact("books", "readwrite", (store) => store.put(book));
+export async function saveBook(book: LibraryBook): Promise<IDBValidKey> {
+  const { cover, ...metadata } = book;
+  const stored: StoredBook = cover
+    ? { ...metadata, coverBytes: new Uint8Array(await cover.arrayBuffer()), coverType: cover.type }
+    : metadata;
+  return transact("books", "readwrite", (store) => store.put(stored));
 }
 
 export function removeBook(id: string): Promise<undefined> {
