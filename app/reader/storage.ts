@@ -9,6 +9,11 @@ type StoredBook = Omit<LibraryBook, "cover"> & {
   coverType?: string;
 };
 
+type StoredAsset = {
+  bytes: Uint8Array<ArrayBuffer>;
+  type: string;
+};
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, VERSION);
@@ -125,15 +130,37 @@ async function fileHandle(path: string, create: boolean): Promise<FileSystemFile
   return directory.getFileHandle(parts.at(-1)!, { create });
 }
 
+async function storeAsset(path: string, data: Blob): Promise<void> {
+  const stored: StoredAsset = {
+    bytes: new Uint8Array(await data.arrayBuffer()),
+    type: data.type,
+  };
+  await transact("assets", "readwrite", (store) => store.put(stored, path));
+}
+
+function assetBlob(stored?: Blob | StoredAsset): Blob | null {
+  if (!stored) return null;
+  if (stored instanceof Blob) return stored;
+  return new Blob([stored.bytes], { type: stored.type });
+}
+
 export async function putLocalFile(path: string, data: Blob): Promise<void> {
-  const handle = await fileHandle(path, true);
-  if (handle) {
-    const writable = await handle.createWritable();
-    await writable.write(data);
-    await writable.close();
-    return;
+  try {
+    const handle = await fileHandle(path, true);
+    if (handle) {
+      const writable = await handle.createWritable();
+      await writable.write(data);
+      await writable.close();
+      return;
+    }
+  } catch {
+    // Private browsing may expose OPFS but reject writes.
   }
-  await transact("assets", "readwrite", (store) => store.put(data, path));
+  try {
+    await storeAsset(path, data);
+  } catch {
+    // Audio and model files are caches; callers can keep using the in-memory Blob.
+  }
 }
 
 export async function getLocalFile(path: string): Promise<File | Blob | null> {
@@ -143,18 +170,32 @@ export async function getLocalFile(path: string): Promise<File | Blob | null> {
   } catch {
     // The file may not have been cached yet.
   }
-  return (await transact<Blob | undefined>("assets", "readonly", (store) => store.get(path))) ?? null;
+  try {
+    return assetBlob(await transact<Blob | StoredAsset | undefined>("assets", "readonly", (store) => store.get(path)));
+  } catch {
+    return null;
+  }
 }
 
 export async function streamToLocalFile(path: string, response: Response): Promise<Blob> {
-  const handle = await fileHandle(path, true);
-  if (handle && response.body) {
-    const writable = await handle.createWritable();
-    await response.body.pipeTo(writable);
-    return handle.getFile();
+  let fallbackResponse = response;
+  try {
+    const handle = await fileHandle(path, true);
+    if (handle && response.body) {
+      fallbackResponse = response.clone();
+      const writable = await handle.createWritable();
+      await response.body.pipeTo(writable);
+      return handle.getFile();
+    }
+  } catch {
+    // Keep the cloned response available when an OPFS stream fails partway through.
   }
-  const blob = await response.blob();
-  await transact("assets", "readwrite", (store) => store.put(blob, path));
+  const blob = await fallbackResponse.blob();
+  try {
+    await storeAsset(path, blob);
+  } catch {
+    // Model initialization can continue without a persistent cache.
+  }
   return blob;
 }
 

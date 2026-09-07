@@ -5,11 +5,15 @@ import type { LibraryBook } from "./types";
 
 const DATABASE = "freereader-web";
 let listBooks: typeof import("./storage").listBooks;
+let getAudio: typeof import("./storage").getAudio;
+let getLocalFile: typeof import("./storage").getLocalFile;
+let saveAudio: typeof import("./storage").saveAudio;
 let saveBook: typeof import("./storage").saveBook;
+let streamToLocalFile: typeof import("./storage").streamToLocalFile;
 
 before(async () => {
   Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
-  ({ listBooks, saveBook } = await import("./storage"));
+  ({ getAudio, getLocalFile, listBooks, saveAudio, saveBook, streamToLocalFile } = await import("./storage"));
 });
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
@@ -56,6 +60,15 @@ function containsBlob(value: unknown, seen = new Set<object>()): boolean {
   return Object.values(value).some((child) => containsBlob(child, seen));
 }
 
+function rejectBlobWrites(): () => void {
+  const originalPut = FakeIDBObjectStore.prototype.put;
+  FakeIDBObjectStore.prototype.put = function (value: unknown, key?: IDBValidKey) {
+    if (containsBlob(value)) throw new DOMException("Error preparing Blob/File data to be stored in object store", "DataCloneError");
+    return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+  };
+  return () => { FakeIDBObjectStore.prototype.put = originalPut; };
+}
+
 test("stores cover artwork without passing Blob data to IndexedDB", async () => {
   const now = new Date().toISOString();
   const book: LibraryBook = {
@@ -72,19 +85,52 @@ test("stores cover artwork without passing Blob data to IndexedDB", async () => 
     cover: new Blob(["cover bytes"], { type: "image/jpeg" }),
   };
 
-  const originalPut = FakeIDBObjectStore.prototype.put;
-  FakeIDBObjectStore.prototype.put = function (value: unknown, key?: IDBValidKey) {
-    if (containsBlob(value)) throw new DOMException("Error preparing Blob/File data to be stored in object store", "DataCloneError");
-    return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
-  };
+  const restorePut = rejectBlobWrites();
   try {
     await saveBook(book);
   } finally {
-    FakeIDBObjectStore.prototype.put = originalPut;
+    restorePut();
   }
 
   const [stored] = await listBooks();
   assert.deepEqual({ ...stored, cover: undefined }, { ...book, cover: undefined });
   assert.equal(stored.cover?.type, "image/jpeg");
   assert.equal(await stored.cover?.text(), "cover bytes");
+});
+
+test("stores audio and model assets without passing Blobs to IndexedDB", async () => {
+  const restorePut = rejectBlobWrites();
+  try {
+    await saveAudio("stored.wav", new Blob(["audio bytes"], { type: "audio/wav" }));
+    await streamToLocalFile(
+      "models/revision/model.onnx",
+      new Response("model bytes", { headers: { "content-type": "application/octet-stream" } }),
+    );
+  } finally {
+    restorePut();
+  }
+
+  const audio = await getAudio("stored.wav");
+  const model = await getLocalFile("models/revision/model.onnx");
+  assert.equal(audio?.type, "audio/wav");
+  assert.equal(await audio?.text(), "audio bytes");
+  assert.equal(model?.type, "application/octet-stream");
+  assert.equal(await model?.text(), "model bytes");
+});
+
+test("continues with in-memory audio and models when persistent cache writes fail", async () => {
+  const originalPut = FakeIDBObjectStore.prototype.put;
+  FakeIDBObjectStore.prototype.put = function () {
+    throw new DOMException("Storage quota exceeded", "QuotaExceededError");
+  };
+  try {
+    await saveAudio("uncached.wav", new Blob(["uncached audio"], { type: "audio/wav" }));
+    const model = await streamToLocalFile(
+      "models/revision/uncached.onnx",
+      new Response("uncached model", { headers: { "content-type": "application/octet-stream" } }),
+    );
+    assert.equal(await model.text(), "uncached model");
+  } finally {
+    FakeIDBObjectStore.prototype.put = originalPut;
+  }
 });
