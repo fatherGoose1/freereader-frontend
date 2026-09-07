@@ -1,7 +1,7 @@
 import type { LibraryBook, LibraryFolder } from "./types";
 
 const DATABASE = "freereader-web";
-const VERSION = 3;
+const VERSION = 4;
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -26,6 +26,15 @@ function openDatabase(): Promise<IDBDatabase> {
           cursor.continue();
         };
       }
+      if (event.oldVersion < 4) {
+        const cursorRequest = request.transaction!.objectStore("assets").openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          if (typeof cursor.key === "string" && /^books\/[^/]+\/source$/.test(cursor.key)) cursor.delete();
+          cursor.continue();
+        };
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -39,11 +48,27 @@ async function transact<T>(
 ): Promise<T> {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
+    let request: IDBRequest<T>;
+    let result: T;
     const transaction = database.transaction(storeName, mode);
-    const request = operation(transaction.objectStore(storeName));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-    transaction.oncomplete = () => database.close();
+    const fail = () => {
+      database.close();
+      reject(transaction.error ?? request?.error ?? new Error("Local storage transaction failed."));
+    };
+    try {
+      request = operation(transaction.objectStore(storeName));
+      request.onsuccess = () => { result = request.result; };
+      request.onerror = fail;
+      transaction.oncomplete = () => {
+        database.close();
+        resolve(result);
+      };
+      transaction.onerror = fail;
+      transaction.onabort = fail;
+    } catch (error) {
+      database.close();
+      reject(error);
+    }
   });
 }
 
@@ -118,10 +143,6 @@ export async function streamToLocalFile(path: string, response: Response): Promi
   const blob = await response.blob();
   await transact("assets", "readwrite", (store) => store.put(blob, path));
   return blob;
-}
-
-export async function saveSource(id: string, file: Blob): Promise<void> {
-  await putLocalFile(`books/${id}/source`, file);
 }
 
 export async function saveAudio(path: string, audio: Blob): Promise<void> {

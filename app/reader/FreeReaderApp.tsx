@@ -12,7 +12,6 @@ import {
   saveAudio,
   saveBook,
   saveFolder,
-  saveSource,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { synthesize, VOICES, type Voice } from "./tts";
@@ -237,7 +236,7 @@ export default function FreeReaderApp() {
     try {
       const parsed = await parseFile(file);
       const book = makeBook(parsed, file.name, file.size, sourceIdentifier, activeFolderId ?? undefined);
-      await Promise.all([saveBook(book), saveSource(book.id, file)]);
+      await saveBook(book);
       setBooks((current) => [book, ...current]);
       setPanel(null);
       setMessage(`${book.title} was added to your private library.`);
@@ -297,7 +296,7 @@ export default function FreeReaderApp() {
         sourceUrl,
         activeFolderId ?? undefined,
       );
-      await Promise.all([saveBook(book), saveSource(book.id, snapshot)]);
+      await saveBook(book);
       setBooks((current) => [book, ...current]);
       setPanel(null);
       setUrl("");
