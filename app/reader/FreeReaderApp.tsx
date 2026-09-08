@@ -14,7 +14,9 @@ import {
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
-import { synthesize, VOICES, type Voice } from "./tts";
+import { VOICES, type Voice } from "./tts";
+import { synthesize } from "./narration";
+import { usesMobileSpeech } from "./mobileSpeech";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
 import posthog from "posthog-js";
@@ -397,7 +399,7 @@ export default function FreeReaderApp() {
   }
 
   function audioCacheKey(book: LibraryBook, index: number): string {
-    return `${book.id}/${TEXT_PIPELINE_REVISION}-${voice}-${steps}-${speechRate}/${index}.wav`;
+    return `${book.id}/${usesMobileSpeech() ? "mobile-int8-v1-" : ""}${TEXT_PIPELINE_REVISION}-${voice}-${steps}-${speechRate}/${index}.wav`;
   }
 
   async function ensureAudio(book: LibraryBook, index: number): Promise<Blob> {
@@ -411,7 +413,10 @@ export default function FreeReaderApp() {
     if (existing) return existing;
     const block = book.blocks[index];
     const promise = synthesize(block.text, voice, steps, (status, progress) => {
-      if (status.startsWith("Downloading voice model")) {
+      if (usesMobileSpeech()) {
+        setMessage(status);
+        setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
+      } else if (status.startsWith("Downloading voice model")) {
         setMessage(status);
         setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
       } else if (status.startsWith("Preparing voice model")) {
@@ -435,6 +440,7 @@ export default function FreeReaderApp() {
   }
 
   async function pregenerate(book: LibraryBook, fromIndex: number) {
+    if (usesMobileSpeech()) return;
     const epoch = ++generationEpoch.current;
     for (let index = fromIndex; index < book.blocks.length; index += 1) {
       if (generationEpoch.current !== epoch) return;
@@ -735,7 +741,7 @@ export default function FreeReaderApp() {
             </div>
             <progress value={ttsProgress} max={1} aria-label={message} />
             {!isModelDownload && <p>{message}</p>}
-            {isModelDownload && <small>This model only needs to be downloaded once and will then be cached for later sessions.</small>}
+            {isModelDownload && <small>{usesMobileSpeech() ? "Smaller on-device Supertonic 3 model. Downloads are cached when browser storage is available." : "This model only needs to be downloaded once and will then be cached for later sessions."}</small>}
           </section>
         )}
         <div className={styles.player}>
