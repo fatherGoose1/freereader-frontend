@@ -21,6 +21,9 @@ test("mobile synthesizes Supertonic 3 in its worker without loading desktop weig
   await page.getByRole("button", { name: /^txt Mobile smoke/ }).click();
   await page.waitForTimeout(1_000);
   expect(onnx).toHaveLength(0); // No whole-book background generation on mobile.
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByLabel("Voice", { exact: false }).selectOption("F1");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(async () => {
     const state = await page.locator("audio").evaluate((audio: HTMLAudioElement) => ({ duration: audio.duration, src: audio.src, paused: audio.paused }));
@@ -40,7 +43,7 @@ test("mobile synthesizes Supertonic 3 in its worker without loading desktop weig
   expect(audio.sampleRate).toBe(44_100);
   expect(audio.bytes).toBeGreaterThan(44_100);
   expect(audio.peak).toBeGreaterThan(100);
-  for (const voice of ["F1", "M2"]) {
+  for (const voice of ["M2", "F2"]) {
     const previous = await page.locator("audio").getAttribute("src");
     await page.getByRole("button", { name: "Voice", exact: true }).click();
     await page.getByLabel("Voice", { exact: false }).selectOption(voice);
@@ -51,16 +54,31 @@ test("mobile synthesizes Supertonic 3 in its worker without loading desktop weig
   expect(onnx.filter((url) => url.includes("soniqo/Supertonic-3-ONNX-INT8"))).toHaveLength(4);
 });
 
-test("desktop keeps original models and background generation", async ({ page }, testInfo) => {
+test("desktop reuses Kokoro Web voice assets after a full reload", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith("desktop"));
-  const requests: string[] = [];
+  const voiceUrl = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/voices/af_heart.bin";
+  let modelRequests = 0;
+  let voiceRequests = 0;
   await page.route("**/*.onnx*", (route) => {
-    requests.push(route.request().url());
-    return route.abort(); // Check routing without downloading the desktop's 398 MB weights.
+    modelRequests += 1;
+    return route.abort();
+  });
+  await page.route("**/voices/af_heart.bin", (route) => {
+    voiceRequests += 1;
+    return route.fulfill({ body: Buffer.alloc(522_240), contentType: "application/octet-stream" });
   });
   await page.goto("/reader");
-  await page.locator('input[type="file"]').first().setInputFiles({ name: "Desktop smoke.txt", mimeType: "text/plain", buffer: Buffer.from("Hello from desktop.") });
-  await page.getByRole("button", { name: /^txt Desktop smoke/ }).click();
-  await expect.poll(() => requests.length, { timeout: 30_000 }).toBeGreaterThan(0);
-  expect(requests.every((url) => url.includes("Supertone/supertonic-3/resolve/3cadd1ee6394adea1bd021217a0e650ede09a323/"))).toBe(true);
+  await page.evaluate(() => caches.delete("kokoro-web-resources-v1"));
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Cache smoke.txt", mimeType: "text/plain", buffer: Buffer.from("Hello from Kokoro Web.") });
+  await page.getByRole("button", { name: /^txt Cache smoke/ }).click();
+  await expect.poll(() => voiceRequests, { timeout: 30_000 }).toBe(1);
+  await expect.poll(() => modelRequests, { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(async (url) => !!(await (await caches.open("kokoro-web-resources-v1")).match(url)), voiceUrl)).toBe(true);
+
+  const firstModelRequests = modelRequests;
+  await page.reload();
+  await page.getByRole("button", { name: /^txt Cache smoke/ }).click();
+  await expect.poll(() => modelRequests, { timeout: 30_000 }).toBeGreaterThan(firstModelRequests);
+  await page.waitForTimeout(500);
+  expect(voiceRequests).toBe(1);
 });
