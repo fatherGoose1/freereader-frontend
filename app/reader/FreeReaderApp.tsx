@@ -16,7 +16,8 @@ import {
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { synthesize } from "./narration";
 import { usesMobileSpeech } from "./mobileSpeech";
-import { isKokoroVoice, narratorVoices, type NarratorVoice } from "./voices";
+import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
+import { isKokoroVoice, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
 import posthog from "posthog-js";
@@ -54,7 +55,14 @@ function documentProperties(book: LibraryBook): TelemetryProperties {
     file_size_bytes: book.size,
     block_count: book.blocks.length,
     chapter_count: book.chapters.length,
+    language: languageForBook(book),
   };
+}
+
+function languageForBook(book: LibraryBook): SpeechLanguage {
+  if (book.language) return book.language;
+  const sample = book.blocks.map((block) => block.text).join(" ").slice(0, 20_000);
+  return detectSpeechLanguage(sample) ?? "en";
 }
 
 function wordCount(book: LibraryBook): number {
@@ -177,6 +185,8 @@ export default function FreeReaderApp() {
   const audioProvider = useRef("");
   const PAGE_CHAR_LIMIT = 900;
   const [page, setPage] = useState({ bookId: "", start: 0 });
+  const narrationLanguage = selected ? languageForBook(selected) : "en";
+  const narrationVoice = voiceForLanguage(voice, narrationLanguage);
   const pageStarts = useMemo(() => {
     const starts: number[] = [];
     let count = 0;
@@ -394,7 +404,11 @@ export default function FreeReaderApp() {
   }
 
   function audioCacheKey(book: LibraryBook, index: number): string {
-    const model = isKokoroVoice(voice) ? `kokoro-web-${voice}-${speechRate}` : `${usesMobileSpeech() ? "mobile-int8-v1-" : ""}${TEXT_PIPELINE_REVISION}-${voice}-${steps}-${speechRate}`;
+    const language = languageForBook(book);
+    const selectedVoice = voiceForLanguage(voice, language);
+    const model = isKokoroVoice(selectedVoice)
+      ? `${TEXT_PIPELINE_REVISION}-kokoro-web-${selectedVoice}-${speechRate}`
+      : `${usesMobileSpeech() ? "mobile-int8-v1-" : ""}${TEXT_PIPELINE_REVISION}-${language}-${selectedVoice}-${steps}-${speechRate}`;
     return `${book.id}/${model}/${index}.wav`;
   }
 
@@ -408,8 +422,10 @@ export default function FreeReaderApp() {
     const existing = pendingAudio.current.get(key);
     if (existing) return existing;
     const block = book.blocks[index];
-    const promise = synthesize(block.text, voice, steps, (status, progress) => {
-      if (isKokoroVoice(voice) || usesMobileSpeech()) {
+    const language = languageForBook(book);
+    const selectedVoice = voiceForLanguage(voice, language);
+    const promise = synthesize(block.text, selectedVoice, steps, (status, progress) => {
+      if (isKokoroVoice(selectedVoice) || usesMobileSpeech()) {
         setMessage(status);
         setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
       } else if (status.startsWith("Downloading voice model")) {
@@ -422,7 +438,7 @@ export default function FreeReaderApp() {
         setMessage(status);
         setTtsProgress(undefined);
       }
-    }, block.isHeading, speechRate).then(async ({ blob, duration, provider, generationSeconds }) => {
+    }, block.isHeading, speechRate, language).then(async ({ blob, duration, provider, generationSeconds }) => {
       audioProvider.current = provider;
       audioTelemetry.current = { provider, cached: false, duration, generationSeconds };
       await saveAudio(key, blob);
@@ -446,7 +462,7 @@ export default function FreeReaderApp() {
 
   useEffect(() => {
     if (selected) void pregenerate(selected, selected.position.blockIndex);
-  }, [selected?.id, selected?.position.blockIndex, voice, steps, speechRate]);
+  }, [selected?.id, selected?.position.blockIndex, selected?.language, voice, steps, speechRate]);
 
   async function playBlock(book: LibraryBook, index: number, offset = 0, offsetFromEnd = false) {
     const audio = audioRef.current;
@@ -486,13 +502,15 @@ export default function FreeReaderApp() {
       const info = audioTelemetry.current;
       if (info && !playableBooks.current.has(book.id)) {
         playableBooks.current.add(book.id);
-        const model = isKokoroVoice(voice) ? "kokoro_web_82m" : "supertonic_3";
+        const language = languageForBook(book);
+        const selectedVoice = voiceForLanguage(voice, language);
+        const model = isKokoroVoice(selectedVoice) ? "kokoro_web_82m" : "supertonic_3";
         recordTelemetry("first_playable_audio", {
           document_id: book.id,
           model,
           ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
-          language: "en",
-          ...(!isKokoroVoice(voice) && { inference_steps: steps }),
+          language,
+          ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
           time_to_first_playable_seconds: info.generationSeconds,
           spoken_seconds: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : info.duration,
@@ -501,7 +519,8 @@ export default function FreeReaderApp() {
         posthog.capture("first_playable_audio", {
           model,
           ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
-          ...(!isKokoroVoice(voice) && { inference_steps: steps }),
+          language,
+          ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
           time_to_first_playable_seconds: info.generationSeconds,
         });
@@ -627,14 +646,31 @@ export default function FreeReaderApp() {
   }
 
   function openBook(book: LibraryBook) {
-    setSelected(book);
-    recordTelemetry("document_opened", documentProperties(book));
+    const language = languageForBook(book);
+    const ready = book.language ? book : { ...book, language };
+    setSelected(ready);
+    setVoice((current) => voiceForLanguage(current, language));
+    if (!book.language) {
+      setBooks((current) => current.map((value) => value.id === book.id ? ready : value));
+      saveBook(ready).catch(() => undefined);
+    }
+    recordTelemetry("document_opened", documentProperties(ready));
     posthog.capture("document_opened", {
       file_type: book.format,
       file_size_bytes: book.size,
       block_count: book.blocks.length,
       chapter_count: book.chapters.length,
     });
+  }
+
+  function changeNarrationLanguage(language: SpeechLanguage) {
+    if (!selected) return;
+    audioRef.current?.pause();
+    setPlaying(false);
+    audioBlock.current = null;
+    setVoice((current) => voiceForLanguage(current, language));
+    updateBook({ ...selected, language, updatedAt: new Date().toISOString() });
+    posthog.capture("voice_settings_changed", { setting: "language", value: language });
   }
 
   function openGutenbergBrowser() {
@@ -738,7 +774,7 @@ export default function FreeReaderApp() {
             </div>
             <progress value={ttsProgress} max={1} aria-label={message} />
             {!isModelDownload && <p>{message}</p>}
-            {isModelDownload && <small>{isKokoroVoice(voice) ? "The Kokoro model and voice are saved in persistent browser storage and reused after refresh." : usesMobileSpeech() ? "Smaller on-device Supertonic 3 model. Downloads are cached when browser storage is available." : "This model only needs to be downloaded once and will then be cached for later sessions."}</small>}
+            {isModelDownload && <small>{isKokoroVoice(narrationVoice) ? "The Kokoro model and voice are saved in persistent browser storage and reused after refresh." : usesMobileSpeech() ? "Smaller on-device Supertonic 3 model. Downloads are cached when browser storage is available." : "This model only needs to be downloaded once and will then be cached for later sessions."}</small>}
           </section>
         )}
         <div className={styles.player}>
@@ -766,9 +802,14 @@ export default function FreeReaderApp() {
         {panel === "voice" && (
           <div className={styles.voicePopover}>
             <div className={styles.settingsTitle}><strong>Voice Settings</strong><button onClick={() => setPanel(null)}>Done</button></div>
+            <label className={styles.settingsRow}><span>Language</span>
+              <select value={narrationLanguage} onChange={(event) => changeNarrationLanguage(event.target.value as SpeechLanguage)}>
+                {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+              </select>
+            </label>
             <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
-              <select value={voice} onChange={(event) => { audioRef.current?.pause(); setPlaying(false); setVoice(event.target.value as NarratorVoice); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
-                {narratorVoices().map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+              <select value={narrationVoice} onChange={(event) => { audioRef.current?.pause(); setPlaying(false); setVoice(event.target.value as NarratorVoice); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
+                {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
             <div className={styles.qualitySetting}><span>Speaking Rate</span><div>

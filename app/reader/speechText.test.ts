@@ -20,6 +20,7 @@ test("matches the iOS capitalization and punctuation pipeline", () => {
 
 test("reads heading and prefixed Roman numerals as numbers", () => {
   assert.equal(normalizeForSpeech("CHAPTER II", true), "Chapter 2.");
+  assert.equal(normalizeForSpeech("Chapter IV", true), "Chapter 4.");
   assert.equal(normalizeForSpeech("Section IV", true), "Section 4.");
   assert.equal(normalizeForSpeech("IV: THE RETURN", true), "4: The Return.");
   assert.equal(normalizeForSpeech("I", true), "1.");
@@ -32,4 +33,11 @@ test("reads obvious body Roman numerals without changing the pronoun I", () => {
   assert.equal(normalizeForSpeech("I think I can."), "I think I can.");
   assert.equal(normalizeForSpeech("I"), "I.");
   assert.equal(normalizeForSpeech("THE MIX"), "The Mix.");
+});
+
+test("expands abbreviated titles for natural pronunciation", () => {
+  assert.equal(normalizeForSpeech("Mr. Smith met Mrs. Jones."), "Mister Smith met Missus Jones.");
+  assert.equal(normalizeForSpeech("Dr. Patel and Prof. Williams spoke."), "Doctor Patel and Professor Williams spoke.");
+  assert.equal(normalizeForSpeech("Capt. Lewis briefed Sen. Adams."), "Captain Lewis briefed Senator Adams.");
+  assert.equal(normalizeForSpeech("El Dr. García habló.", false, "es"), "El Dr. García habló.");
 });

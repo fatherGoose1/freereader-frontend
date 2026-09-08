@@ -21,9 +21,9 @@ test("mobile text chunks bound allocation without dropping text or breaking surr
 });
 
 test("invalid mobile parameters reject before model initialization", async () => {
-  await assert.rejects(synthesizeMobile("x".repeat(4001), "M3", 4, false, 1, () => {}), /exceeds/);
-  await assert.rejects(synthesizeMobile("Hello", "invalid", 4, false, 1, () => {}), /Unknown/);
-  await assert.rejects(synthesizeMobile("Hello", "M3", 4, false, 0, () => {}), /speed/);
+  await assert.rejects(synthesizeMobile("x".repeat(4001), "M3", 4, false, 1, "en", () => {}), /exceeds/);
+  await assert.rejects(synthesizeMobile("Hello", "invalid", 4, false, 1, "en", () => {}), /Unknown/);
+  await assert.rejects(synthesizeMobile("Hello", "M3", 4, false, 0, "en", () => {}), /speed/);
 });
 
 test("a stalled mobile worker is terminated and a fresh worker can retry", async (t) => {
@@ -32,7 +32,7 @@ test("a stalled mobile worker is terminated and a fresh worker can retry", async
   let created = 0;
   const fake = { postMessage() {}, terminate() { terminated += 1; }, onmessage: null } as unknown as Worker;
   const client = new MobileSpeechClient(() => { created += 1; return fake; });
-  const request = { text: "Hello", voice: "M3" as const, steps: 4, isHeading: false, speechSpeed: 1 };
+  const request = { text: "Hello", voice: "M3" as const, steps: 4, isHeading: false, speechSpeed: 1, language: "en" as const };
   const failure = assert.rejects(client.synthesize(request), /stalled/);
   await Promise.resolve();
   t.mock.timers.tick(120_000);
@@ -50,7 +50,7 @@ test("stopping the worker cancels queued work instead of restarting background g
   const fake = { postMessage() {}, terminate() {} } as unknown as Worker;
   let created = 0;
   const client = new MobileSpeechClient(() => { created += 1; return fake; });
-  const request = { text: "Hello", voice: "M3" as const, steps: 4, isHeading: false, speechSpeed: 1 };
+  const request = { text: "Hello", voice: "M3" as const, steps: 4, isHeading: false, speechSpeed: 1, language: "en" as const };
   const first = assert.rejects(client.synthesize(request), /interrupted/);
   const queued = assert.rejects(client.synthesize(request), /cancelled/);
   await Promise.resolve();

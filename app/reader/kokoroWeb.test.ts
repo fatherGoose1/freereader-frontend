@@ -44,7 +44,7 @@ test("Kokoro Web client sends plain text to its worker and returns WAV audio", a
   const client = new KokoroWebSpeechClient(() => fake.worker);
   const resultPromise = client.synthesize("A passage.", "af_heart", 1);
   await Promise.resolve();
-  assert.deepEqual(fake.requests[0], { text: "A passage.", voice: "af_heart", speechSpeed: 1 });
+  assert.deepEqual(fake.requests[0], { text: "A passage.", voice: "af_heart", speechSpeed: 1, isHeading: false });
   const audio = new ArrayBuffer(48);
   fake.worker.onmessage?.({ data: { kind: "result", audio, duration: 1, provider: "WASM", generationSeconds: 0.5 } } as MessageEvent<KokoroWebResponse>);
   const result = await resultPromise;

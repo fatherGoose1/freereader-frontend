@@ -1,7 +1,33 @@
 import { test, expect } from "@playwright/test";
 
+test("mobile defaults English to Kokoro and non-English to Supertonic", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.startsWith("desktop"));
+  await page.goto("/reader");
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "English route.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("This is a long English passage with enough natural language context to identify the text reliably for local narration."),
+  });
+  await page.getByRole("button", { name: /^txt English route/ }).click();
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("en");
+  await expect(page.getByLabel("Voice", { exact: false })).toHaveValue("af_heart");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "Spanish route.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Hola. Esta es una prueba larga de la voz móvil en español para confirmar que el idioma se detecta correctamente."),
+  });
+  await page.getByRole("button", { name: /^txt Spanish route/ }).click();
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("es");
+  await expect(page.getByLabel("Voice", { exact: false })).toHaveValue("M3");
+});
+
 // Opt-in integration test downloads the pinned ~102 MB model and executes real WASM.
-test("mobile synthesizes Supertonic 3 in its worker without loading desktop weights", async ({ page }, testInfo) => {
+test("mobile synthesizes non-English text with Supertonic 3 without loading desktop weights", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith("desktop"));
   test.skip(process.env.RUN_MOBILE_TTS !== "1", "Set RUN_MOBILE_TTS=1 to download and test real voice models.");
   const onnx: string[] = [];
@@ -16,12 +42,13 @@ test("mobile synthesizes Supertonic 3 in its worker without loading desktop weig
   });
   await page.goto("/reader");
   await page.locator('input[type="file"]').first().setInputFiles({
-    name: "Mobile smoke.txt", mimeType: "text/plain", buffer: Buffer.from("Hello. This is a test of the mobile voice."),
+    name: "Mobile smoke.txt", mimeType: "text/plain", buffer: Buffer.from("Hola. Esta es una prueba larga de la voz móvil en español para confirmar que el idioma se detecta correctamente."),
   });
   await page.getByRole("button", { name: /^txt Mobile smoke/ }).click();
   await page.waitForTimeout(1_000);
   expect(onnx).toHaveLength(0); // No whole-book background generation on mobile.
   await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("es");
   await page.getByLabel("Voice", { exact: false }).selectOption("F1");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();

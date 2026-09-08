@@ -1,4 +1,4 @@
-export const TEXT_PIPELINE_REVISION = "text-7";
+export const TEXT_PIPELINE_REVISION = "text-8";
 
 const ROMAN_NUMERAL = /^(?=[MDCLXVI]+$)M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/i;
 
@@ -63,9 +63,39 @@ function normalizeCapitalization(text: string): string {
   return result;
 }
 
-export function normalizeForSpeech(text: string, isHeading = false): string {
-  let normalized = normalizeCapitalization(replaceRomanNumerals(text, isHeading))
-    .normalize("NFKD")
+const SPOKEN_TITLES: Record<string, string> = {
+  mr: "Mister",
+  mrs: "Missus",
+  ms: "Miss",
+  dr: "Doctor",
+  prof: "Professor",
+  rev: "Reverend",
+  fr: "Father",
+  hon: "Honorable",
+  pres: "President",
+  gov: "Governor",
+  sen: "Senator",
+  rep: "Representative",
+  capt: "Captain",
+  cmdr: "Commander",
+  col: "Colonel",
+  gen: "General",
+  lt: "Lieutenant",
+  maj: "Major",
+  sgt: "Sergeant",
+};
+
+function replaceTitles(text: string): string {
+  return text.replace(
+    /\b(Mr|Mrs|Ms|Dr|Prof|Rev|Fr|Hon|Pres|Gov|Sen|Rep|Capt|Cmdr|Col|Gen|Lt|Maj|Sgt)\.(?=\s)/gi,
+    (match, title: string) => SPOKEN_TITLES[title.toLowerCase()] ?? match,
+  );
+}
+
+export function normalizeForSpeech(text: string, isHeading = false, language = "en"): string {
+  const numeralsReplaced = replaceRomanNumerals(text, isHeading);
+  let normalized = normalizeCapitalization(language === "en" ? replaceTitles(numeralsReplaced) : numeralsReplaced)
+    .normalize("NFKD").normalize("NFC")
     .replace(/[\u2600-\u27bf\u{1f300}-\u{1faff}]/gu, "")
     .replace(/\s*(?:-{2,}|[‒–—―]+)\s*/g, ", ")
     .replace(/\s+-\s+/g, ", ")

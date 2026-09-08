@@ -2,6 +2,7 @@ import { getLocalFile, putLocalFile } from "./storage";
 import { loadModelSessions } from "./modelSessions";
 import { downloadModel } from "./modelDownload";
 import { normalizeForSpeech } from "./speechText";
+import type { SpeechLanguage } from "./speech";
 
 const REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
 const MODEL_ROOT = `https://huggingface.co/Supertone/supertonic-3/resolve/${REVISION}`;
@@ -158,7 +159,7 @@ async function loadStyle(voice: Voice, components: Components, status?: TtsStatu
 }
 
 function normalizeText(text: string, language: string, isHeading: boolean): string {
-  return `<${language}>${normalizeForSpeech(text, isHeading)}</${language}>`;
+  return `<${language}>${normalizeForSpeech(text, isHeading, language)}</${language}>`;
 }
 
 function lengthMask(length: number): Float32Array {
@@ -248,12 +249,13 @@ export function synthesize(
   status?: TtsStatus,
   isHeading = false,
   speechSpeed = 0.9,
+  language: SpeechLanguage = "en",
 ): Promise<{ blob: Blob; duration: number; provider: string; generationSeconds: number }> {
   const task = synthesisTail.then(async () => {
     const components = await getComponents(status);
     const style = await loadStyle(voice, components, status);
     const generationStarted = performance.now();
-    const result = await infer(components, style, text, "en", steps, isHeading, speechSpeed, status);
+    const result = await infer(components, style, text, language, steps, isHeading, speechSpeed, status);
     const blob = wavBlob(result.samples, components.config.ae.sample_rate);
     return {
       blob,

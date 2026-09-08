@@ -19,6 +19,10 @@ const SUPERTONIC_NAMES: Record<Voice, string> = {
   F1: "Sarah", F2: "Lily", F3: "Jessica", F4: "Olivia", F5: "Emily",
 };
 
+export function supertonicVoices(): Array<[Voice, string]> {
+  return VOICES.map((voice) => [voice, SUPERTONIC_NAMES[voice]]);
+}
+
 export function isKokoroVoice(voice: NarratorVoice): voice is KokoroVoice {
   return voice in KOKORO_NAMES;
 }
@@ -30,6 +34,6 @@ export function isSupertonicVoice(voice: NarratorVoice): voice is Voice {
 export function narratorVoices(): Array<[NarratorVoice, string]> {
   return [
     ...KOKORO_VOICES.map(([voice, name]) => [voice, name] as [NarratorVoice, string]),
-    ...VOICES.map((voice) => [voice, SUPERTONIC_NAMES[voice]] as [NarratorVoice, string]),
+    ...supertonicVoices(),
   ];
 }

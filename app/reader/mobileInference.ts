@@ -1,6 +1,7 @@
 import { getLocalFile, putLocalFile } from "./storage";
 import { downloadModel } from "./modelDownload";
 import { normalizeForSpeech } from "./speechText";
+import type { SpeechLanguage } from "./speech";
 
 const MODEL_REVISION = "11f5965fd0bc7dfb191a16d83772fc658a3c03d8";
 const ORIGINAL_REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
@@ -162,6 +163,7 @@ async function inferPcm(
   components: Components,
   style: Style,
   text: string,
+  language: SpeechLanguage,
   steps: number,
   speechSpeed: number,
   status: Status,
@@ -181,7 +183,7 @@ async function inferPcm(
     return output;
   };
   try {
-    const codePoints = Array.from(`<en>${text}</en>`, (character) => character.codePointAt(0)!);
+    const codePoints = Array.from(`<${language}>${text}</${language}>`, (character) => character.codePointAt(0)!);
     const ids = new BigInt64Array(codePoints.map((point) => BigInt(components.indexer[point] ?? -1)));
     const textIds = own(new ort.Tensor("int64", ids, [1, ids.length]));
     const textMask = own(new ort.Tensor("float32", new Float32Array(ids.length).fill(1), [1, 1, ids.length]));
@@ -254,13 +256,14 @@ export async function synthesizeMobile(
   steps: number,
   isHeading: boolean,
   speechSpeed: number,
+  language: SpeechLanguage,
   status: (message: string, progress?: number) => void,
 ): Promise<{ blob: Blob; duration: number; provider: string; generationSeconds: number }> {
   if (text.length > MAX_INPUT_CHARS) throw new Error(`Mobile speech input exceeds ${MAX_INPUT_CHARS} characters.`);
   if (!Object.hasOwn(VOICE_SIZES, voice)) throw new Error(`Unknown Supertonic voice: ${voice}`);
   if (!Number.isSafeInteger(steps) || steps < 1 || steps > 64) throw new Error("Speech steps must be between 1 and 64.");
   if (!Number.isFinite(speechSpeed) || speechSpeed <= 0) throw new Error("Speech speed must be finite and positive.");
-  const normalized = normalizeForSpeech(text, isHeading);
+  const normalized = normalizeForSpeech(text, isHeading, language);
   if (!normalized) throw new Error("Mobile speech input is empty after normalization.");
   const chunks = splitMobileText(normalized);
   componentsPromise ??= initialize(status).catch((error) => {
@@ -277,7 +280,7 @@ export async function synthesizeMobile(
   for (let index = 0; index < chunks.length; index += 1) {
     let pcm: Uint8Array<ArrayBuffer>;
     try {
-      pcm = await inferPcm(components, style, chunks[index], steps, speechSpeed,
+      pcm = await inferPcm(components, style, chunks[index], language, steps, speechSpeed,
         (message, progress = 0) => status(`Chunk ${index + 1}/${chunks.length}: ${message}`, (index + progress) / chunks.length));
     } catch (error) {
       if (!(error instanceof SpeechChunkTooLong) || Array.from(chunks[index]).length < 2) throw error;

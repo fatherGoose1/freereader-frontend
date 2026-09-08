@@ -1,5 +1,6 @@
 import type { TtsStatus } from "./tts";
 import { KOKORO_MODELS, kokoroVoiceAsset, loadKokoroAsset } from "./kokoroWebResources";
+import { normalizeForSpeech } from "./speechText";
 import type { KokoroVoice } from "./voices";
 
 const SAMPLE_RATE = 24_000;
@@ -154,12 +155,13 @@ export async function synthesizeKokoroWeb(
   text: string,
   voice: KokoroVoice,
   speechSpeed: number,
+  isHeading: boolean,
   status?: TtsStatus,
 ): Promise<{ audio: ArrayBuffer; duration: number; provider: Provider; generationSeconds: number }> {
   if (!text.trim()) throw new Error("Kokoro speech requires text.");
   if (!Number.isFinite(speechSpeed) || speechSpeed < 0.1 || speechSpeed > 5) throw new Error("Speech speed must be between 0.1 and 5.");
   const [{ ort, session, provider }, voiceData, chunks] = await Promise.all([
-    getComponents(status), getVoice(voice, status), preprocess(text, voice.startsWith("b") ? "en-gb" : "en-us"),
+    getComponents(status), getVoice(voice, status), preprocess(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
   ]);
   status?.("Generating speech");
   const started = performance.now();
