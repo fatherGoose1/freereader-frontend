@@ -1,4 +1,5 @@
 import type { TtsStatus, Voice } from "./tts";
+import type { SpeechLanguage } from "./speech";
 
 export function usesMobileSpeech(device = typeof navigator === "undefined" ? undefined : navigator): boolean {
   return !!device && (/Android|iPhone|iPad|iPod/i.test(device.userAgent)
@@ -6,7 +7,7 @@ export function usesMobileSpeech(device = typeof navigator === "undefined" ? und
 }
 
 export type SpeechResult = { blob: Blob; duration: number; provider: string; generationSeconds: number };
-export type MobileRequest = { text: string; voice: Voice; steps: number; isHeading: boolean; speechSpeed: number };
+export type MobileRequest = { text: string; voice: Voice; steps: number; isHeading: boolean; speechSpeed: number; language: SpeechLanguage };
 export type MobileResponse =
   | { kind: "status"; message: string; progress?: number }
   | { kind: "result"; result: SpeechResult }

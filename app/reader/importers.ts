@@ -3,9 +3,16 @@ import ePub from "epubjs";
 import type Section from "epubjs/types/section";
 import mammoth from "mammoth";
 import { graphemes, isLikelyHeading, normalizeReadingText as normalize } from "./parsingText";
+import { detectSpeechLanguage, normalizeLanguage } from "./speech";
 import type { Chapter, DocumentFormat, ParsedBook, TextBlock } from "./types";
 
 const MAX_BLOCK_LENGTH = 300;
+
+function withDetectedLanguage(book: ParsedBook): ParsedBook {
+  if (book.language) return book;
+  const sample = book.blocks.map((block) => block.text).join(" ").slice(0, 20_000);
+  return { ...book, language: detectSpeechLanguage(sample) ?? "en" };
+}
 
 enum BreakKind {
   Semantic,
@@ -178,7 +185,13 @@ function elementsToBook(document: Document, fallbackTitle: string, format: Docum
   const builder = new BookBuilder();
   appendElements(builder, document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote"));
   if (!builder.blocks.length) builder.plainText(document.body?.textContent ?? "");
-  return { title: normalize(document.title) || fallbackTitle, format, chapters: builder.chapters, blocks: builder.blocks };
+  return withDetectedLanguage({
+    title: normalize(document.title) || fallbackTitle,
+    language: normalizeLanguage(document.documentElement.lang),
+    format,
+    chapters: builder.chapters,
+    blocks: builder.blocks,
+  });
 }
 
 function parseHtml(html: string, fallbackTitle: string, format: DocumentFormat): ParsedBook {
@@ -223,6 +236,7 @@ async function parseEpub(buffer: ArrayBuffer, fallbackTitle: string): Promise<Pa
   return {
     title: normalize(metadata.title) || fallbackTitle,
     author: normalize(metadata.creator ?? "") || undefined,
+    language: normalizeLanguage(metadata.language),
     format: "epub",
     chapters: builder.chapters,
     blocks: builder.blocks,
@@ -251,7 +265,7 @@ async function parsePdf(buffer: ArrayBuffer, fallbackTitle: string): Promise<Par
 function parsePlainText(text: string, fallbackTitle: string, format: DocumentFormat = "txt"): ParsedBook {
   const builder = new BookBuilder();
   builder.plainText(text);
-  return { title: fallbackTitle, format, chapters: builder.chapters, blocks: builder.blocks };
+  return withDetectedLanguage({ title: fallbackTitle, format, chapters: builder.chapters, blocks: builder.blocks });
 }
 
 function markdownToHtml(markdown: string, sourceName: string): string {
@@ -347,7 +361,13 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
   if (builder.blocks.length < (isRedditEmbed ? 1 : 2) || readableCharacters < (isRedditEmbed ? 20 : 200)) {
     throw new Error("The page does not contain enough readable article text.");
   }
-  return { title, format: "html", chapters: builder.chapters, blocks: builder.blocks };
+  return withDetectedLanguage({
+    title,
+    language: normalizeLanguage(document.documentElement.lang),
+    format: "html",
+    chapters: builder.chapters,
+    blocks: builder.blocks,
+  });
 }
 
 export async function parseFile(file: File): Promise<ParsedBook> {
@@ -365,7 +385,7 @@ export async function parseFile(file: File): Promise<ParsedBook> {
   else if (["txt", "text"].includes(extension ?? "")) parsed = parsePlainText(await file.text(), title);
   else throw new Error("Choose an EPUB, PDF, TXT, DOCX, HTML, or Markdown file.");
   if (!parsed.blocks.some((block) => !block.isHeading)) throw new Error("No readable text was found. Scanned PDFs need OCR before import.");
-  return parsed;
+  return withDetectedLanguage(parsed);
 }
 
 function contentUrl(url: URL): URL {
@@ -421,7 +441,10 @@ export async function parseWebLink(rawUrl: string): Promise<{ parsed: ParsedBook
     const title = payload.title || sourceUrl.hostname;
     builder.chapter(title);
     builder.plainText(payload.text);
-    return { parsed: { title, format: "html", chapters: builder.chapters, blocks: builder.blocks }, sourceUrl: payload.source_url ?? sourceUrl.toString() };
+    return {
+      parsed: withDetectedLanguage({ title, format: "html", chapters: builder.chapters, blocks: builder.blocks }),
+      sourceUrl: payload.source_url ?? sourceUrl.toString(),
+    };
   }
 }
 

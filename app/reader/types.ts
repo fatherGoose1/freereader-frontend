@@ -1,3 +1,5 @@
+import type { SpeechLanguage } from "./speech";
+
 export type DocumentFormat = "epub" | "pdf" | "txt" | "docx" | "html" | "md";
 
 export interface TextBlock {
@@ -23,6 +25,7 @@ export interface LibraryBook {
   id: string;
   title: string;
   author?: string;
+  language?: SpeechLanguage;
   format: DocumentFormat;
   sourceName: string;
   sourceIdentifier?: string;
@@ -47,6 +50,7 @@ export interface LibraryFolder {
 export interface ParsedBook {
   title: string;
   author?: string;
+  language?: SpeechLanguage;
   format: DocumentFormat;
   chapters: Chapter[];
   blocks: TextBlock[];
