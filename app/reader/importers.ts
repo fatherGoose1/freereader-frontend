@@ -28,8 +28,10 @@ class BookBuilder {
   chapter(rawTitle: string) {
     const title = normalize(rawTitle);
     if (!title) return;
-    this.chapterIndex += 1;
-    this.chapters.push({ title, startBlockIndex: this.blocks.length });
+    if (!this.blocks.at(-1)?.isHeading) {
+      this.chapterIndex += 1;
+      this.chapters.push({ title, startBlockIndex: this.blocks.length });
+    }
     this.blocks.push({
       index: this.blocks.length,
       text: title,

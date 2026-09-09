@@ -131,10 +131,17 @@ test("imports The Lion, the Witch and the Wardrobe EPUB", { timeout: 30_000 }, a
   try {
     const parsed = await parseFile(await fixtureFile(LION_WITCH_WARDROBE));
     assert.equal(parsed.format, "epub");
-    assert.ok(parsed.chapters.length > 20);
+    assert.equal(parsed.chapters.filter((chapter) => /^Chapter [IVXLCDM]+$/.test(chapter.title)).length, 17);
     assert.ok(parsed.blocks.length > 1_000);
     assert.ok(parsed.blocks.some((block) => block.text === "The Lion, the Witch and the Wardrobe"));
     assert.ok(parsed.blocks.some((block) => block.text === "Chapter I"));
+    const chapter = parsed.chapters.find((item) => item.title === "Chapter III");
+    assert.ok(chapter);
+    const headings = parsed.blocks.slice(chapter.startBlockIndex, chapter.startBlockIndex + 2);
+    assert.deepEqual(headings.map((block) => block.text), ["Chapter III", "Edmund and the Wardrobe"]);
+    assert.ok(headings.every((block) => block.isHeading && block.chapterIndex === headings[0].chapterIndex));
+    assert.ok(!parsed.chapters.some((item) => item.title === "Edmund and the Wardrobe"));
+    assert.equal(parsed.blocks[chapter.startBlockIndex + 2].chapterIndex, headings[0].chapterIndex);
   } finally {
     restoreDom();
   }
