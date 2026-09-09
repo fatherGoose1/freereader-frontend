@@ -270,6 +270,35 @@ function parsePlainText(text: string, fallbackTitle: string, format: DocumentFor
   return withDetectedLanguage({ title: fallbackTitle, format, chapters: builder.chapters, blocks: builder.blocks });
 }
 
+function looksLikeMarkdown(text: string): boolean {
+  const sample = text.slice(0, 4_000);
+  if (/^#{1,6}\s+\S/m.test(sample)) return true;
+  if (/^ {0,3}> ?\S/m.test(sample)) return true;
+  if (/\[[^\]\n]+\]\([^)\n]+\)/.test(sample)) return true;
+  if (/\*\*[^*\n]+\*\*/.test(sample)) return true;
+  const listLines = sample.split("\n").filter((line) => /^\s*(?:[-+*]|\d+[.)])\s+\S/.test(line));
+  return listLines.length >= 3;
+}
+
+function looksLikeHtml(text: string): boolean {
+  const sample = text.slice(0, 2_000);
+  return /^\s*<!doctype html/i.test(sample)
+    || /<\/?(?:p|div|span|br|h[1-6]|ul|ol|li|blockquote|article|section|body|html)\b/i.test(sample);
+}
+
+export function parsePastedText(text: string, fallbackTitle: string): ParsedBook {
+  const trimmed = text.trim();
+  const parsed = looksLikeHtml(trimmed)
+    ? parseHtml(trimmed, fallbackTitle, "html")
+    : looksLikeMarkdown(trimmed)
+      ? parseHtml(markdownToHtml(trimmed, fallbackTitle), fallbackTitle, "md")
+      : parsePlainText(trimmed, fallbackTitle);
+  if (!parsed.blocks.some((block) => !block.isHeading)) {
+    throw new Error("No readable text was found. Paste more than just headings.");
+  }
+  return parsed;
+}
+
 function markdownToHtml(markdown: string, sourceName: string): string {
   let lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   if (lines[0]?.trim() === "---") {

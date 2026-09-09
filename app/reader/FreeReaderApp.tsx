@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { browseGutenberg, downloadGutenbergBook } from "./gutenberg";
-import { parseFile, parseWebLink } from "./importers";
+import { parseFile, parsePastedText, parseWebLink } from "./importers";
 import {
   getAudio,
   listBooks,
@@ -23,7 +23,7 @@ import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./tel
 import posthog from "posthog-js";
 import styles from "./reader.module.css";
 
-type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | null;
+type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
 
 const gutenbergCategories = [
   [649, "Classics"], [644, "Adventure"], [640, "Mystery"], [639, "Romance"],
@@ -159,6 +159,10 @@ export default function FreeReaderApp() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
   const [url, setUrl] = useState("");
+  const [pastedTitle, setPastedTitle] = useState("");
+  const [pastedText, setPastedText] = useState("");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<number | undefined>();
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
@@ -235,6 +239,22 @@ export default function FreeReaderApp() {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     return () => { if (audioUrl.current) URL.revokeObjectURL(audioUrl.current); };
   }, []);
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!addMenuRef.current?.contains(event.target as Node)) setAddMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAddMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [addMenuOpen]);
 
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
@@ -329,6 +349,63 @@ export default function FreeReaderApp() {
       });
       posthog.capture("import_failed", {
         file_type: "html",
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function firstLineTitle(text: string): string {
+    const line = text.split("\n").map((value) => value.trim()).find(Boolean) ?? "";
+    const stripped = line.replace(/^#{1,6}\s+/, "").replace(/^[*-]\s+/, "");
+    return stripped.length > 0 && stripped.length <= 80 ? stripped : "";
+  }
+
+  async function importPastedText() {
+    const text = pastedText.trim();
+    if (!text) return;
+    setBusy(true);
+    setMessage("Preparing your text...");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const started = Date.now();
+    try {
+      const givenTitle = pastedTitle.trim();
+      const parsed = parsePastedText(text, givenTitle || firstLineTitle(text) || "Pasted Text");
+      const title = givenTitle || parsed.title || "Pasted Text";
+      const size = new Blob([text]).size;
+      const book = makeBook({ ...parsed, title }, title, size, undefined, activeFolderId ?? undefined);
+      await saveBook(book);
+      setBooks((current) => [book, ...current]);
+      setPanel(null);
+      setPastedText("");
+      setPastedTitle("");
+      setMessage(`${book.title} was added to your private library.`);
+      recordTelemetry("import_completed", {
+        ...documentProperties(book),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      posthog.capture("import_completed", {
+        file_type: book.format,
+        file_size_bytes: book.size,
+        block_count: book.blocks.length,
+        chapter_count: book.chapters.length,
+        source: "paste",
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The text could not be added.");
+      recordTelemetry("import_failed", {
+        file_type: "txt",
+        file_size_bytes: text.length,
+        error_category: failureCategory(error),
+        duration_seconds: (Date.now() - started) / 1000,
+      });
+      posthog.capture("import_failed", {
+        file_type: "txt",
+        file_size_bytes: text.length,
         error_category: failureCategory(error),
         duration_seconds: (Date.now() - started) / 1000,
       });
@@ -847,11 +924,35 @@ export default function FreeReaderApp() {
       <header className={styles.libraryHero}>
         <div><span className={styles.kicker}>On this device</span><h1>FreeReader</h1></div>
         <div className={styles.actions}>
-          <button onClick={() => openGutenbergBrowser()}>Browse Free Books</button>
-          <button onClick={() => setPanel("url")}>Web Link</button>
-          <label className={`${styles.primaryAction} ${styles.desktopAddAction}`} title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)">+ Add Book
-            <input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} />
-          </label>
+          <div className={styles.addMenuWrap} ref={addMenuRef}>
+            <button
+              className={`${styles.primaryAction} ${styles.addMenuButton}`}
+              aria-haspopup="menu"
+              aria-expanded={addMenuOpen}
+              title="Add reading to your library"
+              onClick={() => setAddMenuOpen((open) => !open)}
+            >+ Add<span className={styles.addCaret} aria-hidden="true">{addMenuOpen ? "▴" : "▾"}</span></button>
+            {addMenuOpen && (
+              <div className={styles.addMenu} role="menu" aria-label="Add reading">
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); fileInputRef.current?.click(); }}>
+                  <span className={styles.addChoiceIcon}>+</span>
+                  <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or Markdown</small></span>
+                </button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); openGutenbergBrowser(); }}>
+                  <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}>G</span>
+                  <span><strong>Free Books</strong><small>Browse Project Gutenberg</small></span>
+                </button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); setPanel("url"); }}>
+                  <span className={`${styles.addChoiceIcon} ${styles.webChoiceIcon}`}>W</span>
+                  <span><strong>Web Link</strong><small>Import an article from the web</small></span>
+                </button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); setPanel("paste"); }}>
+                  <span className={`${styles.addChoiceIcon} ${styles.pasteChoiceIcon}`}>T</span>
+                  <span><strong>Insert Text</strong><small>Paste or type content directly</small></span>
+                </button>
+              </div>
+            )}
+          </div>
           <button className={styles.mobileAddButton} aria-label="Add reading" onClick={() => setPanel("add")}>+</button>
           <input ref={fileInputRef} hidden type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => {
             const file = event.currentTarget.files?.[0];
@@ -879,6 +980,7 @@ export default function FreeReaderApp() {
           <span className={styles.sidebarLabel}>Add reading</span>
           <button onClick={() => openGutenbergBrowser()}><span className={styles.sidebarIcon}>G</span> Free Books</button>
           <button onClick={() => setPanel("url")}><span className={styles.sidebarIcon}>W</span> Web Link</button>
+          <button onClick={() => setPanel("paste")}><span className={`${styles.sidebarIcon} ${styles.pasteSidebarIcon}`}>T</span> Insert Text</button>
           <label title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)"><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} /></label>
           <div className={styles.privacyNote}><strong>Private by design</strong><span>Books, reading positions, and audio stay in this browser.</span></div>
         </aside>
@@ -927,7 +1029,7 @@ export default function FreeReaderApp() {
             </div>
           ) : childFolders.length === 0 ? (
             <div className={styles.emptyLibrary}>
-              <span className={styles.emptyBooks}>|||</span><h2>{activeFolder ? "This folder is empty" : "Your shelf is empty"}</h2><p>Browse free books or import a web link, EPUB, PDF, or TXT file. Everything stays on this device.</p>
+              <span className={styles.emptyBooks}>|||</span><h2>{activeFolder ? "This folder is empty" : "Your shelf is empty"}</h2><p>Browse free books, import a web link, paste some text, or add an EPUB, PDF, or TXT file. Everything stays on this device.</p>
             </div>
           ) : null}
         </section>
@@ -953,9 +1055,42 @@ export default function FreeReaderApp() {
                 <span><strong>Web Link</strong><small>Import an article from the web</small></span>
                 <i>&gt;</i>
               </button>
+              <button onClick={() => setPanel("paste")}>
+                <span className={`${styles.addChoiceIcon} ${styles.pasteChoiceIcon}`}>T</span>
+                <span><strong>Insert Text</strong><small>Paste or type content directly</small></span>
+                <i>&gt;</i>
+              </button>
             </div>
             <div className={styles.modalActions}><button onClick={() => setPanel(null)}>Cancel</button></div>
           </div>
+        </div>
+      )}
+      {panel === "paste" && (
+        <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
+          <form className={styles.modal} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importPastedText(); }}>
+            <span className={styles.kicker}>Insert Text</span><h2>Paste your reading</h2>
+            <p>Copy anything into the box below — an article, notes, or a chapter. FreeReader turns it into a readable, narratable document.</p>
+            <label className={styles.fieldLabel}>Title (optional)<input maxLength={120} placeholder="Defaults to the first line" value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} /></label>
+            <label className={styles.fieldLabel}>Text
+              <textarea
+                autoFocus
+                className={styles.pasteArea}
+                placeholder="Paste or type your text here..."
+                value={pastedText}
+                disabled={busy}
+                onChange={(event) => setPastedText(event.target.value)}
+              />
+            </label>
+            <div className={styles.pasteMeta}>{pastedText.trim() ? `${pastedText.trim().split(/\s+/).length.toLocaleString()} words` : ""}</div>
+            <div className={styles.modalActions}>
+              <button type="button" onClick={() => setPanel(null)}>Cancel</button>
+              <button className={styles.primaryAction} disabled={busy || !pastedText.trim()}>
+                {busy && <span className={styles.addSpinner} aria-label="Adding" />}
+                {busy ? "Adding" : "Add to Library"}
+              </button>
+            </div>
+            <div className={styles.modalPrivacy}>Pasted text is parsed and stored only on this device.</div>
+          </form>
         </div>
       )}
       {panel === "folder" && (
