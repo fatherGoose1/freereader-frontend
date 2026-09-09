@@ -1,4 +1,4 @@
-export const TEXT_PIPELINE_REVISION = "text-8";
+export const TEXT_PIPELINE_REVISION = "text-9";
 
 const ROMAN_NUMERAL = /^(?=[MDCLXVI]+$)M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/i;
 

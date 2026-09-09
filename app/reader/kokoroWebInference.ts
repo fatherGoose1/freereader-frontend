@@ -13,6 +13,7 @@ type Session = Awaited<ReturnType<Ort["InferenceSession"]["create"]>>;
 type Provider = "WebGPU" | "WASM";
 type Components = { ort: Ort; session: Session; provider: Provider };
 type Chunk = { tokens: number[] } | { silence: number };
+type Phonemizer = (text: string, language: "en-us" | "en-gb") => Promise<string>;
 
 let componentsPromise: Promise<Components> | undefined;
 const voices = new Map<KokoroVoice, Promise<Float32Array>>();
@@ -44,7 +45,7 @@ function normalizeText(text: string): string {
     .replace(/？/g, "? ").replaceAll("\n", "  ").replaceAll("\t", "  ").trim();
 }
 
-async function phonemize(text: string, language: "en-us" | "en-gb"): Promise<string> {
+async function phonemizeWords(text: string, language: "en-us" | "en-gb"): Promise<string> {
   type ESpeakFactory = (options: {
     locateFile: (path: string) => string;
     arguments: string[];
@@ -59,10 +60,23 @@ async function phonemize(text: string, language: "en-us" | "en-gb"): Promise<str
   return espeak.FS.readFile(output, { encoding: "utf8" }).split("\n").join(" ").trim();
 }
 
-async function preprocess(text: string, language: "en-us" | "en-gb"): Promise<Chunk[]> {
-  const sanitized = text.replace(/\.\s+/g, "[0.4s]").replace(/,\s+/g, "[0.2s]")
-    .replace(/;\s+/g, "[0.4s]").replace(/:\s+/g, "[0.3s]").replace(/!\s+/g, "![0.1s]")
-    .replace(/\?\s+/g, "?[0.1s]").replace(/\n+/g, "[0.4s]").trim();
+async function phonemize(text: string, language: "en-us" | "en-gb", toPhonemes: Phonemizer): Promise<string> {
+  const normalized = normalizeText(text);
+  const ending = normalized.match(/([;:,.!?]+)["')\]]*$/);
+  const spokenText = ending ? normalized.slice(0, ending.index).trimEnd() : normalized;
+  const phonemes = spokenText ? await toPhonemes(spokenText, language) : "";
+  return `${phonemes}${ending?.[1] ?? ""}`;
+}
+
+export async function preprocessKokoroText(
+  text: string,
+  language: "en-us" | "en-gb",
+  toPhonemes: Phonemizer = phonemizeWords,
+): Promise<Chunk[]> {
+  const sanitized = normalizeText(text).replace(/([.!?]+)(["')\]]*)(?=\s|$)/g, "$1$2[0.4s]")
+    .replace(/,(["')\]]*)(?=\s|$)/g, ",$1[0.2s]")
+    .replace(/;(["')\]]*)(?=\s|$)/g, ";$1[0.4s]")
+    .replace(/:(["')\]]*)(?=\s|$)/g, ":$1[0.3s]").replace(/\n+/g, "[0.4s]").trim();
   const segments = sanitized.split(/(\[[0-9]+(?:\.[0-9]+)?s\])/g).map((value) => value.trim()).filter(Boolean);
   const chunks: Chunk[] = [];
   for (const segment of segments) {
@@ -71,7 +85,7 @@ async function preprocess(text: string, language: "en-us" | "en-gb"): Promise<Ch
       chunks.push({ silence: Number(silence[1]) });
       continue;
     }
-    const phonemes = await phonemize(segment, language);
+    const phonemes = await phonemize(segment, language, toPhonemes);
     const characters = [...phonemes];
     for (let offset = 0; offset < characters.length; offset += MAX_TOKENS) {
       chunks.push({ tokens: tokenize(characters.slice(offset, offset + MAX_TOKENS).join("")) });
@@ -172,7 +186,7 @@ export async function synthesizeKokoroWeb(
   if (!text.trim()) throw new Error("Kokoro speech requires text.");
   if (!Number.isFinite(speechSpeed) || speechSpeed < 0.1 || speechSpeed > 5) throw new Error("Speech speed must be between 0.1 and 5.");
   const [{ ort, session, provider }, voiceData, chunks] = await Promise.all([
-    getComponents(status, mobile), getVoice(voice, status, mobile), preprocess(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
+    getComponents(status, mobile), getVoice(voice, status, mobile), preprocessKokoroText(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
   ]);
   status?.("Generating speech");
   const started = performance.now();
