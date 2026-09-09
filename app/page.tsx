@@ -7,8 +7,7 @@ export default function Home() {
     <main>
       <section className="hero wrap">
         <div className="hero-copy">
-          <span className="eyebrow">Free, private, and yours</span>
-          <h1>Turn any book into an audiobook.</h1>
+          <h1>Turn anything into an audiobook.</h1>
           <p className="lead">
             Listen to your EPUBs, PDFs, and text files with natural voices.
             Completely free.
