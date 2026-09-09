@@ -535,6 +535,7 @@ export default function FreeReaderApp() {
 
   async function togglePlayback() {
     if (!selected) return;
+    if (usesMobileSpeech()) void requestPersistentStorage().catch(() => false);
     const audio = audioRef.current;
     if (audio && audioBlock.current === selected.position.blockIndex && audio.src) {
       if (audio.paused) {

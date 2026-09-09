@@ -1,7 +1,7 @@
 import type { TtsStatus } from "./tts";
 import type { KokoroVoice } from "./voices";
 
-export type KokoroWebRequest = { text: string; voice: KokoroVoice; speechSpeed: number; isHeading: boolean };
+export type KokoroWebRequest = { text: string; voice: KokoroVoice; speechSpeed: number; isHeading: boolean; mobile: boolean };
 export type KokoroWebResponse =
   | { kind: "status"; message: string; progress?: number }
   | { kind: "result"; audio: ArrayBuffer; duration: number; provider: string; generationSeconds: number }
@@ -22,7 +22,7 @@ export class KokoroWebSpeechClient {
     this.rejectActive?.(new Error("Kokoro speech was interrupted. Tap Play to retry."));
   }
 
-  synthesize(text: string, voice: KokoroVoice, speechSpeed: number, isHeading = false, status?: TtsStatus) {
+  synthesize(text: string, voice: KokoroVoice, speechSpeed: number, isHeading = false, status?: TtsStatus, mobile = false) {
     const epoch = this.epoch;
     const task = this.tail.then(() => new Promise<{ blob: Blob; duration: number; provider: string; generationSeconds: number }>((resolve, reject) => {
       if (epoch !== this.epoch) { reject(new Error("Kokoro speech was cancelled.")); return; }
@@ -47,7 +47,7 @@ export class KokoroWebSpeechClient {
         this.worker.onerror = () => finish(new Error("Kokoro voice worker failed. Tap Play to retry."));
         this.worker.onmessageerror = () => finish(new Error("Could not read Kokoro voice output. Tap Play to retry."));
         watchdog();
-        this.worker.postMessage({ text, voice, speechSpeed, isHeading } satisfies KokoroWebRequest);
+        this.worker.postMessage({ text, voice, speechSpeed, isHeading, mobile } satisfies KokoroWebRequest);
       } catch (error) { finish(error instanceof Error ? error : new Error(String(error))); }
     }));
     this.tail = task.catch(() => undefined);

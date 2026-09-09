@@ -17,7 +17,7 @@ export async function synthesize(text: string, voice: NarratorVoice = "af_heart"
       pagehideInstalled = true;
       window.addEventListener("pagehide", () => kokoro?.stop());
     }
-    return kokoro.synthesize(text, selectedVoice, speechSpeed, isHeading, status);
+    return kokoro.synthesize(text, selectedVoice, speechSpeed, isHeading, status, usesMobileSpeech());
   }
   if (!isSupertonicVoice(selectedVoice)) throw new Error("A Supertonic voice is required for this language.");
   if (!usesMobileSpeech()) {

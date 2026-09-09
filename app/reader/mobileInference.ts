@@ -1,5 +1,5 @@
-import { getLocalFile, putLocalFile } from "./storage";
-import { downloadModel } from "./modelDownload";
+import { loadMobileModelAsset } from "./mobileModelCache";
+import { configureMobileWasm } from "./mobileWasm";
 import { normalizeForSpeech } from "./speechText";
 import type { SpeechLanguage } from "./speech";
 
@@ -58,16 +58,13 @@ let cachedStyle: Style | null = null;
 async function cachedAsset(path: string, size: number, quantized: boolean, status: Status): Promise<Blob> {
   const revision = quantized ? MODEL_REVISION : ORIGINAL_REVISION;
   const root = quantized ? MODEL_ROOT : ORIGINAL_ROOT;
-  const cachePath = `models/${revision}/${path}`;
   status(`Checking model cache: ${path}`);
-  const local = await getLocalFile(cachePath);
-  if (local?.size === size) return local;
-  status(`Downloading voice model: ${path}`, 0);
-  const blob = await downloadModel(`${root}/${path}?download=true`, size,
-    (progress) => status(`Downloading voice model: ${path}`, progress));
-  status(`Caching voice model: ${path}`, 1);
-  await putLocalFile(cachePath, blob);
-  return blob;
+  return loadMobileModelAsset({
+    url: `${root}/${path}?download=true`,
+    path: `models/${revision}/${path}`,
+    size,
+    label: path,
+  }, status);
 }
 
 async function jsonAsset<T>(path: string, size: number, status: Status): Promise<T> {
@@ -76,9 +73,7 @@ async function jsonAsset<T>(path: string, size: number, status: Status): Promise
 
 async function initialize(status: Status): Promise<Components> {
   const ort = await import("onnxruntime-web/wasm");
-  ort.env.wasm.numThreads = 1;
-  ort.env.wasm.proxy = false;
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/";
+  configureMobileWasm(ort, self.location.href);
   const config = await jsonAsset<TtsConfig>("onnx/tts.json", 8_253, status);
   const indexer = await jsonAsset<number[]>("onnx/unicode_indexer.json", 277_676, status);
   // These pinned dimensions also bound latent allocations if the cache is corrupt.

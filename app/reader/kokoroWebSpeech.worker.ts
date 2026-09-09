@@ -9,7 +9,7 @@ self.onmessage = async (event: MessageEvent<KokoroWebRequest>) => {
   busy = true;
   try {
     const result = await synthesizeKokoroWeb(event.data.text, event.data.voice, event.data.speechSpeed, event.data.isHeading,
-      (message, progress) => send({ kind: "status", message, progress }));
+      (message, progress) => send({ kind: "status", message, progress }), event.data.mobile);
     send({ kind: "result", ...result }, [result.audio]);
   } catch (error) {
     send({ kind: "error", message: error instanceof Error ? error.message : "Kokoro speech generation failed." });

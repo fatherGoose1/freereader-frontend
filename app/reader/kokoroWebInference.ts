@@ -2,6 +2,7 @@ import type { TtsStatus } from "./tts";
 import { KOKORO_MODELS, kokoroVoiceAsset, loadKokoroAsset } from "./kokoroWebResources";
 import { normalizeForSpeech } from "./speechText";
 import type { KokoroVoice } from "./voices";
+import { configureMobileWasm } from "./mobileWasm";
 
 const SAMPLE_RATE = 24_000;
 const MAX_TOKENS = 510;
@@ -118,7 +119,16 @@ function encodeWav(chunks: Float32Array[], sampleCount: number): ArrayBuffer {
   return buffer;
 }
 
-async function createComponents(status?: TtsStatus): Promise<Components> {
+async function createComponents(status?: TtsStatus, mobile = false): Promise<Components> {
+  if (mobile) {
+    const ort = await import("onnxruntime-web/wasm");
+    configureMobileWasm(ort, self.location.href);
+    const model = await loadKokoroAsset(KOKORO_MODELS.wasm, status, true);
+    status?.("Preparing mobile voice model with WASM");
+    const session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"] });
+    return { ort, session, provider: "WASM" };
+  }
+
   const ort = await import("onnxruntime-web/webgpu");
   ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/";
   if ("gpu" in navigator) {
@@ -137,15 +147,15 @@ async function createComponents(status?: TtsStatus): Promise<Components> {
   return { ort, session, provider: "WASM" };
 }
 
-async function getComponents(status?: TtsStatus): Promise<Components> {
-  componentsPromise ??= createComponents(status).catch((error) => { componentsPromise = undefined; throw error; });
+async function getComponents(status?: TtsStatus, mobile = false): Promise<Components> {
+  componentsPromise ??= createComponents(status, mobile).catch((error) => { componentsPromise = undefined; throw error; });
   return componentsPromise;
 }
 
-async function getVoice(voice: KokoroVoice, status?: TtsStatus): Promise<Float32Array> {
+async function getVoice(voice: KokoroVoice, status?: TtsStatus, mobile = false): Promise<Float32Array> {
   let value = voices.get(voice);
   if (!value) {
-    value = loadKokoroAsset(kokoroVoiceAsset(voice), status).then((buffer) => new Float32Array(buffer));
+    value = loadKokoroAsset(kokoroVoiceAsset(voice), status, mobile).then((buffer) => new Float32Array(buffer));
     voices.set(voice, value);
   }
   return value;
@@ -157,11 +167,12 @@ export async function synthesizeKokoroWeb(
   speechSpeed: number,
   isHeading: boolean,
   status?: TtsStatus,
+  mobile = false,
 ): Promise<{ audio: ArrayBuffer; duration: number; provider: Provider; generationSeconds: number }> {
   if (!text.trim()) throw new Error("Kokoro speech requires text.");
   if (!Number.isFinite(speechSpeed) || speechSpeed < 0.1 || speechSpeed > 5) throw new Error("Speech speed must be between 0.1 and 5.");
   const [{ ort, session, provider }, voiceData, chunks] = await Promise.all([
-    getComponents(status), getVoice(voice, status), preprocess(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
+    getComponents(status, mobile), getVoice(voice, status, mobile), preprocess(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
   ]);
   status?.("Generating speech");
   const started = performance.now();

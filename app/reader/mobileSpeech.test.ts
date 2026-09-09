@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MobileSpeechClient, usesMobileSpeech } from "./mobileSpeech";
 import { splitMobileText, synthesizeMobile } from "./mobileInference";
+import { configureMobileWasm, MOBILE_ORT_WASM_PATH } from "./mobileWasm";
 
 test("mobile routing excludes desktop Safari and desktop Chrome", () => {
   const device = (userAgent: string, platform = "", maxTouchPoints = 0) => ({ userAgent, platform, maxTouchPoints }) as Navigator;
@@ -10,6 +11,15 @@ test("mobile routing excludes desktop Safari and desktop Chrome", () => {
   assert.equal(usesMobileSpeech(device("iPhone Safari")), true);
   assert.equal(usesMobileSpeech(device("Android Chrome")), true);
   assert.equal(usesMobileSpeech(device("Macintosh Safari", "MacIntel", 5)), true);
+});
+
+test("mobile WASM uses the pinned same-origin runtime without threads or a proxy", () => {
+  const ort = { env: { wasm: {} } } as unknown as typeof import("onnxruntime-web/wasm");
+  configureMobileWasm(ort, "https://reader.example/reader");
+  assert.equal(ort.env.wasm.numThreads, 1);
+  assert.equal(ort.env.wasm.proxy, false);
+  assert.equal(ort.env.wasm.simd, "fixed");
+  assert.deepEqual(ort.env.wasm.wasmPaths, { wasm: `https://reader.example${MOBILE_ORT_WASM_PATH}` });
 });
 
 test("mobile text chunks bound allocation without dropping text or breaking surrogate pairs", () => {

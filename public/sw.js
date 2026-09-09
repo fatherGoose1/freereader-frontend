@@ -7,7 +7,9 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))));
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys
+    .filter((key) => key !== CACHE && !key.startsWith("freereader-mobile-"))
+    .map((key) => caches.delete(key)))));
   self.clients.claim();
 });
 

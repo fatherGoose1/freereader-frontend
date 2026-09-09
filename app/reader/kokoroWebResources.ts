@@ -1,4 +1,5 @@
 import { downloadModel } from "./modelDownload";
+import { loadMobileModelAsset } from "./mobileModelCache";
 import { getLocalFile, putLocalFile } from "./storage";
 import type { TtsStatus } from "./tts";
 import type { KokoroVoice } from "./voices";
@@ -23,7 +24,9 @@ export function kokoroVoiceAsset(voice: KokoroVoice): KokoroAsset {
   };
 }
 
-export async function loadKokoroAsset(asset: KokoroAsset, status?: TtsStatus): Promise<ArrayBuffer> {
+export async function loadKokoroAsset(asset: KokoroAsset, status?: TtsStatus, mobile = false): Promise<ArrayBuffer> {
+  if (mobile) return (await loadMobileModelAsset(asset, status)).arrayBuffer();
+
   let cache: Cache | undefined;
   try {
     cache = await caches.open(CACHE_NAME);
