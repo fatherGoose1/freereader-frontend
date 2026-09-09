@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { browseGutenberg, downloadGutenbergBook } from "./gutenberg";
 import { parseFile, parsePastedText, parseWebLink } from "./importers";
+import { readingPageStarts } from "./pagination";
 import {
   getAudio,
   listBooks,
@@ -191,27 +192,7 @@ export default function FreeReaderApp() {
   const [page, setPage] = useState({ bookId: "", start: 0 });
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
-  const pageStarts = useMemo(() => {
-    const starts: number[] = [];
-    let count = 0;
-    let characters = 0;
-    for (const block of selected?.blocks ?? []) {
-      const overflow = count > 0 && characters + block.text.length > PAGE_CHAR_LIMIT;
-      if (block.isHeading && count > 0) {
-        starts.push(block.index);
-        count = 0;
-        characters = 0;
-      } else if (overflow) {
-        starts.push(block.index);
-        count = 0;
-        characters = 0;
-      }
-      if (count === 0) starts.push(block.index);
-      count += 1;
-      characters += block.text.length;
-    }
-    return starts;
-  }, [selected?.id]);
+  const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
 
   useEffect(() => {
     if (!selected) return;
@@ -936,7 +917,7 @@ export default function FreeReaderApp() {
               <div className={styles.addMenu} role="menu" aria-label="Add reading">
                 <button role="menuitem" onClick={() => { setAddMenuOpen(false); fileInputRef.current?.click(); }}>
                   <span className={styles.addChoiceIcon}>+</span>
-                  <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or Markdown</small></span>
+                  <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or MD</small></span>
                 </button>
                 <button role="menuitem" onClick={() => { setAddMenuOpen(false); openGutenbergBrowser(); }}>
                   <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}>G</span>
