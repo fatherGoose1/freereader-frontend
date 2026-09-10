@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Support",
+  title: "FreeReader Support",
   description:
-    "Get help with FreeReader, troubleshoot importing and playback, or find answers to common questions.",
+    "Contact FreeReader support, troubleshoot importing and playback, or find answers to common questions.",
   alternates: { canonical: "/support" },
 };
 
@@ -14,9 +14,40 @@ export default function Support() {
       <span className="eyebrow">Support</span>
       <h1>How can we help?</h1>
       <p>
-        FreeReader is designed to be simple, free, and private. Start with the
-        answers below. If you still need help, use the support link on
-        FreeReader&apos;s App Store listing.
+        Find answers to common questions below, or contact us directly for help
+        with the FreeReader app.
+      </p>
+
+      <section className="support-card" aria-labelledby="contact-support">
+        <span className="eyebrow">Contact us</span>
+        <h2 id="contact-support">Email FreeReader support</h2>
+        <p>
+          For technical help, questions, feedback, or to report a problem,
+          email us at{" "}
+          <a href="mailto:parker@birdseye.gg?subject=FreeReader%20Support">
+            parker@birdseye.gg
+          </a>
+          . We review every support request and will reply as soon as possible.
+        </p>
+        <a
+          className="button"
+          href="mailto:parker@birdseye.gg?subject=FreeReader%20Support"
+        >
+          Email support
+        </a>
+      </section>
+
+      <h2>What to include</h2>
+      <p>To help us investigate a technical issue, please include:</p>
+      <ul>
+        <li>your iPhone model and iOS version;</li>
+        <li>your FreeReader app version;</li>
+        <li>what you expected to happen and what happened instead; and</li>
+        <li>the steps needed to reproduce the issue, if known.</li>
+      </ul>
+      <p>
+        Screenshots are helpful, but please do not send private, sensitive, or
+        copyrighted documents.
       </p>
 
       <h2>Frequently asked questions</h2>
