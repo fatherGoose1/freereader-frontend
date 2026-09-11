@@ -30,14 +30,14 @@ export async function browseGutenberg(query = "", bookshelfId?: number): Promise
     const normalizedDetail = detailUrl && safeUrl(detailUrl, response.url);
     const id = normalizedDetail?.match(/\/(\d+)\.opds/)?.[1];
     if (!id || !normalizedDetail) return [];
-    const thumbnail = links.find((link) => link.getAttribute("rel")?.endsWith("/thumbnail"))?.getAttribute("href");
-    const canonicalCover = safeUrl(`/cache/epub/${id}/pg${id}.cover.small.jpg`);
     return [{
       id,
       title: elementText(entry, "title"),
       author: elementText(entry, "content") || undefined,
       detailUrl: normalizedDetail,
-      coverUrl: (thumbnail && safeUrl(thumbnail, response.url)) || canonicalCover,
+      // Same-origin proxy; Gutenberg image responses lack CORS/CORP and would
+      // otherwise be blocked by the document's COEP require-corp policy.
+      coverUrl: `/api/gutenberg/cover/${id}`,
     }];
   });
 }

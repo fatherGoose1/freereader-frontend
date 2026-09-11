@@ -96,6 +96,12 @@ function BookCover({ book, index }: { book: LibraryBook; index: number }) {
     : <span className={`${styles.cover} ${styles[`cover${index % 4}`]}`}><small>{book.format}</small></span>;
 }
 
+function GutenbergCover({ book }: { book: GutenbergBook }) {
+  const [failed, setFailed] = useState(false);
+  if (!book.coverUrl || failed) return <span className={styles.miniCover}>PG</span>;
+  return <img src={book.coverUrl} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+}
+
 function readingProgress(book: LibraryBook, fractionWithinBlock = 0): number {
   const total = wordCount(book);
   if (!total) return 0;
@@ -1151,7 +1157,7 @@ export default function FreeReaderApp() {
             <div className={styles.catalogList}>
               {gutenberg.map((book) => (
                 <article key={book.id}>
-                  {book.coverUrl ? <img src={book.coverUrl} alt="" /> : <span className={styles.miniCover}>PG</span>}
+                  <GutenbergCover book={book} />
                   <div><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small></div>
                   <button disabled={busy} onClick={() => importGutenberg(book)}>
                     {importingBookId === book.id && <span className={styles.addSpinner} aria-label="Adding book" />}
