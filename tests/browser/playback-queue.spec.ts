@@ -39,7 +39,7 @@ async function setup(page: Page, held: number[] = [], delayFirstPlay = false) {
     window.Worker = class extends EventTarget {
       onmessage: ((event: MessageEvent) => void) | null = null;
       terminate() {}
-      postMessage(request: { kind: string; text: string }) {
+      postMessage(request: { kind?: string; text: string }) {
         if (request.kind === "probe") {
           setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready" } })), 0);
           return;
@@ -65,9 +65,11 @@ async function setup(page: Page, held: number[] = [], delayFirstPlay = false) {
           view.setUint32(40, audio.byteLength - 44, true);
           view.setInt16(44, index, true); // Identify the actual played blob, independently of highlighting.
           state.completed.push(index);
-          this.onmessage?.(new MessageEvent("message", { data: {
-            kind: "result", audio, duration: 8, generationSeconds: 0.03, generationStartedAt, provider: "WebGPU",
-          } }));
+          const result = { duration: 8, generationSeconds: 0.03, generationStartedAt };
+          this.onmessage?.(new MessageEvent("message", { data: request.kind === "synthesize"
+            ? { kind: "result", audio, ...result, provider: "WebGPU" }
+            : { kind: "result", result: { blob: new Blob([audio], { type: "audio/wav" }), ...result, provider: "WASM" } },
+          }));
         };
         if (held.includes(index)) state.release[index] = finish;
         else setTimeout(finish, 30);

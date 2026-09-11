@@ -24,7 +24,7 @@ test("plays the first chunk before look-ahead and measures synthesis-to-playback
     window.Worker = class extends EventTarget {
       onmessage: ((event: MessageEvent) => void) | null = null;
       terminate() {}
-      postMessage(request: { kind: string }) {
+      postMessage(request: { kind?: string }) {
         if (request.kind === "probe") {
           // Cold initialization must not be counted as audio generation.
           setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready" } })), 1_000);
@@ -42,9 +42,11 @@ test("plays the first chunk before look-ahead and measures synthesis-to-playback
         view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 24_000, true);
         view.setUint32(28, 48_000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
         view.setUint32(40, audio.byteLength - 44, true);
-        setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: {
-          kind: "result", audio, duration: 12, generationSeconds: 0.05, generationStartedAt, provider: "WebGPU",
-        } })), 50);
+        const result = { duration: 12, generationSeconds: 0.05, generationStartedAt };
+        setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: request.kind === "synthesize"
+          ? { kind: "result", audio, ...result, provider: "WebGPU" }
+          : { kind: "result", result: { blob: new Blob([audio], { type: "audio/wav" }), ...result, provider: "WASM" } },
+        })), 50);
       }
     } as unknown as typeof Worker;
   });
@@ -70,7 +72,7 @@ test("plays the first chunk before look-ahead and measures synthesis-to-playback
   expect(Math.abs(reported.time_to_first_playable_seconds - expected)).toBeLessThan(0.1);
 });
 
-test("mobile defaults English to Kokoro and non-English to Supertonic", async ({ page }, testInfo) => {
+test("mobile preserves default English and non-English voice selections", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith("desktop"));
   await page.goto("/reader");
   await page.locator('input[type="file"]').first().setInputFiles({
@@ -196,6 +198,7 @@ test("synthesizes English with WebGPU Kokoro or Supertonic WASM and reuses retai
     return state.src && Number.isFinite(state.duration) && state.duration > 0 && state.played;
   }, { timeout: 360_000, intervals: [2_000] }).toBe(true);
   expect(models.some((url) => url.endsWith(mobile ? "/onnx/model.onnx" : "/onnx/model_quantized.onnx"))).toBe(false);
+  if (mobile) expect(models.every((url) => url.includes("soniqo/Supertonic-3-ONNX-INT8"))).toBe(true);
   if (models.some((url) => url.includes("Kokoro"))) {
     expect(runtime).toContainEqual(expect.stringContaining("ort-wasm-simd-threaded.jsep.wasm"));
   } else {
@@ -233,7 +236,7 @@ test("synthesizes English with WebGPU Kokoro or Supertonic WASM and reuses retai
 });
 
 for (const gpuDisabled of [true, false]) {
-  test(`GPU-first downloads and isolated worker runtime (GPU disabled: ${gpuDisabled})`, async ({ page }, testInfo) => {
+  test(`device-specific downloads and isolated worker runtime (GPU disabled: ${gpuDisabled})`, async ({ page }, testInfo) => {
     if (gpuDisabled) {
       await page.context().route("**/_next/static/chunks/*.js", async (route) => {
         const response = await route.fetch();
@@ -269,9 +272,10 @@ for (const gpuDisabled of [true, false]) {
     await page.getByRole("button", { name: "Listen", exact: true }).click();
     await expect.poll(() => models.length, { timeout: 90_000 }).toBeGreaterThan(0);
     const mobile = !testInfo.project.name.startsWith("desktop");
-    if (gpuDisabled || !models[0].includes("Kokoro")) {
+    if (mobile || gpuDisabled || !models[0].includes("Kokoro")) {
       expect(models[0]).toContain(mobile ? "soniqo/Supertonic-3-ONNX-INT8" : "Supertone/supertonic-3");
       expect(requests.some((url) => url.includes("Kokoro"))).toBe(false);
+      if (mobile) expect(models.every((url) => url.includes("soniqo/Supertonic-3-ONNX-INT8"))).toBe(true);
     } else {
       // This branch executes the real tiny ONNX GPU probe, never a mocked ORT.
       expect(models[0]).toContain(mobile ? "model_quantized.onnx" : "/onnx/model.onnx");

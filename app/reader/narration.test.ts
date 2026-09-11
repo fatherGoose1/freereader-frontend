@@ -21,29 +21,33 @@ function setup(mobile: boolean, probeError?: Error, inferenceError?: Error) {
 }
 
 for (const mobile of [false, true]) {
-  test(`${mobile ? "mobile" : "desktop"}: usable GPU selects only the correct Kokoro variant`, async () => {
+  test(`${mobile ? "mobile" : "desktop"}: usable GPU selects ${mobile ? "Supertonic INT8" : "Kokoro FP32"}`, async () => {
     const { calls, speak } = setup(mobile);
     const result = await speak();
-    assert.equal(result.route.model, mobile ? "kokoro-q8-webgpu-v2" : "kokoro-fp32-webgpu-v2");
-    assert.deepEqual(calls, ["probe", `kokoro:${mobile}`]);
+    assert.equal(result.route.model, mobile ? "supertonic-int8-wasm-v2" : "kokoro-fp32-webgpu-v2");
+    assert.deepEqual(calls, mobile ? ["supertonic:true:F1:en"] : ["probe", "kokoro:false"]);
   });
 
-  test(`${mobile ? "mobile" : "desktop"}: failed GPU probe skips Kokoro; fallback stays selected`, async () => {
+  test(`${mobile ? "mobile" : "desktop"}: unavailable GPU uses Supertonic; route stays selected`, async () => {
     const { calls, speak } = setup(mobile, new Error("requestDevice rejected"));
     const result = await speak();
     assert.equal(result.route.model, mobile ? "supertonic-int8-wasm-v2" : "supertonic-fp32-wasm-v2");
     assert.equal(result.provider, "WASM");
     await speak();
-    assert.deepEqual(calls, ["probe", "dispose-kokoro", `supertonic:${mobile}:F1:en`, `supertonic:${mobile}:F1:en`]);
+    assert.deepEqual(calls, [...(mobile ? [] : ["probe", "dispose-kokoro"]), `supertonic:${mobile}:F1:en`, `supertonic:${mobile}:F1:en`]);
   });
 
-  test(`${mobile ? "mobile" : "desktop"}: Kokoro failure disposes before transparent fallback`, async () => {
+  test(mobile ? "mobile: bypasses Kokoro even if it would fail" : "desktop: Kokoro failure disposes before transparent fallback", async () => {
     const { calls, speak } = setup(mobile, undefined, new Error("Unsupported operator / device lost"));
     assert.equal((await speak()).provider, "WASM");
     await speak();
-    assert.equal(calls.filter((call) => call === "probe").length, 1);
-    assert.ok(calls.indexOf("dispose-kokoro") < calls.indexOf(`supertonic:${mobile}:F1:en`));
-    assert.equal(calls.filter((call) => call.startsWith("kokoro:")).length, 1);
+    if (mobile) {
+      assert.deepEqual(calls, ["supertonic:true:F1:en", "supertonic:true:F1:en"]);
+    } else {
+      assert.equal(calls.filter((call) => call === "probe").length, 1);
+      assert.ok(calls.indexOf("dispose-kokoro") < calls.indexOf(`supertonic:${mobile}:F1:en`));
+      assert.equal(calls.filter((call) => call.startsWith("kokoro:")).length, 1);
+    }
   });
 }
 
@@ -57,9 +61,9 @@ test("language switches release the previous large model worker", async () => {
 });
 
 test("page exit cancellation does not trigger model downloads for fallback", async () => {
-  const { calls, speak } = setup(true, undefined, new SpeechCancelledError("pagehide"));
+  const { calls, speak } = setup(false, undefined, new SpeechCancelledError("pagehide"));
   await assert.rejects(speak(), SpeechCancelledError);
-  assert.deepEqual(calls, ["probe", "kokoro:true"]);
+  assert.deepEqual(calls, ["probe", "kokoro:false"]);
 });
 
 function deferred<T>() {
@@ -102,7 +106,7 @@ test("a seek during the capability probe prevents obsolete inference", async () 
   const probe = deferred<void>();
   const started = deferred<void>();
   let needed = true;
-  const router = new NarrationRouter(true, {
+  const router = new NarrationRouter(false, {
     kokoro: {
       async probe() { started.resolve(); await probe.promise; },
       async synthesize() { throw new Error("Obsolete inference ran"); },

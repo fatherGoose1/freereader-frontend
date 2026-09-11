@@ -42,7 +42,8 @@ export class NarrationRouter {
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
     const selected = voiceForLanguage(voice, language);
-    if (speechEngine(language) === "kokoro" && !this.fallbackReason) {
+    // Temporary mobile override: always use the existing Supertonic 3 INT8 WASM path below.
+    if (!this.mobile && speechEngine(language) === "kokoro" && !this.fallbackReason) {
       this.gpu ??= this.clients.kokoro.probe(this.mobile).then(() => true).catch((error) => {
         if (error instanceof SpeechCancelledError) throw error;
         this.fallback(error);
