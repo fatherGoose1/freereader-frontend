@@ -61,3 +61,58 @@ test("page exit cancellation does not trigger model downloads for fallback", asy
   await assert.rejects(speak(), SpeechCancelledError);
   assert.deepEqual(calls, ["probe", "kokoro:true"]);
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+test("a seek drops stale queued synthesis while retaining an in-flight result and the loaded worker", async () => {
+  const first = deferred<typeof audio>();
+  const started = deferred<void>();
+  const calls: string[] = [];
+  let current = 0;
+  const router = new NarrationRouter(false, {
+    kokoro: {
+      async probe() { calls.push("probe"); },
+      async synthesize(text) {
+        calls.push(text);
+        if (text === "first") { started.resolve(); return first.promise; }
+        return audio;
+      },
+      stop() { calls.push("stop"); },
+    },
+    supertonic: { async synthesize() { throw new Error("Unexpected fallback"); }, stop() {} },
+  });
+  const speak = (text: string, epoch: number) => router.synthesize(text, "af_heart", 4, undefined, false, 1, "en", () => current === epoch);
+  const inFlight = speak("first", 0);
+  await started.promise;
+  const obsolete = assert.rejects(speak("old next section", 0), SpeechCancelledError);
+  current = 1;
+  const latest = speak("selected section", 1);
+  first.resolve(audio);
+  assert.equal((await inFlight).blob, audio.blob); // Still useful to the audio cache.
+  await obsolete;
+  await latest;
+  assert.deepEqual(calls, ["probe", "first", "selected section"]);
+});
+
+test("a seek during the capability probe prevents obsolete inference", async () => {
+  const probe = deferred<void>();
+  const started = deferred<void>();
+  let needed = true;
+  const router = new NarrationRouter(true, {
+    kokoro: {
+      async probe() { started.resolve(); await probe.promise; },
+      async synthesize() { throw new Error("Obsolete inference ran"); },
+      stop() {},
+    },
+    supertonic: { async synthesize() { throw new Error("Unexpected fallback"); }, stop() {} },
+  });
+  const cancelled = assert.rejects(router.synthesize("Old selection", "af_heart", 4, undefined, false, 1, "en", () => needed), SpeechCancelledError);
+  await started.promise;
+  needed = false;
+  probe.resolve();
+  await cancelled;
+});

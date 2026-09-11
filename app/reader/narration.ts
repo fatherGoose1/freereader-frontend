@@ -57,13 +57,17 @@ export class NarrationRouter {
   }
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
-    isHeading: boolean, speechSpeed: number, language: SpeechLanguage): Promise<SpeechResult & { route: NarrationRoute }> {
+    isHeading: boolean, speechSpeed: number, language: SpeechLanguage,
+    isNeeded: () => boolean = () => true): Promise<SpeechResult & { route: NarrationRoute }> {
     const epoch = this.epoch;
+    const checkRequest = () => {
+      if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
+    };
     const task = this.tail.then(async () => {
       const started = performance.now();
-      if (epoch !== this.epoch) throw new SpeechCancelledError("Narration was cancelled");
+      checkRequest();
       let route = await this.route(voice, language);
-      if (epoch !== this.epoch) throw new SpeechCancelledError("Narration was cancelled");
+      checkRequest();
       let result: SpeechResult | undefined;
       if (route.provider === "WebGPU" && isKokoroVoice(route.voice)) {
         if (this.active === "supertonic") this.clients.supertonic.stop();
@@ -72,11 +76,13 @@ export class NarrationRouter {
           result = await this.clients.kokoro.synthesize(text, route.voice, speechSpeed, isHeading, status, this.mobile);
         } catch (error) {
           if (epoch !== this.epoch || error instanceof SpeechCancelledError) throw error;
+          checkRequest();
           this.fallback(error);
           route = await this.route(voice, language);
         }
       }
       if (!result) {
+        checkRequest();
         if (this.active === "kokoro") { this.clients.kokoro.stop(); this.gpu = undefined; }
         this.active = "supertonic";
         if (isKokoroVoice(route.voice)) throw new Error("Invalid fallback voice");
@@ -106,6 +112,6 @@ export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage) {
 }
 
 export function synthesize(text: string, voice: NarratorVoice = "af_heart", steps = 8, status?: TtsStatus,
-  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en") {
-  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language);
+  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean) {
+  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded);
 }

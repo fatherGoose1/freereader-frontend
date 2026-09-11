@@ -16,7 +16,7 @@ import {
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { narrationRoute, synthesize, type NarrationRoute } from "./narration";
-import { ttsLog } from "./ttsDiagnostics";
+import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
 import { isKokoroVoice, type NarratorVoice } from "./voices";
@@ -30,6 +30,8 @@ type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   generationStartedAt?: number;
 };
+type PendingAudio = { promise: Promise<PreparedAudio>; request: { isCurrent: () => boolean } };
+type ActiveAudio = { bookId: string; index: number; url: string };
 
 const gutenbergCategories = [
   [649, "Classics"], [644, "Adventure"], [640, "Mystery"], [639, "Romance"],
@@ -167,6 +169,8 @@ export default function FreeReaderApp() {
   const [organizingBook, setOrganizingBook] = useState<LibraryBook | null>(null);
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
   const [selected, setSelected] = useState<LibraryBook | null>(null);
+  // Async media events must use the latest cursor, including changes before React renders.
+  const selectedRef = useRef<LibraryBook | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
@@ -186,9 +190,11 @@ export default function FreeReaderApp() {
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const audioBlock = useRef<number | null>(null);
+  const activeAudio = useRef<ActiveAudio | null>(null);
   const audioUrl = useRef<string | null>(null);
-  const pendingAudio = useRef(new Map<string, Promise<PreparedAudio>>());
+  const pendingAudio = useRef(new Map<string, PendingAudio>());
+  const playbackEpoch = useRef(0);
+  const wantsPlayback = useRef(false);
   const generationEpoch = useRef(0);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
@@ -222,7 +228,12 @@ export default function FreeReaderApp() {
       .catch(() => setMessage("Local library storage is unavailable."));
     requestPersistentStorage().catch(() => false);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    return () => { if (audioUrl.current) URL.revokeObjectURL(audioUrl.current); };
+    return () => {
+      playbackEpoch.current += 1;
+      generationEpoch.current += 1;
+      wantsPlayback.current = false;
+      if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -452,6 +463,7 @@ export default function FreeReaderApp() {
   }
 
   function updateBook(book: LibraryBook) {
+    selectedRef.current = book;
     setSelected(book);
     setBooks((current) => current.map((value) => value.id === book.id ? book : value));
     saveBook(book).catch(() => setMessage("Reading position could not be saved."));
@@ -472,19 +484,36 @@ export default function FreeReaderApp() {
     return `${book.id}/${model}/${index}.wav`;
   }
 
-  async function ensureAudio(book: LibraryBook, index: number): Promise<PreparedAudio> {
+  async function ensureAudio(book: LibraryBook, index: number, isCurrent: () => boolean): Promise<PreparedAudio> {
+    const checkRequest = () => {
+      if (!isCurrent()) throw new SpeechCancelledError("Playback position changed");
+    };
+    checkRequest();
     const route = await narrationRoute(voice, languageForBook(book));
+    checkRequest();
     const key = audioCacheKey(book, index, route);
     const cached = await getAudio(key);
+    checkRequest();
     if (cached) {
       return { blob: cached, provider: route.provider, model: route.model, cached: true, duration: 0 };
     }
     const existing = pendingAudio.current.get(key);
-    if (existing) return existing;
+    if (existing) {
+      // A seek can adopt the chunk currently being prepared by the old look-ahead.
+      existing.request.isCurrent = isCurrent;
+      try { return await existing.promise; }
+      catch (error) {
+        // A queued request may have been cancelled just before this caller adopted it.
+        if (error instanceof SpeechCancelledError && isCurrent()) return ensureAudio(book, index, isCurrent);
+        throw error;
+      }
+    }
     const block = book.blocks[index];
     const language = languageForBook(book);
     const selectedVoice = voiceForLanguage(voice, language);
+    const request = { isCurrent };
     const promise = synthesize(block.text, selectedVoice, steps, (status, progress) => {
+      if (!request.isCurrent()) return;
       if (isKokoroVoice(selectedVoice) || usesMobileSpeech()) {
         setMessage(status);
         setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
@@ -498,26 +527,28 @@ export default function FreeReaderApp() {
         setMessage(status);
         setTtsProgress(undefined);
       }
-    }, block.isHeading, speechRate, language).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
+    }, block.isHeading, speechRate, language, () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
       await saveAudio(audioCacheKey(book, index, actualRoute), blob);
       // Keep timing attached to this chunk so background generation cannot overwrite it.
       return { blob, provider, model: actualRoute.model, cached: false, duration, generationStartedAt };
     }).finally(() => {
-      setTtsProgress(undefined);
+      if (request.isCurrent()) setTtsProgress(undefined);
       pendingAudio.current.delete(key);
     });
-    pendingAudio.current.set(key, promise);
+    pendingAudio.current.set(key, { promise, request });
     return promise;
   }
 
   async function pregenerate(book: LibraryBook, fromIndex: number) {
     const epoch = ++generationEpoch.current;
+    const isCurrent = () => generationEpoch.current === epoch && wantsPlayback.current;
     let bufferedSeconds = 0;
     for (let index = fromIndex; index < Math.min(book.blocks.length, fromIndex + 4); index += 1) {
-      if (generationEpoch.current !== epoch) return;
+      if (!isCurrent()) return;
       try {
-        const { blob } = await ensureAudio(book, index);
+        const { blob } = await ensureAudio(book, index, isCurrent);
+        if (!isCurrent()) return;
         const wav = new DataView(await blob.slice(0, 44).arrayBuffer());
         bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true) / book.position.speed;
         if (bufferedSeconds >= 30) return;
@@ -525,40 +556,79 @@ export default function FreeReaderApp() {
     }
   }
 
-  useEffect(() => {
-    if (selected && playing && !audioRef.current?.paused && audioBlock.current === selected.position.blockIndex) {
-      void pregenerate(selected, selected.position.blockIndex + 1);
+  function pausePlayback() {
+    playbackEpoch.current += 1;
+    generationEpoch.current += 1;
+    wantsPlayback.current = false;
+    audioRef.current?.pause();
+    setPlaying(false);
+    setBusy(false);
+    setTtsProgress(undefined);
+  }
+
+  function resetPlayback() {
+    pausePlayback();
+    activeAudio.current = null;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.onloadedmetadata = null;
+      if (audio.hasAttribute("src")) {
+        audio.removeAttribute("src");
+        audio.load();
+      }
     }
-    return () => { generationEpoch.current += 1; };
-  }, [playing, selected?.id, selected?.position.blockIndex, selected?.language, voice, steps, speechRate]);
+    if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
+    audioUrl.current = null;
+    setAudioProgress(0);
+  }
+
+  function currentAudio() {
+    const audio = audioRef.current;
+    const source = activeAudio.current;
+    const book = selectedRef.current;
+    if (!audio || !source || !book || source.bookId !== book.id || source.index !== book.position.blockIndex
+      || audio.currentSrc !== source.url) return;
+    return { audio, source, book };
+  }
 
   async function playBlock(book: LibraryBook, index: number, offset = 0, offsetFromEnd = false) {
     const audio = audioRef.current;
     if (!audio || !book.blocks[index]) return;
     const requestedAt = performance.now();
-    generationEpoch.current += 1;
+    resetPlayback();
+    const epoch = playbackEpoch.current;
+    const isCurrent = () => playbackEpoch.current === epoch && wantsPlayback.current && audioRef.current === audio;
+    wantsPlayback.current = true;
+    setPlaying(true);
+    // Selection/highlighting and the next playback position change synchronously, before generation.
+    updateBook(positionBook(book, index, offsetFromEnd ? 0 : offset));
     setBusy(true);
     try {
-      const { blob, ...info } = await ensureAudio(book, index);
-      if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
+      const { blob, ...info } = await ensureAudio(book, index, isCurrent);
+      if (!isCurrent()) return;
       audioUrl.current = URL.createObjectURL(blob);
-      audio.src = audioUrl.current;
-      audio.playbackRate = book.position.speed;
-      audioBlock.current = index;
+      const source = { bookId: book.id, index, url: audioUrl.current };
+      activeAudio.current = source;
       audio.onloadedmetadata = () => {
+        if (activeAudio.current !== source || !currentAudio() || audio.readyState < 1) return;
+        audio.onloadedmetadata = null;
         audio.currentTime = offsetFromEnd
           ? Math.max(0, audio.duration - offset)
           : Math.min(offset, Math.max(0, audio.duration - 0.05));
       };
-      const positioned = positionBook(book, index, offset);
-      updateBook(positioned);
+      audio.src = source.url;
+      audio.playbackRate = selectedRef.current!.position.speed;
       await audio.play();
+      if (!isCurrent()) return;
       const playbackStartedAt = performance.timeOrigin + performance.now();
       // Generated audio: actual synthesis start through playback, excluding setup.
       // Cached audio has no synthesis start; retain its request-to-playback latency.
       const timeToFirstPlayableSeconds = Math.max(0,
         (playbackStartedAt - (info.generationStartedAt ?? performance.timeOrigin + requestedAt)) / 1000);
       setPlaying(true);
+      // Start/refill from this cursor only after its audio actually starts, even if
+      // React has already rendered `playing` while generation was pending.
+      void pregenerate(selectedRef.current!, index + 1);
       ttsLog("playback started", { timeToFirstAudioSeconds: (playbackStartedAt - performance.timeOrigin - requestedAt) / 1000,
         generationToPlaybackSeconds: info.cached ? undefined : timeToFirstPlayableSeconds,
         model: info.model, provider: info.provider, cached: info.cached });
@@ -603,51 +673,68 @@ export default function FreeReaderApp() {
         });
       }
     } catch (error) {
-      setPlaying(false);
+      if (!isCurrent()) return;
+      pausePlayback();
       setMessage(error instanceof Error ? error.message : "Local speech generation failed.");
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   }
 
   async function togglePlayback() {
-    if (!selected) return;
+    const book = selectedRef.current;
+    if (!book) return;
     if (usesMobileSpeech()) void requestPersistentStorage().catch(() => false);
-    const audio = audioRef.current;
-    if (audio && audioBlock.current === selected.position.blockIndex && audio.src) {
-      if (audio.paused) {
+    const current = currentAudio();
+    if (wantsPlayback.current) {
+      pausePlayback();
+      if (current) updateBook(positionBook(book, current.source.index, current.audio.currentTime));
+      return;
+    }
+    if (current && !current.audio.ended) {
+      const { audio, source } = current;
+      const epoch = ++playbackEpoch.current;
+      wantsPlayback.current = true;
+      setPlaying(true);
+      try {
         await audio.play();
-        setPlaying(true);
-      } else {
-        audio.pause();
-        setPlaying(false);
-        updateBook(positionBook(selected, selected.position.blockIndex, audio.currentTime));
+        if (playbackEpoch.current !== epoch || !wantsPlayback.current) return;
+        void pregenerate(selectedRef.current!, source.index + 1);
+      } catch (error) {
+        if (playbackEpoch.current !== epoch) return;
+        pausePlayback();
+        setMessage(error instanceof Error ? error.message : "Audio playback failed.");
       }
       return;
     }
-    await playBlock(selected, selected.position.blockIndex, selected.position.offsetSeconds);
+    await playBlock(book, book.position.blockIndex, book.position.offsetSeconds);
   }
 
   function seek(seconds: number) {
-    const audio = audioRef.current;
-    if (!audio || !selected || !Number.isFinite(audio.duration)) return;
+    const current = currentAudio();
+    if (!current || !Number.isFinite(current.audio.duration)) return;
+    const { audio, book } = current;
     const target = audio.currentTime + seconds;
-    if (target > audio.duration && selected.position.blockIndex + 1 < selected.blocks.length) {
-      void playBlock(selected, selected.position.blockIndex + 1, target - audio.duration);
-    } else if (target < 0 && selected.position.blockIndex > 0) {
-      void playBlock(selected, selected.position.blockIndex - 1, Math.abs(target), true);
+    if (target > audio.duration && book.position.blockIndex + 1 < book.blocks.length) {
+      void playBlock(book, book.position.blockIndex + 1, target - audio.duration);
+    } else if (target < 0 && book.position.blockIndex > 0) {
+      void playBlock(book, book.position.blockIndex - 1, Math.abs(target), true);
     } else audio.currentTime = Math.max(0, Math.min(audio.duration, target));
   }
 
   function changeSpeed(speed: number) {
+    const selected = selectedRef.current;
     if (!selected) return;
     if (audioRef.current) audioRef.current.playbackRate = speed;
     updateBook({ ...selected, position: { ...selected.position, speed } });
+    if (wantsPlayback.current && currentAudio() && !audioRef.current?.paused) {
+      void pregenerate(selectedRef.current!, selected.position.blockIndex + 1);
+    }
   }
 
   function seekOverall(progress: number) {
+    const selected = selectedRef.current;
     if (!selected) return;
-    const shouldResume = playing || Boolean(audioRef.current && !audioRef.current.paused);
     const target = Math.max(0, Math.min(1, progress)) * wordCount(selected);
     let wordsBefore = 0;
     const targetBlock = selected.blocks.find((item) => {
@@ -657,57 +744,50 @@ export default function FreeReaderApp() {
       return false;
     }) ?? selected.blocks.at(-1);
     if (!targetBlock) return;
-    audioRef.current?.pause();
-    setPlaying(false);
-    setAudioProgress(0);
-    audioBlock.current = null;
-    if (shouldResume) void playBlock(selected, targetBlock.index);
-    else updateBook(positionBook(selected, targetBlock.index));
+    goToBlock(targetBlock.index);
   }
 
   function onTimeUpdate() {
-    const audio = audioRef.current;
-    if (!audio || !selected) return;
+    const current = currentAudio();
+    if (!current) return;
+    const { audio, book, source } = current;
     setAudioProgress(audio.duration ? audio.currentTime / audio.duration : 0);
     if (Date.now() - lastPositionSave.current > 5_000) {
       lastPositionSave.current = Date.now();
-      updateBook(positionBook(selected, selected.position.blockIndex, audio.currentTime));
+      updateBook(positionBook(book, source.index, audio.currentTime));
     }
   }
 
   async function onEnded() {
-    if (!selected) return;
-    const next = selected.position.blockIndex + 1;
-    if (next < selected.blocks.length) await playBlock(selected, next);
+    const current = currentAudio();
+    // Browsers can deliver an old ended event after a seek or source replacement.
+    if (!current || !wantsPlayback.current || !current.audio.ended) return;
+    const next = current.source.index + 1;
+    if (next < current.book.blocks.length) await playBlock(current.book, next);
     else {
-      setPlaying(false);
+      pausePlayback();
       setMessage("You reached the end of this book.");
     }
   }
 
   function moveChapter(direction: -1 | 1) {
+    const selected = selectedRef.current;
     if (!selected) return;
-    const shouldResume = playing || Boolean(audioRef.current && !audioRef.current.paused);
     const chapter = direction > 0
       ? selected.chapters.find((item) => item.startBlockIndex > selected.position.blockIndex)
       : selected.chapters.findLast((item) => item.startBlockIndex < selected.position.blockIndex);
     if (!chapter) return;
-    audioRef.current?.pause();
-    setPlaying(false);
-    audioBlock.current = null;
-    if (shouldResume) void playBlock(selected, chapter.startBlockIndex);
-    else updateBook(positionBook(selected, chapter.startBlockIndex));
+    goToBlock(chapter.startBlockIndex);
   }
 
   function goToBlock(blockIndex: number) {
-    if (!selected) return;
-    const shouldResume = playing || Boolean(audioRef.current && !audioRef.current.paused);
-    audioRef.current?.pause();
-    setPlaying(false);
-    setAudioProgress(0);
-    audioBlock.current = null;
-    if (shouldResume) void playBlock(selected, blockIndex);
-    else updateBook(positionBook(selected, blockIndex));
+    const selected = selectedRef.current;
+    if (!selected || !selected.blocks[blockIndex]) return;
+    if (wantsPlayback.current) void playBlock(selected, blockIndex);
+    else {
+      resetPlayback();
+      updateBook(positionBook(selected, blockIndex));
+    }
   }
 
   async function deleteBook(book: LibraryBook) {
@@ -724,8 +804,10 @@ export default function FreeReaderApp() {
   }
 
   function openBook(book: LibraryBook) {
+    resetPlayback();
     const language = languageForBook(book);
     const ready = book.language ? book : { ...book, language };
+    selectedRef.current = ready;
     setSelected(ready);
     setVoice((current) => voiceForLanguage(current, language));
     if (!book.language) {
@@ -742,10 +824,9 @@ export default function FreeReaderApp() {
   }
 
   function changeNarrationLanguage(language: SpeechLanguage) {
+    const selected = selectedRef.current;
     if (!selected) return;
-    audioRef.current?.pause();
-    setPlaying(false);
-    audioBlock.current = null;
+    resetPlayback();
     setVoice((current) => voiceForLanguage(current, language));
     updateBook({ ...selected, language, updatedAt: new Date().toISOString() });
     posthog.capture("voice_settings_changed", { setting: "language", value: language });
@@ -803,9 +884,13 @@ export default function FreeReaderApp() {
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
     return (
       <main className={styles.appShell}>
-        <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => setPlaying(false)} />
+        <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
+          if (!currentAudio() || !audioRef.current?.error) return;
+          setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
+          resetPlayback();
+        }} />
         <div className={styles.readerTop}>
-          <button className={styles.textButton} onClick={() => { audioRef.current?.pause(); setSelected(null); }}>Library</button>
+          <button className={styles.textButton} onClick={() => { resetPlayback(); selectedRef.current = null; setSelected(null); }}>Library</button>
           <div className={styles.readerTitle}><strong>{selected.title}</strong><span>{chapter?.title ?? "Beginning"}</span></div>
           <div className={styles.readerTools}>
             {selected.chapters.length > 0 && (
@@ -837,8 +922,8 @@ export default function FreeReaderApp() {
             <div className={styles.readingText}>
               {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
                 item.isHeading
-                  ? <h2 key={item.index} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""}>{item.text}</h2>
-                  : <p key={item.index} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
+                  ? <h2 key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</h2>
+                  : <p key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
               ))}
             </div>
             <div className={styles.pageMarker}>{selected.position.blockIndex + 1} / {selected.blocks.length}</div>
@@ -886,18 +971,18 @@ export default function FreeReaderApp() {
               </select>
             </label>
             <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
-              <select value={narrationVoice} onChange={(event) => { audioRef.current?.pause(); setPlaying(false); setVoice(event.target.value as NarratorVoice); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
+              <select value={narrationVoice} onChange={(event) => { resetPlayback(); setVoice(event.target.value as NarratorVoice); posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
             <div className={styles.qualitySetting}><span>Speaking Rate</span><div>
               {[[0.8, "0.8x"], [0.9, "0.9x"], [1, "1x"], [1.1, "1.1x"], [1.2, "1.2x"]].map(([value, label]) => (
-                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { audioRef.current?.pause(); setPlaying(false); setSpeechRate(Number(value)); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
+                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); setSpeechRate(Number(value)); posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
               ))}
             </div></div>
             <div className={styles.qualitySetting}><span>Quality</span><div>
               {[[5, "Low"], [8, "Medium"], [12, "High"]].map(([value, label]) => (
-                <button key={value} className={steps === value ? styles.qualityActive : ""} onClick={() => { audioRef.current?.pause(); setPlaying(false); setSteps(Number(value)); audioBlock.current = null; posthog.capture("voice_settings_changed", { setting: "quality_steps", value: Number(value) }); }}>{label}</button>
+                <button key={value} className={steps === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); setSteps(Number(value)); posthog.capture("voice_settings_changed", { setting: "quality_steps", value: Number(value) }); }}>{label}</button>
               ))}
             </div></div>
             <small>Higher quality takes longer to generate. Changes apply to new passages.</small>
