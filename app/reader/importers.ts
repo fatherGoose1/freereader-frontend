@@ -2,6 +2,8 @@ import { Readability } from "@mozilla/readability";
 import ePub from "epubjs";
 import type Section from "epubjs/types/section";
 import mammoth from "mammoth";
+import { asImportError, fallbackError, ImportError, type ImportFileType } from "./importErrors";
+import { detectDocument, fileTypeHint, isBinaryFormat, looksLikeHtml, MAX_IMPORT_BYTES, validateImportSize } from "./importFormats";
 import { graphemes, isLikelyHeading, normalizeReadingText as normalize } from "./parsingText";
 import { detectSpeechLanguage, normalizeLanguage } from "./speech";
 import type { Chapter, DocumentFormat, ParsedBook, TextBlock } from "./types";
@@ -183,9 +185,16 @@ function appendElements(builder: BookBuilder, elements: Iterable<Element>) {
   }
 }
 
+function contentElements(document: Document): Element[] {
+  document.querySelectorAll("script,style,noscript,template,[hidden],[aria-hidden='true']").forEach((element) => element.remove());
+  document.querySelectorAll("br").forEach((element) => element.replaceWith(document.createTextNode("\n")));
+  return Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote"))
+    .filter((element) => !element.parentElement?.closest("li,blockquote"));
+}
+
 function elementsToBook(document: Document, fallbackTitle: string, format: DocumentFormat): ParsedBook {
   const builder = new BookBuilder();
-  appendElements(builder, document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote"));
+  appendElements(builder, contentElements(document));
   if (!builder.blocks.length) builder.plainText(document.body?.textContent ?? "");
   return withDetectedLanguage({
     title: normalize(document.title) || fallbackTitle,
@@ -201,49 +210,54 @@ function parseHtml(html: string, fallbackTitle: string, format: DocumentFormat):
 }
 
 async function parseEpub(buffer: ArrayBuffer, fallbackTitle: string): Promise<ParsedBook> {
-  const book = ePub(buffer);
-  await book.ready;
-  const metadata = await book.loaded.metadata;
-  let cover: Blob | undefined;
+  const book = ePub();
   try {
-    const coverUrl = await book.coverUrl();
-    if (coverUrl) {
-      const response = await fetch(coverUrl);
-      if (response.ok) cover = await response.blob();
+    // Passing bytes to the constructor swallows open failures and leaves ready pending forever.
+    await book.open(buffer, "binary");
+    await book.ready;
+    const metadata = await book.loaded.metadata;
+    let cover: Blob | undefined;
+    try {
+      const coverUrl = await book.coverUrl();
+      if (coverUrl) {
+        const response = await fetch(coverUrl);
+        if (response.ok) cover = await response.blob();
+      }
+    } catch {
+      // A missing or malformed cover should not prevent the book from importing.
     }
-  } catch {
-    // A missing or malformed cover should not prevent the book from importing.
+    const builder = new BookBuilder();
+    const sections: Section[] = [];
+    book.spine.each((item: Section) => sections.push(item));
+    for (const item of sections) {
+      await item.load(book.load.bind(book));
+      const elements = Array.from(item.document?.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li") ?? [])
+        .map((element) => ({
+          text: normalize(element.textContent ?? ""),
+          isHeading: /^h[1-6]$/.test(element.localName.toLowerCase()),
+        }))
+        .filter((element) => element.text);
+      if (!elements.some((element) => element.isHeading) && elements.length) {
+        builder.chapter(`Chapter ${builder.chapters.length + 1}`);
+      }
+      for (const element of elements) {
+        if (element.isHeading) builder.chapter(element.text);
+        else builder.paragraph(element.text);
+      }
+      item.unload();
+    }
+    return {
+      title: normalize(metadata.title) || fallbackTitle,
+      author: normalize(metadata.creator ?? "") || undefined,
+      language: normalizeLanguage(metadata.language),
+      format: "epub",
+      chapters: builder.chapters,
+      blocks: builder.blocks,
+      cover,
+    };
+  } finally {
+    book.destroy();
   }
-  const builder = new BookBuilder();
-  const sections: Section[] = [];
-  book.spine.each((item: Section) => sections.push(item));
-  for (const item of sections) {
-    await item.load(book.load.bind(book));
-    const elements = Array.from(item.document?.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li") ?? [])
-      .map((element) => ({
-        text: normalize(element.textContent ?? ""),
-        isHeading: /^h[1-6]$/.test(element.localName.toLowerCase()),
-      }))
-      .filter((element) => element.text);
-    if (!elements.some((element) => element.isHeading) && elements.length) {
-      builder.chapter(`Chapter ${builder.chapters.length + 1}`);
-    }
-    for (const element of elements) {
-      if (element.isHeading) builder.chapter(element.text);
-      else builder.paragraph(element.text);
-    }
-    item.unload();
-  }
-  book.destroy();
-  return {
-    title: normalize(metadata.title) || fallbackTitle,
-    author: normalize(metadata.creator ?? "") || undefined,
-    language: normalizeLanguage(metadata.language),
-    format: "epub",
-    chapters: builder.chapters,
-    blocks: builder.blocks,
-    cover,
-  };
 }
 
 async function parsePdf(buffer: ArrayBuffer, fallbackTitle: string): Promise<ParsedBook> {
@@ -251,17 +265,22 @@ async function parsePdf(buffer: ArrayBuffer, fallbackTitle: string): Promise<Par
   if (typeof window !== "undefined") {
     pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   }
-  const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
-  const builder = new BookBuilder();
-  for (let index = 1; index <= pdf.numPages; index += 1) {
-    const content = await (await pdf.getPage(index)).getTextContent();
-    const text = content.items.map((item) => {
-      if (!("str" in item)) return "";
-      return `${item.str}${item.hasEOL ? "\n" : " "}`;
-    }).join("");
-    builder.plainText(text, index);
+  const task = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+  try {
+    const pdf = await task.promise;
+    const builder = new BookBuilder();
+    for (let index = 1; index <= pdf.numPages; index += 1) {
+      const content = await (await pdf.getPage(index)).getTextContent();
+      const text = content.items.map((item) => {
+        if (!("str" in item)) return "";
+        return `${item.str}${item.hasEOL ? "\n" : " "}`;
+      }).join("");
+      builder.plainText(text, index);
+    }
+    return { title: fallbackTitle, format: "pdf", chapters: builder.chapters, blocks: builder.blocks };
+  } finally {
+    await task.destroy();
   }
-  return { title: fallbackTitle, format: "pdf", chapters: builder.chapters, blocks: builder.blocks };
 }
 
 function parsePlainText(text: string, fallbackTitle: string, format: DocumentFormat = "txt"): ParsedBook {
@@ -280,12 +299,6 @@ function looksLikeMarkdown(text: string): boolean {
   return listLines.length >= 3;
 }
 
-function looksLikeHtml(text: string): boolean {
-  const sample = text.slice(0, 2_000);
-  return /^\s*<!doctype html/i.test(sample)
-    || /<\/?(?:p|div|span|br|h[1-6]|ul|ol|li|blockquote|article|section|body|html)\b/i.test(sample);
-}
-
 export function parsePastedText(text: string, fallbackTitle: string): ParsedBook {
   const trimmed = text.trim();
   const parsed = looksLikeHtml(trimmed)
@@ -293,10 +306,7 @@ export function parsePastedText(text: string, fallbackTitle: string): ParsedBook
     : looksLikeMarkdown(trimmed)
       ? parseHtml(markdownToHtml(trimmed, fallbackTitle), fallbackTitle, "md")
       : parsePlainText(trimmed, fallbackTitle);
-  if (!parsed.blocks.some((block) => !block.isHeading)) {
-    throw new Error("No readable text was found. Paste more than just headings.");
-  }
-  return parsed;
+  return requireReadableContent(parsed);
 }
 
 function markdownToHtml(markdown: string, sourceName: string): string {
@@ -356,13 +366,13 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
   if (bodyText.length < 1_500 && [
     "subscribe to continue", "subscription required", "already a subscriber", "sign in to continue",
     "log in to continue", "register to continue", "this content is for subscribers", "purchase a subscription",
-  ].some((phrase) => bodyText.toLowerCase().includes(phrase))) throw new Error("This article appears to require a login or subscription.");
+  ].some((phrase) => bodyText.toLowerCase().includes(phrase))) throw new ImportError("This article appears to require a login or subscription.", "restricted", "restricted_article", "conversion", "html");
   const isRedditEmbed = sourceUrl.hostname === "embed.reddit.com";
   const embedTitle = isRedditEmbed
     ? normalize(document.querySelector("shreddit-embed-title, h1")?.textContent ?? "")
     : "";
   const readable = new Readability(document, { charThreshold: 200 }).parse();
-  if (!readable?.content) throw new Error("The page does not contain enough readable article text.");
+  if (!readable?.content) throw new ImportError("The page does not contain enough readable article text.", "insufficient_content", "insufficient_article", "conversion", "html");
   const title = embedTitle
     || normalize(readable.title ?? "")
     || sourceUrl.hostname.replace(/^www\./, "");
@@ -371,7 +381,7 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
   builder.chapter(title);
   let previous = "";
   let skippedTitle = false;
-  for (const element of article.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote")) {
+  for (const element of contentElements(article)) {
     const text = normalize(element.textContent ?? "");
     const tag = element.localName.toLowerCase();
     const isHeading = /^h[1-6]$/.test(tag);
@@ -388,9 +398,9 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
     else builder.paragraph(text);
     previous = text;
   }
-  const readableCharacters = builder.blocks.reduce((total, block) => total + block.text.length, 0);
-  if (builder.blocks.length < (isRedditEmbed ? 1 : 2) || readableCharacters < (isRedditEmbed ? 20 : 200)) {
-    throw new Error("The page does not contain enough readable article text.");
+  const readableCharacters = builder.blocks.filter((block) => !block.isHeading).reduce((total, block) => total + block.text.length, 0);
+  if (readableCharacters < (isRedditEmbed ? 20 : 200)) {
+    throw new ImportError("The page does not contain enough readable article text.", "insufficient_content", "insufficient_article", "conversion", "html");
   }
   return withDetectedLanguage({
     title,
@@ -401,22 +411,45 @@ function parseReadableHtml(html: string, sourceUrl: URL): ParsedBook {
   });
 }
 
-export async function parseFile(file: File): Promise<ParsedBook> {
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  const title = titleFromName(file.name);
-  const buffer = await file.arrayBuffer();
-  let parsed: ParsedBook;
-  if (extension === "epub") parsed = await parseEpub(buffer, title);
-  else if (extension === "pdf") parsed = await parsePdf(buffer, title);
-  else if (extension === "docx") {
-    const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
-    parsed = parseHtml(result.value, title, "docx");
-  } else if (["html", "htm"].includes(extension ?? "")) parsed = parseHtml(await file.text(), title, "html");
-  else if (["md", "markdown", "mdown", "mkd"].includes(extension ?? "")) parsed = parseHtml(markdownToHtml(await file.text(), file.name), title, "md");
-  else if (["txt", "text"].includes(extension ?? "")) parsed = parsePlainText(await file.text(), title);
-  else throw new Error("Choose an EPUB, PDF, TXT, DOCX, HTML, or Markdown file.");
-  if (!parsed.blocks.some((block) => !block.isHeading)) throw new Error("No readable text was found. Scanned PDFs need OCR before import.");
+function requireReadableContent(parsed: ParsedBook): ParsedBook {
+  if (!parsed.blocks.some((block) => !block.isHeading && normalize(block.text))) {
+    const message = parsed.format === "pdf" ? "No readable text was found. Scanned PDFs need OCR before import."
+      : "No readable text was found. Include more than just headings.";
+    throw new ImportError(message, "insufficient_content", "no_readable_text", "conversion", parsed.format);
+  }
   return withDetectedLanguage(parsed);
+}
+
+async function parseDocument(buffer: ArrayBuffer, name: string, contentType = "", articleUrl?: URL): Promise<ParsedBook> {
+  let format = fileTypeHint(name, contentType);
+  try {
+    validateImportSize(buffer.byteLength, format);
+    const detected = await detectDocument(buffer, name, contentType);
+    format = detected.format;
+    const text = detected.text ?? "";
+    const title = name ? titleFromName(name) : articleUrl?.hostname || "Untitled";
+    let parsed: ParsedBook;
+    if (format === "epub") parsed = await parseEpub(buffer, title);
+    else if (format === "pdf") parsed = await parsePdf(buffer, title);
+    else if (format === "docx") {
+      const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+      parsed = parseHtml(result.value, title, "docx");
+    } else if (format === "html") parsed = articleUrl ? parseReadableHtml(text, articleUrl) : parseHtml(text, title, "html");
+    else if (format === "md") parsed = parseHtml(markdownToHtml(text, name), title, "md");
+    else parsed = parsePlainText(text, title);
+    return requireReadableContent(parsed);
+  } catch (error) {
+    throw asImportError(error, "conversion", format);
+  }
+}
+
+export async function parseFile(file: File): Promise<ParsedBook> {
+  const hint = fileTypeHint(file.name, file.type);
+  validateImportSize(file.size, hint);
+  let buffer: ArrayBuffer;
+  try { buffer = await file.arrayBuffer(); }
+  catch (error) { throw asImportError(error, "read", hint); }
+  return parseDocument(buffer, file.name, file.type);
 }
 
 function contentUrl(url: URL): URL {
@@ -444,38 +477,119 @@ function contentUrl(url: URL): URL {
   return transformed;
 }
 
-export async function parseWebLink(rawUrl: string): Promise<{ parsed: ParsedBook; sourceUrl: string }> {
-  const sourceUrl = contentUrl(new URL(rawUrl.includes("://") ? rawUrl : `https://${rawUrl}`));
-  if (!/^https?:$/.test(sourceUrl.protocol) || sourceUrl.username || sourceUrl.password) throw new Error("Enter a valid public web address.");
+function publicUrl(value: string): URL {
   try {
-    const response = await fetch(sourceUrl, { headers: { Accept: "text/html,text/markdown,text/plain" } });
-    if (!response.ok) throw new Error("Direct fetch failed");
-    const contentType = response.headers.get("content-type") ?? "";
-    const source = await response.text();
-    if (contentType.includes("markdown") || /\.md$/i.test(sourceUrl.pathname)) {
-      return { parsed: { ...parseHtml(markdownToHtml(source, sourceUrl.pathname), titleFromName(sourceUrl.pathname), "md"), format: "html" }, sourceUrl: response.url };
+    const trimmed = value.trim();
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error();
+    return url;
+  } catch {
+    throw new ImportError("Enter a valid public web address.", "unsupported", "invalid_url", "validation");
+  }
+}
+
+export function urlFileTypeHint(rawUrl: string): ImportFileType {
+  try { return fileTypeHint(publicUrl(rawUrl).pathname); } catch { return "unknown"; }
+}
+
+function responseName(response: Response, url: URL): string {
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const encoded = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+  try {
+    return decodeURIComponent(encoded ?? plain?.[1] ?? plain?.[2]?.trim() ?? url.pathname.split("/").pop() ?? "");
+  } catch {
+    return url.pathname.split("/").pop() ?? "";
+  }
+}
+
+async function readDownload(response: Response, fileType: ImportFileType): Promise<ArrayBuffer> {
+  const length = Number(response.headers.get("content-length"));
+  if (length > MAX_IMPORT_BYTES) {
+    await response.body?.cancel();
+    validateImportSize(length, fileType);
+  }
+  if (!response.body) return new ArrayBuffer(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_IMPORT_BYTES) {
+        await reader.cancel();
+        validateImportSize(size, fileType);
+      }
+      chunks.push(value);
     }
-    if (contentType.includes("text/plain")) return { parsed: parsePlainText(source, titleFromName(sourceUrl.pathname), "html"), sourceUrl: response.url };
-    return { parsed: parseReadableHtml(source, new URL(response.url)), sourceUrl: response.url };
-  } catch (directError) {
-    const response = await fetch("/api/import-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: sourceUrl.toString() }),
+    return await new Blob(chunks).arrayBuffer();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function parseWebLink(rawUrl: string): Promise<{ parsed: ParsedBook; sourceUrl: string }> {
+  const sourceUrl = contentUrl(publicUrl(rawUrl));
+  let fileType = fileTypeHint(sourceUrl.pathname);
+  let stage: "direct_fetch" | "conversion" = "direct_fetch";
+  try {
+    const response = await fetch(sourceUrl, {
+      headers: { Accept: "text/html,application/xhtml+xml,text/markdown,text/plain,application/pdf,application/epub+zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*;q=0.5" },
+      signal: AbortSignal.timeout(15_000),
     });
-    const payload = (await response.json()) as { title?: string; text?: string; source_url?: string; error?: string };
-    if (!response.ok || !payload.text) {
-      if (directError instanceof Error && response.status === 503) throw directError;
-      throw new Error(payload.error ?? "The page could not be imported.");
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new ImportError(`The document download failed (HTTP ${response.status}).`, response.status === 401 || response.status === 403 ? "restricted" : "network", "direct_http_error", "direct_fetch", fileType, response.status);
     }
-    const builder = new BookBuilder();
-    const title = payload.title || sourceUrl.hostname;
-    builder.chapter(title);
-    builder.plainText(payload.text);
-    return {
-      parsed: withDetectedLanguage({ title, format: "html", chapters: builder.chapters, blocks: builder.blocks }),
-      sourceUrl: payload.source_url ?? sourceUrl.toString(),
-    };
+    const resolvedUrl = publicUrl(response.url || sourceUrl.toString());
+    const name = responseName(response, resolvedUrl);
+    const contentType = response.headers.get("content-type") ?? "";
+    fileType = fileTypeHint(name, contentType);
+    const buffer = await readDownload(response, fileType);
+    stage = "conversion";
+    const parsed = await parseDocument(buffer, name, contentType, resolvedUrl);
+    return { parsed, sourceUrl: resolvedUrl.toString() };
+  } catch (error) {
+    const directError = asImportError(error, stage, fileType);
+    // The backend extracts articles; it cannot repair a downloaded binary document.
+    if (isBinaryFormat(directError.fileType) || directError.category === "file_too_large"
+      || (stage === "conversion" && directError.fileType !== "html")) throw directError;
+    try {
+      const response = await fetch("/api/import-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: sourceUrl.toString() }),
+        signal: AbortSignal.timeout(35_000),
+      });
+      // Read failures must propagate, while invalid JSON must retain the HTTP status.
+      // WebKit's Response.json() can reject with a DOMException named SyntaxError.
+      const responseText = await response.text();
+      let payload: unknown;
+      try { payload = JSON.parse(responseText); } catch { payload = null; }
+      if (!response.ok) throw fallbackError(payload, response.status, directError.fileType);
+      if (!payload || typeof payload !== "object" || !("text" in payload) || typeof payload.text !== "string") {
+        throw fallbackError({ error: "invalid_response" }, response.status, directError.fileType);
+      }
+      const result = payload as { title?: unknown; text: string; source_url?: unknown };
+      const title = typeof result.title === "string" && result.title.trim() ? result.title.trim() : sourceUrl.hostname;
+      const format = directError.fileType === "md" || directError.fileType === "txt" ? directError.fileType : "html";
+      const builder = new BookBuilder();
+      builder.chapter(title);
+      builder.plainText(result.text);
+      let resolvedUrl = sourceUrl;
+      if (typeof result.source_url === "string") {
+        try { resolvedUrl = publicUrl(result.source_url); } catch { /* retain the validated request URL */ }
+      }
+      return {
+        parsed: requireReadableContent({ title, format, chapters: builder.chapters, blocks: builder.blocks }),
+        sourceUrl: resolvedUrl.toString(),
+      };
+    } catch (error) {
+      const failure = asImportError(error, "fallback", directError.fileType);
+      throw new ImportError(failure.message, failure.category, failure.code, "fallback", failure.fileType, failure.status, directError);
+    }
   }
 }
 

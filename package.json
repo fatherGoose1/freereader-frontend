@@ -15,6 +15,7 @@
     "@mozilla/readability": "^0.6.0",
     "epubjs": "^0.3.93",
     "franc-min": "^6.2.0",
+    "jszip": "^3.10.2",
     "mammoth": "^1.12.2",
     "next": "^16.2.10",
     "onnxruntime-web": "1.29.0",

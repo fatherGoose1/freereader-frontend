@@ -28,7 +28,9 @@ Browser extraction is intentionally not byte-for-byte identical. PDF.js and PDFK
 
 ## URL fallback
 
-Web-link imports first use a browser `fetch`. If CORS or page access prevents it, `/api/import-url` forwards only the URL to the existing Koko Flask endpoint at `/api/v1/parryt/article-extractions`. Configure the server-side adapter with:
+File and direct-URL imports share format detection: PDF signatures, EPUB/DOCX ZIP contents, MIME types, filename aliases, and HTML content. Redirected URLs and exposed `Content-Disposition` filenames are supported. Text decoding honors BOMs and declared charsets. Imports are limited to 100 MB and must contain readable body text. DOCX and Markdown use HTML as an intermediate representation but retain `docx` and `md` as their document format; plain-text links retain `txt`.
+
+Web-link imports first use a browser `fetch` with a 15-second timeout. Direct PDF, EPUB, and DOCX links use the same local parsers as uploaded files. For web pages, if CORS, page access, or article extraction prevents it, `/api/import-url` forwards only the URL to the existing Koko Flask endpoint at `/api/v1/parryt/article-extractions`. Binary download/parse failures do not use the article service; users can download and upload the file if browser access is blocked. Configure the server-side adapter with:
 
 ```bash
 KOKO_BACKEND_URL=https://your-koko-backend.example
@@ -36,6 +38,8 @@ PARRYT_API_TOKEN=your-existing-parryt-token
 ```
 
 The token is never exposed to browser JavaScript. The backend response contains readable article text only; cleanup and local storage remain in the browser. No file import, Gutenberg EPUB, or TTS request uses this route.
+
+Import events include `source` (`file`, `url`, `paste`, or `project_gutenberg`). Failures report the detected format (or `unknown` when it cannot be determined), `error_category`, `error_code`, `error_stage`, and an HTTP status when available. Fallback failures also retain the direct-fetch error category/code/status. These properties contain no document text, filenames, or URLs. Historical URL-import failures were always labeled `html`, and historical successful TXT/Markdown links were also relabeled `html`; those old events cannot identify the original format or exact cause.
 
 ## Development
 

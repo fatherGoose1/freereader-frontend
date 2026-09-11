@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { browseGutenberg, downloadGutenbergBook } from "./gutenberg";
-import { parseFile, parsePastedText, parseWebLink } from "./importers";
+import { parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
+import { asImportError, failureCategory, importFailureProperties, type ImportFileType, type ImportStage } from "./importErrors";
+import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
 import { readingPageStarts } from "./pagination";
 import {
   getAudio,
@@ -37,24 +39,6 @@ const gutenbergCategories = [
   [649, "Classics"], [644, "Adventure"], [640, "Mystery"], [639, "Romance"],
   [638, "Sci-Fi & Fantasy"], [636, "Young Readers"], [643, "Biographies"], [637, "Poetry"],
 ] as const;
-
-function failureCategory(error: unknown): string {
-  const text = error instanceof Error ? error.message.toLowerCase() : "";
-  if (/login|subscription|private|restricted/.test(text)) return "restricted";
-  if (/timeout/.test(text)) return "timeout";
-  if (/larger|limit|too large/.test(text)) return "file_too_large";
-  if (/storage/.test(text)) return "storage";
-  if (/no readable|not contain enough|empty/.test(text)) return "insufficient_content";
-  if (/choose an|enter a valid|unsupported|could not be imported|could not be reached/.test(text)) return "unsupported";
-  if (/fetch|network|unavailable|failed \(/.test(text)) return "network";
-  if (/parse|readable text|invalid/.test(text)) return "conversion";
-  return "unknown";
-}
-
-function fileTypeOf(name: string): string {
-  const extension = name.split(".").pop()?.toLowerCase() ?? "";
-  return ["epub", "pdf", "txt", "docx", "html", "md"].includes(extension) ? extension : "txt";
-}
 
 function documentProperties(book: LibraryBook): TelemetryProperties {
   return {
@@ -174,6 +158,7 @@ export default function FreeReaderApp() {
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
+  const [importErrorMessage, setImportErrorMessage] = useState("");
   const [url, setUrl] = useState("");
   const [pastedTitle, setPastedTitle] = useState("");
   const [pastedText, setPastedText] = useState("");
@@ -200,6 +185,7 @@ export default function FreeReaderApp() {
   const playableBooks = useRef(new Set<string>());
   const PAGE_CHAR_LIMIT = 900;
   const [page, setPage] = useState({ bookId: "", start: 0 });
+  useEffect(() => { setImportErrorMessage(""); }, [panel]);
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
   const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
@@ -254,20 +240,28 @@ export default function FreeReaderApp() {
 
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
+    setImportErrorMessage("");
     setMessage(`Reading ${file.name} locally...`);
     const started = Date.now();
+    const source = gutenbergId ? "project_gutenberg" : "file";
+    let fileType: ImportFileType = fileTypeHint(file.name, file.type);
+    let stage: ImportStage = "conversion";
     try {
       const parsed = await parseFile(file);
+      fileType = parsed.format;
       const book = makeBook(parsed, file.name, file.size, sourceIdentifier, activeFolderId ?? undefined);
+      stage = "storage";
       await saveBook(book);
       setBooks((current) => [book, ...current]);
       setPanel(null);
       setMessage(`${book.title} was added to your private library.`);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
+        source,
         duration_seconds: (Date.now() - started) / 1000,
       });
       posthog.capture("import_completed", {
+        source,
         file_type: book.format,
         file_size_bytes: book.size,
         block_count: book.blocks.length,
@@ -284,20 +278,16 @@ export default function FreeReaderApp() {
         });
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The document could not be imported.");
-      recordTelemetry("import_failed", {
-        file_type: fileTypeOf(file.name),
+      const failure = asImportError(error, stage, fileType);
+      setMessage(failure.message);
+      const properties = {
+        ...importFailureProperties(failure, { source, fileType, stage }),
         file_size_bytes: file.size,
-        error_category: failureCategory(error),
         duration_seconds: (Date.now() - started) / 1000,
-      });
-      posthog.capture("import_failed", {
-        file_type: fileTypeOf(file.name),
-        file_size_bytes: file.size,
-        error_category: failureCategory(error),
-        duration_seconds: (Date.now() - started) / 1000,
-      });
-      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
+      };
+      recordTelemetry("import_failed", properties);
+      posthog.capture("import_failed", properties);
+      posthog.captureException(error instanceof Error ? error : failure, properties);
     } finally {
       setBusy(false);
     }
@@ -306,11 +296,15 @@ export default function FreeReaderApp() {
   async function importUrl() {
     if (!url.trim()) return;
     setBusy(true);
+    setImportErrorMessage("");
     setMessage("Trying the page directly in your browser...");
     await new Promise((resolve) => setTimeout(resolve, 50));
     const started = Date.now();
+    let fileType: ImportFileType = urlFileTypeHint(url);
+    let stage: ImportStage = "direct_fetch";
     try {
       const { parsed, sourceUrl } = await parseWebLink(url);
+      fileType = parsed.format;
       const snapshot = new Blob([parsed.blocks.map((block) => block.text).join("\n\n")], { type: "text/plain" });
       const book = makeBook(
         parsed,
@@ -319,6 +313,7 @@ export default function FreeReaderApp() {
         sourceUrl,
         activeFolderId ?? undefined,
       );
+      stage = "storage";
       await saveBook(book);
       setBooks((current) => [book, ...current]);
       setPanel(null);
@@ -326,6 +321,7 @@ export default function FreeReaderApp() {
       setMessage(`${book.title} was saved for offline reading.`);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
+        source: "url",
         duration_seconds: (Date.now() - started) / 1000,
       });
       posthog.capture("import_completed", {
@@ -337,18 +333,16 @@ export default function FreeReaderApp() {
         duration_seconds: (Date.now() - started) / 1000,
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The link could not be imported.");
-      recordTelemetry("import_failed", {
-        file_type: "html",
-        error_category: failureCategory(error),
+      const failure = asImportError(error, stage, fileType);
+      setMessage(failure.message);
+      const properties = {
+        ...importFailureProperties(failure, { source: "url", fileType, stage }),
         duration_seconds: (Date.now() - started) / 1000,
-      });
-      posthog.capture("import_failed", {
-        file_type: "html",
-        error_category: failureCategory(error),
-        duration_seconds: (Date.now() - started) / 1000,
-      });
-      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
+      };
+      setImportErrorMessage(failure.message);
+      recordTelemetry("import_failed", properties);
+      posthog.capture("import_failed", properties);
+      posthog.captureException(error instanceof Error ? error : failure, properties);
     } finally {
       setBusy(false);
     }
@@ -364,15 +358,20 @@ export default function FreeReaderApp() {
     const text = pastedText.trim();
     if (!text) return;
     setBusy(true);
+    setImportErrorMessage("");
     setMessage("Preparing your text...");
     await new Promise((resolve) => setTimeout(resolve, 50));
     const started = Date.now();
+    const size = new Blob([text]).size;
+    let fileType: ImportFileType = "unknown";
+    let stage: ImportStage = "conversion";
     try {
       const givenTitle = pastedTitle.trim();
       const parsed = parsePastedText(text, givenTitle || firstLineTitle(text) || "Pasted Text");
+      fileType = parsed.format;
       const title = givenTitle || parsed.title || "Pasted Text";
-      const size = new Blob([text]).size;
       const book = makeBook({ ...parsed, title }, title, size, undefined, activeFolderId ?? undefined);
+      stage = "storage";
       await saveBook(book);
       setBooks((current) => [book, ...current]);
       setPanel(null);
@@ -381,6 +380,7 @@ export default function FreeReaderApp() {
       setMessage(`${book.title} was added to your private library.`);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
+        source: "paste",
         duration_seconds: (Date.now() - started) / 1000,
       });
       posthog.capture("import_completed", {
@@ -392,20 +392,17 @@ export default function FreeReaderApp() {
         duration_seconds: (Date.now() - started) / 1000,
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The text could not be added.");
-      recordTelemetry("import_failed", {
-        file_type: "txt",
-        file_size_bytes: text.length,
-        error_category: failureCategory(error),
+      const failure = asImportError(error, stage, fileType);
+      setMessage(failure.message);
+      const properties = {
+        ...importFailureProperties(failure, { source: "paste", fileType, stage }),
+        file_size_bytes: size,
         duration_seconds: (Date.now() - started) / 1000,
-      });
-      posthog.capture("import_failed", {
-        file_type: "txt",
-        file_size_bytes: text.length,
-        error_category: failureCategory(error),
-        duration_seconds: (Date.now() - started) / 1000,
-      });
-      posthog.captureException(error instanceof Error ? error : new Error(String(error)));
+      };
+      setImportErrorMessage(failure.message);
+      recordTelemetry("import_failed", properties);
+      posthog.capture("import_failed", properties);
+      posthog.captureException(error instanceof Error ? error : failure, properties);
     } finally {
       setBusy(false);
     }
@@ -1039,7 +1036,7 @@ export default function FreeReaderApp() {
             )}
           </div>
           <button className={styles.mobileAddButton} aria-label="Add reading" onClick={() => setPanel("add")}>+</button>
-          <input ref={fileInputRef} hidden type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => {
+          <input ref={fileInputRef} hidden type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             if (file) void importDocument(file);
@@ -1066,7 +1063,11 @@ export default function FreeReaderApp() {
           <button onClick={() => openGutenbergBrowser()}><span className={styles.sidebarIcon}>G</span> Free Books</button>
           <button onClick={() => setPanel("url")}><span className={styles.sidebarIcon}>W</span> Web Link</button>
           <button onClick={() => setPanel("paste")}><span className={`${styles.sidebarIcon} ${styles.pasteSidebarIcon}`}>T</span> Insert Text</button>
-          <label title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)"><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept=".epub,.pdf,.txt,.text,.docx,.html,.htm,.md,.markdown" onChange={(event) => event.target.files?.[0] && importDocument(event.target.files[0])} /></label>
+          <label title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)"><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void importDocument(file);
+          }} /></label>
           <div className={styles.privacyNote}><strong>Private by design</strong><span>Books, reading positions, and audio stay in this browser.</span></div>
         </aside>
         <section className={styles.shelf}>
@@ -1167,6 +1168,7 @@ export default function FreeReaderApp() {
               />
             </label>
             <div className={styles.pasteMeta}>{pastedText.trim() ? `${pastedText.trim().split(/\s+/).length.toLocaleString()} words` : ""}</div>
+            {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
             <div className={styles.modalActions}>
               <button type="button" onClick={() => setPanel(null)}>Cancel</button>
               <button className={styles.primaryAction} disabled={busy || !pastedText.trim()}>
@@ -1219,8 +1221,9 @@ export default function FreeReaderApp() {
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
           <form className={styles.modal} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importUrl(); }}>
             <span className={styles.kicker}>Import from Web</span><h2>Import reading from the web</h2>
-            <p>Paste an article URL. FreeReader tries the page directly first and uses the configured article fallback only if browser access is blocked.</p>
-            <label className={styles.fieldLabel}>Article URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
+            <p>Paste an article or document URL. FreeReader downloads supported documents directly and uses the article service when a web page cannot be read in your browser.</p>
+            <label className={styles.fieldLabel}>Article or document URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
+            {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
             <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Import link"}</button></div>
             <div className={styles.modalPrivacy}>Imported content is processed and stored only on this device.</div>
           </form>
