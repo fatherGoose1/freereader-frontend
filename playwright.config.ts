@@ -6,7 +6,7 @@ export default defineConfig({
   testDir: "./tests/browser",
   timeout: 240_000,
   workers: 1,
-  use: { baseURL: `http://127.0.0.1:${port}`, serviceWorkers: "block" },
+  use: { baseURL: `http://127.0.0.1:${port}`, serviceWorkers: "block", headless: process.env.TTS_HEADED !== "1" },
   webServer: { command: `npm run start -- --port ${port}`, url: `http://127.0.0.1:${port}/reader`, timeout: 60_000 },
   projects: [
     { name: "mobile-chromium", use: { ...devices["Pixel 7"], browserName: "chromium" } },

@@ -2,21 +2,39 @@ import type { TtsStatus } from "./tts";
 import { KOKORO_MODELS, kokoroVoiceAsset, loadKokoroAsset } from "./kokoroWebResources";
 import { normalizeForSpeech } from "./speechText";
 import type { KokoroVoice } from "./voices";
-import { configureMobileWasm } from "./mobileWasm";
+import { probeWebGPU } from "./webgpuProbe";
+import { ttsLog } from "./ttsDiagnostics";
 
 const SAMPLE_RATE = 24_000;
 const MAX_TOKENS = 510;
 const ESPEAK_MODULE = "/kokoro-web/espeak-ng.js";
 const ESPEAK_WASM = "/kokoro-web/espeak-ng.wasm";
-type Ort = typeof import("onnxruntime-web/webgpu");
+type Ort = typeof import("onnxruntime-web/all");
 type Session = Awaited<ReturnType<Ort["InferenceSession"]["create"]>>;
-type Provider = "WebGPU" | "WASM";
+type Provider = "WebGPU";
 type Components = { ort: Ort; session: Session; provider: Provider };
 type Chunk = { tokens: number[] } | { silence: number };
 type Phonemizer = (text: string, language: "en-us" | "en-gb") => Promise<string>;
 
 let componentsPromise: Promise<Components> | undefined;
+let gpuPromise: ReturnType<typeof probeWebGPU> | undefined;
 const voices = new Map<KokoroVoice, Promise<Float32Array>>();
+
+export async function prepareKokoroWebGPU(mobile: boolean): Promise<void> {
+  gpuPromise ??= probeWebGPU(mobile);
+  (await gpuPromise).assertUsable();
+}
+
+export async function disposeKokoroWeb(): Promise<void> {
+  const components = await componentsPromise?.catch(() => undefined);
+  const gpu = await gpuPromise?.catch(() => undefined);
+  await components?.session.release().catch(() => undefined);
+  await gpu?.session.release().catch(() => undefined);
+  gpu?.device.destroy();
+  componentsPromise = undefined;
+  gpuPromise = undefined;
+  voices.clear();
+}
 
 const VOCAB: Record<string, number> = {
   ";": 1, ":": 2, ",": 3, ".": 4, "!": 5, "?": 6, "—": 9, "…": 10, '"': 11,
@@ -134,31 +152,18 @@ function encodeWav(chunks: Float32Array[], sampleCount: number): ArrayBuffer {
 }
 
 async function createComponents(status?: TtsStatus, mobile = false): Promise<Components> {
-  if (mobile) {
-    const ort = await import("onnxruntime-web/wasm");
-    configureMobileWasm(ort, self.location.href);
-    const model = await loadKokoroAsset(KOKORO_MODELS.wasm, status, true);
-    status?.("Preparing mobile voice model with WASM");
-    const session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"] });
-    return { ort, session, provider: "WASM" };
-  }
-
-  const ort = await import("onnxruntime-web/webgpu");
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/";
-  if ("gpu" in navigator) {
-    try {
-      const model = await loadKokoroAsset(KOKORO_MODELS.webgpu, status);
-      status?.("Preparing voice model with WebGPU");
-      const session = await ort.InferenceSession.create(model, { executionProviders: ["webgpu"] });
-      return { ort, session, provider: "WebGPU" };
-    } catch (error) {
-      console.warn("Kokoro WebGPU initialization failed; using WASM", error);
-    }
-  }
-  const model = await loadKokoroAsset(KOKORO_MODELS.wasm, status);
-  status?.("Preparing voice model with WASM");
-  const session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"] });
-  return { ort, session, provider: "WASM" };
+  await prepareKokoroWebGPU(mobile);
+  const { ort, assertUsable } = await gpuPromise!;
+  const asset = mobile ? KOKORO_MODELS.mobile : KOKORO_MODELS.full;
+  ttsLog("model", { model: "Kokoro", variant: asset.label, bytes: asset.size, provider: "WebGPU", mobile });
+  const model = await loadKokoroAsset(asset, status, mobile);
+  assertUsable();
+  status?.("Preparing voice model with WebGPU");
+  const session = await ort.InferenceSession.create(model, {
+    executionProviders: ["webgpu"],
+    graphOptimizationLevel: "all",
+  });
+  return { ort, session, provider: "WebGPU" };
 }
 
 async function getComponents(status?: TtsStatus, mobile = false): Promise<Components> {
@@ -185,6 +190,8 @@ export async function synthesizeKokoroWeb(
 ): Promise<{ audio: ArrayBuffer; duration: number; provider: Provider; generationSeconds: number }> {
   if (!text.trim()) throw new Error("Kokoro speech requires text.");
   if (!Number.isFinite(speechSpeed) || speechSpeed < 0.1 || speechSpeed > 5) throw new Error("Speech speed must be between 0.1 and 5.");
+  // No Kokoro assets (including the voice) are fetched before the GPU/ORT probe.
+  await prepareKokoroWebGPU(mobile);
   const [{ ort, session, provider }, voiceData, chunks] = await Promise.all([
     getComponents(status, mobile), getVoice(voice, status, mobile), preprocessKokoroText(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
   ]);
@@ -200,14 +207,23 @@ export async function synthesizeKokoroWeb(
     if (!chunk.tokens.length) continue;
     const padded = [0, ...chunk.tokens, 0];
     const offset = (chunk.tokens.length - 1) * 256;
-    const styleData = voiceData.slice(offset, offset + 256);
-    const result = await session.run({
+    const styleData = voiceData.subarray(offset, offset + 256);
+    const feeds = {
       input_ids: new ort.Tensor("int64", BigInt64Array.from(padded, BigInt), [1, padded.length]),
       style: new ort.Tensor("float32", styleData, [1, 256]),
       speed: new ort.Tensor("float32", [speechSpeed], [1]),
-    });
-    const waveform = trimWaveform(await result.waveform.getData() as Float32Array);
-    waveforms.push(waveform); sampleCount += waveform.length;
+    };
+    let result: Awaited<ReturnType<typeof session.run>> | undefined;
+    try {
+      (await gpuPromise!).assertUsable();
+      result = await session.run(feeds);
+      const waveform = trimWaveform(await result.waveform.getData() as Float32Array);
+      (await gpuPromise!).assertUsable();
+      waveforms.push(waveform); sampleCount += waveform.length;
+    } finally {
+      Object.values(feeds).forEach((tensor) => tensor.dispose());
+      Object.values(result ?? {}).forEach((tensor) => tensor.dispose());
+    }
   }
   if (!sampleCount) throw new Error("Kokoro speech generation produced no audio. Tap Play to retry.");
   return { audio: encodeWav(waveforms, sampleCount), duration: sampleCount / SAMPLE_RATE, provider, generationSeconds: (performance.now() - started) / 1000 };

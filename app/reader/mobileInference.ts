@@ -2,6 +2,7 @@ import { loadMobileModelAsset } from "./mobileModelCache";
 import { configureMobileWasm } from "./mobileWasm";
 import { normalizeForSpeech } from "./speechText";
 import type { SpeechLanguage } from "./speech";
+import { ttsLog } from "./ttsDiagnostics";
 
 const MODEL_REVISION = "11f5965fd0bc7dfb191a16d83772fc658a3c03d8";
 const ORIGINAL_REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
@@ -74,6 +75,7 @@ async function jsonAsset<T>(path: string, size: number, status: Status): Promise
 async function initialize(status: Status): Promise<Components> {
   const ort = await import("onnxruntime-web/wasm");
   configureMobileWasm(ort, self.location.href);
+  ttsLog("model", { model: "Supertonic 3", variant: "INT8", bytes: 102_090_195, provider: "WASM", mobile: true });
   const config = await jsonAsset<TtsConfig>("onnx/tts.json", 8_253, status);
   const indexer = await jsonAsset<number[]>("onnx/unicode_indexer.json", 277_676, status);
   // These pinned dimensions also bound latent allocations if the cache is corrupt.
@@ -90,7 +92,7 @@ async function initialize(status: Status): Promise<Components> {
         sessions.push(await ort.InferenceSession.create(url, {
           executionProviders: ["wasm"],
           executionMode: "sequential",
-          graphOptimizationLevel: "basic",
+          graphOptimizationLevel: "all",
           enableCpuMemArena: false,
           enableMemPattern: false,
           extra: { session: { disable_prepacking: "1" } },

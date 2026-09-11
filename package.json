@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-ort.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/prepare-ort.mjs",
     "build": "next build",
     "start": "next start",
     "test": "tsx --test app/reader/*.test.ts",

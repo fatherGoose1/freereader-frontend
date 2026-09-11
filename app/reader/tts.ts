@@ -3,6 +3,8 @@ import { loadModelSessions } from "./modelSessions";
 import { downloadModel } from "./modelDownload";
 import { normalizeForSpeech } from "./speechText";
 import type { SpeechLanguage } from "./speech";
+import { configureMobileWasm } from "./mobileWasm";
+import { ttsLog } from "./ttsDiagnostics";
 
 const REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
 const MODEL_ROOT = `https://huggingface.co/Supertone/supertonic-3/resolve/${REVISION}`;
@@ -24,7 +26,7 @@ const TOTAL_MODEL_BYTES = ASSETS.reduce((total, [, size]) => total + size, 0);
 export type Voice = (typeof VOICES)[number];
 export type TtsStatus = (message: string, progress?: number) => void;
 
-type OrtModule = typeof import("onnxruntime-web/webgpu");
+type OrtModule = typeof import("onnxruntime-web/wasm");
 type Session = Awaited<ReturnType<OrtModule["InferenceSession"]["create"]>>;
 
 interface Style {
@@ -45,7 +47,7 @@ interface Components {
   encoder: Session;
   estimator: Session;
   vocoder: Session;
-  provider: "WebGPU" | "WASM";
+  provider: "WASM";
 }
 
 let componentsPromise: Promise<Components> | null = null;
@@ -71,7 +73,7 @@ async function jsonAsset<T>(path: string, expectedSize: number, status?: TtsStat
 
 async function createSessions(
   ort: OrtModule,
-  provider: "webgpu" | "wasm",
+  provider: "wasm",
   status?: TtsStatus,
 ): Promise<[Session, Session, Session, Session]> {
   let completed = 0;
@@ -94,24 +96,13 @@ async function createSessions(
 }
 
 async function initialize(status?: TtsStatus): Promise<Components> {
-  const ort = await import("onnxruntime-web/webgpu");
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/";
+  const ort = await import("onnxruntime-web/wasm");
+  configureMobileWasm(ort, self.location.href, false);
+  ttsLog("model", { model: "Supertonic 3", variant: "FP32", bytes: TOTAL_MODEL_BYTES, provider: "WASM", mobile: false });
   const config = await jsonAsset<TtsConfig>("onnx/tts.json", 8_253, status);
   const indexer = await jsonAsset<number[]>("onnx/unicode_indexer.json", 277_676, status);
-  let sessions: [Session, Session, Session, Session];
-  let provider: "WebGPU" | "WASM" = "WebGPU";
-  if ("gpu" in navigator) {
-    try {
-      sessions = await createSessions(ort, "webgpu", status);
-    } catch (error) {
-      console.warn("Supertonic WebGPU initialization failed; using WASM", error);
-      provider = "WASM";
-      sessions = await createSessions(ort, "wasm", status);
-    }
-  } else {
-    provider = "WASM";
-    sessions = await createSessions(ort, "wasm", status);
-  }
+  const provider = "WASM";
+  const sessions = await createSessions(ort, "wasm", status);
   status?.(`Voice model ready with ${provider}`, 1);
   return {
     ort,
@@ -183,38 +174,56 @@ async function infer(
   status?: TtsStatus,
 ): Promise<{ samples: Float32Array; duration: number }> {
   const { ort, config } = components;
-  const tagged = normalizeText(text, language, isHeading);
-  const codePoints = Array.from(tagged, (character) => character.codePointAt(0)!);
-  const ids = new BigInt64Array(codePoints.map((point) => BigInt(components.indexer[point] ?? -1)));
-  const maskData = lengthMask(ids.length);
-  const textIds = new ort.Tensor("int64", ids, [1, ids.length]);
-  const textMask = new ort.Tensor("float32", maskData, [1, 1, ids.length]);
-  const durationOutput = await components.duration.run({ text_ids: textIds, style_dp: style.dp, text_mask: textMask });
-  const duration = Number(durationOutput.duration.data[0]) / speechSpeed;
-  const encoderOutput = await components.encoder.run({ text_ids: textIds, style_ttl: style.ttl, text_mask: textMask });
-  const chunkSize = config.ae.base_chunk_size * config.ttl.chunk_compress_factor;
-  const latentLength = Math.max(1, Math.ceil(duration * config.ae.sample_rate / chunkSize));
-  const channels = config.ttl.latent_dim * config.ttl.chunk_compress_factor;
-  let latent = new Float32Array(channels * latentLength);
-  latent.forEach((_, index) => { latent[index] = randomNormal(); });
-  const latentMask = new ort.Tensor("float32", lengthMask(latentLength), [1, 1, latentLength]);
-  const totalStep = new ort.Tensor("float32", new Float32Array([steps]), [1]);
-  for (let step = 0; step < steps; step += 1) {
-    status?.(`Generating speech (${step + 1}/${steps})`, (step + 1) / steps);
-    const result = await components.estimator.run({
-      noisy_latent: new ort.Tensor("float32", latent, [1, channels, latentLength]),
-      text_emb: encoderOutput.text_emb,
-      style_ttl: style.ttl,
-      latent_mask: latentMask,
-      text_mask: textMask,
-      current_step: new ort.Tensor("float32", new Float32Array([step]), [1]),
-      total_step: totalStep,
-    });
-    latent = new Float32Array(result.denoised_latent.data as Float32Array);
+  type Tensor = InstanceType<OrtModule["Tensor"]>;
+  const tensors = new Set<Tensor>();
+  const own = (tensor: Tensor) => { tensors.add(tensor); return tensor; };
+  const dispose = (tensor: Tensor) => { if (tensors.delete(tensor)) tensor.dispose(); };
+  const run = async (session: Session, feeds: Record<string, Tensor>) => {
+    const result = await session.run(feeds);
+    Object.values(result).forEach(own);
+    return result;
+  };
+  try {
+    const tagged = normalizeText(text, language, isHeading);
+    const codePoints = Array.from(tagged, (character) => character.codePointAt(0)!);
+    const ids = new BigInt64Array(codePoints.map((point) => BigInt(components.indexer[point] ?? -1)));
+    const maskData = lengthMask(ids.length);
+    const textIds = own(new ort.Tensor("int64", ids, [1, ids.length]));
+    const textMask = own(new ort.Tensor("float32", maskData, [1, 1, ids.length]));
+    const durationOutput = await run(components.duration, { text_ids: textIds, style_dp: style.dp, text_mask: textMask });
+    const duration = Number(durationOutput.duration.data[0]) / speechSpeed;
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 60) throw new Error("Invalid Supertonic speech duration");
+    const encoderOutput = await run(components.encoder, { text_ids: textIds, style_ttl: style.ttl, text_mask: textMask });
+    const chunkSize = config.ae.base_chunk_size * config.ttl.chunk_compress_factor;
+    const latentLength = Math.max(1, Math.ceil(duration * config.ae.sample_rate / chunkSize));
+    const channels = config.ttl.latent_dim * config.ttl.chunk_compress_factor;
+    const noise = new Float32Array(channels * latentLength);
+    for (let index = 0; index < noise.length; index += 1) noise[index] = randomNormal();
+    let latent = own(new ort.Tensor("float32", noise, [1, channels, latentLength]));
+    const latentMask = own(new ort.Tensor("float32", lengthMask(latentLength), [1, 1, latentLength]));
+    const totalStep = own(new ort.Tensor("float32", new Float32Array([steps]), [1]));
+    for (let step = 0; step < steps; step += 1) {
+      status?.(`Generating speech (${step + 1}/${steps})`, (step + 1) / steps);
+      const currentStep = own(new ort.Tensor("float32", new Float32Array([step]), [1]));
+      const result = await run(components.estimator, {
+        noisy_latent: latent,
+        text_emb: encoderOutput.text_emb,
+        style_ttl: style.ttl,
+        latent_mask: latentMask,
+        text_mask: textMask,
+        current_step: currentStep,
+        total_step: totalStep,
+      });
+      dispose(latent);
+      dispose(currentStep);
+      latent = result.denoised_latent;
+    }
+    const output = await run(components.vocoder, { latent });
+    const maximum = Math.min(output.wav_tts.data.length, Math.floor(config.ae.sample_rate * duration));
+    return { samples: (output.wav_tts.data as Float32Array).slice(0, maximum), duration: maximum / config.ae.sample_rate };
+  } finally {
+    tensors.forEach((tensor) => tensor.dispose());
   }
-  const output = await components.vocoder.run({ latent: new ort.Tensor("float32", latent, [1, channels, latentLength]) });
-  const maximum = Math.min(output.wav_tts.data.length, Math.floor(config.ae.sample_rate * duration));
-  return { samples: new Float32Array((output.wav_tts.data as Float32Array).slice(0, maximum)), duration };
 }
 
 function wavBlob(samples: Float32Array, sampleRate: number): Blob {

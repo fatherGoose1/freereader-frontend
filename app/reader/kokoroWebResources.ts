@@ -11,8 +11,8 @@ const CACHE_NAME = "kokoro-web-resources-v1";
 export type KokoroAsset = { url: string; path: string; size: number; label: string };
 
 export const KOKORO_MODELS = {
-  webgpu: { url: `${ROOT}/onnx/model.onnx`, path: `models/kokoro-web/${REVISION}/model.onnx`, size: 325_532_232, label: "Kokoro (326 MB)" },
-  wasm: { url: `${ROOT}/onnx/model_quantized.onnx`, path: `models/kokoro-web/${REVISION}/model_quantized.onnx`, size: 92_361_116, label: "Kokoro quantized (92 MB)" },
+  full: { url: `${ROOT}/onnx/model.onnx`, path: `models/kokoro-web/${REVISION}/model.onnx`, size: 325_532_232, label: "Kokoro FP32 (326 MB)" },
+  mobile: { url: `${ROOT}/onnx/model_quantized.onnx`, path: `models/kokoro-web/${REVISION}/model_quantized.onnx`, size: 92_361_116, label: "Kokoro quantized (92 MB)" },
 } as const satisfies Record<string, KokoroAsset>;
 
 export function kokoroVoiceAsset(voice: KokoroVoice): KokoroAsset {

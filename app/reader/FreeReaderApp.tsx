@@ -15,7 +15,8 @@ import {
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
-import { synthesize } from "./narration";
+import { narrationRoute, synthesize, type NarrationRoute } from "./narration";
+import { ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
 import { isKokoroVoice, type NarratorVoice } from "./voices";
@@ -184,6 +185,7 @@ export default function FreeReaderApp() {
     cached: boolean;
     duration: number;
     generationSeconds: number;
+    model: string;
   } | null>(null);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
@@ -461,20 +463,19 @@ export default function FreeReaderApp() {
     };
   }
 
-  function audioCacheKey(book: LibraryBook, index: number): string {
+  function audioCacheKey(book: LibraryBook, index: number, route: NarrationRoute): string {
     const language = languageForBook(book);
-    const selectedVoice = voiceForLanguage(voice, language);
-    const model = isKokoroVoice(selectedVoice)
-      ? `${TEXT_PIPELINE_REVISION}-kokoro-web-${selectedVoice}-${speechRate}`
-      : `${usesMobileSpeech() ? "mobile-int8-v1-" : ""}${TEXT_PIPELINE_REVISION}-${language}-${selectedVoice}-${steps}-${speechRate}`;
+    const quality = route.provider === "WASM" ? `${steps}-` : "";
+    const model = `${TEXT_PIPELINE_REVISION}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
     return `${book.id}/${model}/${index}.wav`;
   }
 
   async function ensureAudio(book: LibraryBook, index: number): Promise<Blob> {
-    const key = audioCacheKey(book, index);
+    const route = await narrationRoute(voice, languageForBook(book));
+    const key = audioCacheKey(book, index, route);
     const cached = await getAudio(key);
     if (cached) {
-      audioTelemetry.current = { provider: audioProvider.current, cached: true, duration: 0, generationSeconds: 0 };
+      audioTelemetry.current = { provider: route.provider, model: route.model, cached: true, duration: 0, generationSeconds: 0 };
       return cached;
     }
     const existing = pendingAudio.current.get(key);
@@ -496,10 +497,11 @@ export default function FreeReaderApp() {
         setMessage(status);
         setTtsProgress(undefined);
       }
-    }, block.isHeading, speechRate, language).then(async ({ blob, duration, provider, generationSeconds }) => {
+    }, block.isHeading, speechRate, language).then(async ({ blob, duration, provider, generationSeconds, route: actualRoute }) => {
       audioProvider.current = provider;
-      audioTelemetry.current = { provider, cached: false, duration, generationSeconds };
-      await saveAudio(key, blob);
+      audioTelemetry.current = { provider, model: actualRoute.model, cached: false, duration, generationSeconds };
+      // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
+      await saveAudio(audioCacheKey(book, index, actualRoute), blob);
       return blob;
     }).finally(() => {
       setTtsProgress(undefined);
@@ -510,23 +512,32 @@ export default function FreeReaderApp() {
   }
 
   async function pregenerate(book: LibraryBook, fromIndex: number) {
-    if (usesMobileSpeech()) return;
     const epoch = ++generationEpoch.current;
-    for (let index = fromIndex; index < book.blocks.length; index += 1) {
+    let bufferedSeconds = 0;
+    for (let index = fromIndex; index < Math.min(book.blocks.length, fromIndex + 4); index += 1) {
       if (generationEpoch.current !== epoch) return;
-      try { await ensureAudio(book, index); } catch { return; }
+      try {
+        const blob = await ensureAudio(book, index);
+        const wav = new DataView(await blob.slice(0, 44).arrayBuffer());
+        bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true) / book.position.speed;
+        if (bufferedSeconds >= 30) return;
+      } catch { return; }
     }
   }
 
   useEffect(() => {
-    if (selected) void pregenerate(selected, selected.position.blockIndex);
-  }, [selected?.id, selected?.position.blockIndex, selected?.language, voice, steps, speechRate]);
+    if (selected && playing && !audioRef.current?.paused && audioBlock.current === selected.position.blockIndex) {
+      void pregenerate(selected, selected.position.blockIndex + 1);
+    }
+    return () => { generationEpoch.current += 1; };
+  }, [playing, selected?.id, selected?.position.blockIndex, selected?.language, voice, steps, speechRate]);
 
   async function playBlock(book: LibraryBook, index: number, offset = 0, offsetFromEnd = false) {
     const audio = audioRef.current;
     if (!audio || !book.blocks[index]) return;
+    const requestedAt = performance.now();
+    generationEpoch.current += 1;
     setBusy(true);
-    setPlaying(true);
     try {
       const blob = await ensureAudio(book, index);
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
@@ -542,6 +553,10 @@ export default function FreeReaderApp() {
       const positioned = positionBook(book, index, offset);
       updateBook(positioned);
       await audio.play();
+      setPlaying(true);
+      ttsLog("playback started", { timeToFirstAudioSeconds: (performance.now() - requestedAt) / 1000,
+        model: audioTelemetry.current?.model, provider: audioTelemetry.current?.provider,
+        cached: audioTelemetry.current?.cached });
       if (!playedBooks.current.has(book.id)) {
         playedBooks.current.add(book.id);
         recordTelemetry("playback_first_started", {
@@ -562,7 +577,7 @@ export default function FreeReaderApp() {
         playableBooks.current.add(book.id);
         const language = languageForBook(book);
         const selectedVoice = voiceForLanguage(voice, language);
-        const model = isKokoroVoice(selectedVoice) ? "kokoro_web_82m" : "supertonic_3";
+        const model = info.model;
         recordTelemetry("first_playable_audio", {
           document_id: book.id,
           model,
@@ -570,7 +585,7 @@ export default function FreeReaderApp() {
           language,
           ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
-          time_to_first_playable_seconds: info.generationSeconds,
+          time_to_first_playable_seconds: (performance.now() - requestedAt) / 1000,
           spoken_seconds: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : info.duration,
           cache_bytes: blob.size,
         });
@@ -580,7 +595,7 @@ export default function FreeReaderApp() {
           language,
           ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
-          time_to_first_playable_seconds: info.generationSeconds,
+          time_to_first_playable_seconds: (performance.now() - requestedAt) / 1000,
         });
       }
     } catch (error) {
@@ -833,7 +848,7 @@ export default function FreeReaderApp() {
             </div>
             <progress value={ttsProgress} max={1} aria-label={message} />
             {!isModelDownload && <p>{message}</p>}
-            {isModelDownload && <small>{isKokoroVoice(narrationVoice) ? "The Kokoro model and voice are saved in persistent browser storage and reused after refresh." : usesMobileSpeech() ? "Smaller on-device Supertonic 3 model. Downloads are cached when browser storage is available." : "This model only needs to be downloaded once and will then be cached for later sessions."}</small>}
+            {isModelDownload && <small>The model and voice are cached in browser storage when available and reused after refresh.</small>}
           </section>
         )}
         <div className={styles.player}>

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MobileSpeechClient, usesMobileSpeech } from "./mobileSpeech";
 import { splitMobileText, synthesizeMobile } from "./mobileInference";
-import { configureMobileWasm, MOBILE_ORT_WASM_PATH } from "./mobileWasm";
+import { configureMobileWasm, MOBILE_ORT_WASM_PATH, wasmThreads } from "./mobileWasm";
 
 test("mobile routing excludes desktop Safari and desktop Chrome", () => {
   const device = (userAgent: string, platform = "", maxTouchPoints = 0) => ({ userAgent, platform, maxTouchPoints }) as Navigator;
@@ -13,13 +13,29 @@ test("mobile routing excludes desktop Safari and desktop Chrome", () => {
   assert.equal(usesMobileSpeech(device("Macintosh Safari", "MacIntel", 5)), true);
 });
 
-test("mobile WASM uses the pinned same-origin runtime without threads or a proxy", () => {
+test("WASM uses matching same-origin glue and binary, SIMD, and no nested inference proxy", () => {
   const ort = { env: { wasm: {} } } as unknown as typeof import("onnxruntime-web/wasm");
   configureMobileWasm(ort, "https://reader.example/reader");
   assert.equal(ort.env.wasm.numThreads, 1);
   assert.equal(ort.env.wasm.proxy, false);
   assert.equal(ort.env.wasm.simd, "fixed");
-  assert.deepEqual(ort.env.wasm.wasmPaths, { wasm: `https://reader.example${MOBILE_ORT_WASM_PATH}` });
+  assert.deepEqual(ort.env.wasm.wasmPaths, {
+    wasm: `https://reader.example${MOBILE_ORT_WASM_PATH}`,
+    mjs: "https://reader.example/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.mjs",
+  });
+  configureMobileWasm(ort, "https://reader.example/reader", true, true);
+  assert.deepEqual(ort.env.wasm.wasmPaths, {
+    wasm: "https://reader.example/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.jsep.wasm",
+    mjs: "https://reader.example/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.jsep.mjs",
+  });
+});
+
+test("WASM threads require isolation and leave cores available for playback", () => {
+  assert.equal(wasmThreads(true, false, 8), 1);
+  assert.equal(wasmThreads(false, false, 16), 1);
+  assert.equal(wasmThreads(true, true, 8), 2);
+  assert.equal(wasmThreads(false, true, 16), 4);
+  assert.equal(wasmThreads(false, true, 2), 1);
 });
 
 test("mobile text chunks bound allocation without dropping text or breaking surrogate pairs", () => {

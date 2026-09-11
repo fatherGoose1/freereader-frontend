@@ -7,13 +7,13 @@ export function usesMobileSpeech(device = typeof navigator === "undefined" ? und
 }
 
 export type SpeechResult = { blob: Blob; duration: number; provider: string; generationSeconds: number };
-export type MobileRequest = { text: string; voice: Voice; steps: number; isHeading: boolean; speechSpeed: number; language: SpeechLanguage };
+export type MobileRequest = { text: string; voice: Voice; steps: number; isHeading: boolean; speechSpeed: number; language: SpeechLanguage; mobile?: boolean };
 export type MobileResponse =
   | { kind: "status"; message: string; progress?: number }
   | { kind: "result"; result: SpeechResult }
   | { kind: "error"; message: string };
 
-// Only the mobile dispatcher creates this worker. Desktop never loads its runtime.
+// Both Supertonic variants run off the UI thread; the worker imports only its variant.
 export class MobileSpeechClient {
   private worker?: Worker;
   private tail: Promise<unknown> = Promise.resolve();

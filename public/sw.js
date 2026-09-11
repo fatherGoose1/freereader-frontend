@@ -1,4 +1,4 @@
-const CACHE = "freereader-shell-v1";
+const CACHE = "freereader-shell-v2";
 const SHELL = ["/reader", "/icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -8,7 +8,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(keys
-    .filter((key) => key !== CACHE && !key.startsWith("freereader-mobile-"))
+    .filter((key) => key.startsWith("freereader-shell-") && key !== CACHE)
     .map((key) => caches.delete(key)))));
   self.clients.claim();
 });
