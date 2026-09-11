@@ -187,7 +187,7 @@ export async function synthesizeKokoroWeb(
   isHeading: boolean,
   status?: TtsStatus,
   mobile = false,
-): Promise<{ audio: ArrayBuffer; duration: number; provider: Provider; generationSeconds: number }> {
+): Promise<{ audio: ArrayBuffer; duration: number; provider: Provider; generationSeconds: number; generationStartedAt: number }> {
   if (!text.trim()) throw new Error("Kokoro speech requires text.");
   if (!Number.isFinite(speechSpeed) || speechSpeed < 0.1 || speechSpeed > 5) throw new Error("Speech speed must be between 0.1 and 5.");
   // No Kokoro assets (including the voice) are fetched before the GPU/ORT probe.
@@ -226,5 +226,6 @@ export async function synthesizeKokoroWeb(
     }
   }
   if (!sampleCount) throw new Error("Kokoro speech generation produced no audio. Tap Play to retry.");
-  return { audio: encodeWav(waveforms, sampleCount), duration: sampleCount / SAMPLE_RATE, provider, generationSeconds: (performance.now() - started) / 1000 };
+  return { audio: encodeWav(waveforms, sampleCount), duration: sampleCount / SAMPLE_RATE, provider,
+    generationSeconds: (performance.now() - started) / 1000, generationStartedAt: performance.timeOrigin + started };
 }

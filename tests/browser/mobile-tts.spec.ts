@@ -1,19 +1,38 @@
 import { test, expect } from "@playwright/test";
 
-test("plays the first chunk before bounded look-ahead generation on desktop and mobile", async ({ page }) => {
+test("plays the first chunk before look-ahead and measures synthesis-to-playback without initialization", async ({ page }) => {
+  const events: Array<{ event_name: string; properties: { time_to_first_playable_seconds: number; audio_source: string } }> = [];
+  await page.route("**/api/telemetry", (route) => {
+    events.push(...route.request().postDataJSON().events);
+    return route.fulfill({ status: 202, json: {} });
+  });
   await page.addInitScript(() => {
-    const state = { generated: 0, atPlayback: -1 };
+    const state = { generated: 0, atPlayback: -1, firstGenerationStartedAt: 0, firstPlaybackStartedAt: 0 };
     Object.assign(window, { ttsPipeline: state });
-    document.addEventListener("playing", () => { if (state.atPlayback < 0) state.atPlayback = state.generated; }, true);
+    document.addEventListener("playing", () => {
+      if (state.atPlayback < 0) {
+        state.atPlayback = state.generated;
+        state.firstPlaybackStartedAt = performance.timeOrigin + performance.now();
+      }
+    }, true);
+    // Include the audio handoff in the metric, not just the worker's inference time.
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = async function () {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return play.call(this);
+    };
     window.Worker = class extends EventTarget {
       onmessage: ((event: MessageEvent) => void) | null = null;
       terminate() {}
       postMessage(request: { kind: string }) {
         if (request.kind === "probe") {
-          setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready" } })), 0);
+          // Cold initialization must not be counted as audio generation.
+          setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready" } })), 1_000);
           return;
         }
         state.generated += 1;
+        const generationStartedAt = performance.timeOrigin + performance.now();
+        if (state.generated === 1) state.firstGenerationStartedAt = generationStartedAt;
         const audio = new ArrayBuffer(44 + 24_000 * 12 * 2);
         const view = new DataView(audio);
         for (const [offset, value] of [[0, "RIFF"], [8, "WAVE"], [12, "fmt "], [36, "data"]] as const) {
@@ -24,7 +43,7 @@ test("plays the first chunk before bounded look-ahead generation on desktop and 
         view.setUint32(28, 48_000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
         view.setUint32(40, audio.byteLength - 44, true);
         setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: {
-          kind: "result", audio, duration: 12, generationSeconds: 0.05, provider: "WebGPU",
+          kind: "result", audio, duration: 12, generationSeconds: 0.05, generationStartedAt, provider: "WebGPU",
         } })), 50);
       }
     } as unknown as typeof Worker;
@@ -34,12 +53,21 @@ test("plays the first chunk before bounded look-ahead generation on desktop and 
     buffer: Buffer.from("This is an English passage about reading books and listening to stories while the next part is prepared.\n\n".repeat(30)) });
   await page.getByRole("button", { name: /^txt Pipeline/ }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
-  const state = () => page.evaluate(() => (window as unknown as { ttsPipeline: { generated: number; atPlayback: number } }).ttsPipeline);
+  const state = () => page.evaluate(() => (window as unknown as { ttsPipeline: {
+    generated: number; atPlayback: number; firstGenerationStartedAt: number; firstPlaybackStartedAt: number;
+  } }).ttsPipeline);
   await expect.poll(async () => (await state()).atPlayback).toBe(1);
   await expect.poll(async () => (await state()).generated).toBe(4);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await page.waitForTimeout(250);
   expect((await state()).generated).toBe(4);
+  await expect.poll(() => events.filter((event) => event.event_name === "first_playable_audio").length).toBe(1);
+  const timing = await state();
+  const reported = events.find((event) => event.event_name === "first_playable_audio")!.properties;
+  const expected = (timing.firstPlaybackStartedAt - timing.firstGenerationStartedAt) / 1000;
+  expect(reported.audio_source).toBe("generated");
+  expect(reported.time_to_first_playable_seconds).toBeGreaterThanOrEqual(0.15);
+  expect(Math.abs(reported.time_to_first_playable_seconds - expected)).toBeLessThan(0.1);
 });
 
 test("mobile defaults English to Kokoro and non-English to Supertonic", async ({ page }, testInfo) => {

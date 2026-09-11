@@ -5,6 +5,7 @@ import { normalizeForSpeech } from "./speechText";
 import type { SpeechLanguage } from "./speech";
 import { configureMobileWasm } from "./mobileWasm";
 import { ttsLog } from "./ttsDiagnostics";
+import type { SpeechResult } from "./mobileSpeech";
 
 const REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
 const MODEL_ROOT = `https://huggingface.co/Supertone/supertonic-3/resolve/${REVISION}`;
@@ -259,7 +260,7 @@ export function synthesize(
   isHeading = false,
   speechSpeed = 0.9,
   language: SpeechLanguage = "en",
-): Promise<{ blob: Blob; duration: number; provider: string; generationSeconds: number }> {
+): Promise<SpeechResult> {
   const task = synthesisTail.then(async () => {
     const components = await getComponents(status);
     const style = await loadStyle(voice, components, status);
@@ -271,6 +272,7 @@ export function synthesize(
       duration: result.duration,
       provider: components.provider,
       generationSeconds: (performance.now() - generationStarted) / 1000,
+      generationStartedAt: performance.timeOrigin + generationStarted,
     };
   });
   synthesisTail = task.catch(() => undefined);

@@ -7,7 +7,7 @@ export type KokoroWebRequest = { kind: "probe"; mobile: boolean }
 export type KokoroWebResponse =
   | { kind: "status"; message: string; progress?: number }
   | { kind: "ready" }
-  | { kind: "result"; audio: ArrayBuffer; duration: number; provider: string; generationSeconds: number }
+  | { kind: "result"; audio: ArrayBuffer; duration: number; provider: string; generationSeconds: number; generationStartedAt: number }
   | { kind: "error"; message: string };
 
 export class KokoroWebSpeechClient {
@@ -33,7 +33,7 @@ export class KokoroWebSpeechClient {
     const reply = await this.request({ kind: "synthesize", text, voice, speechSpeed, isHeading, mobile }, status);
     if (reply.kind !== "result") throw new Error("Missing Kokoro audio result");
     return { blob: new Blob([reply.audio], { type: "audio/wav" }), duration: reply.duration,
-      provider: reply.provider, generationSeconds: reply.generationSeconds };
+      provider: reply.provider, generationSeconds: reply.generationSeconds, generationStartedAt: reply.generationStartedAt };
   }
 
   private request(request: KokoroWebRequest, status?: TtsStatus) {

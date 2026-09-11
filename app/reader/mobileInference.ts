@@ -3,6 +3,7 @@ import { configureMobileWasm } from "./mobileWasm";
 import { normalizeForSpeech } from "./speechText";
 import type { SpeechLanguage } from "./speech";
 import { ttsLog } from "./ttsDiagnostics";
+import type { SpeechResult } from "./mobileSpeech";
 
 const MODEL_REVISION = "11f5965fd0bc7dfb191a16d83772fc658a3c03d8";
 const ORIGINAL_REVISION = "3cadd1ee6394adea1bd021217a0e650ede09a323";
@@ -255,7 +256,7 @@ export async function synthesizeMobile(
   speechSpeed: number,
   language: SpeechLanguage,
   status: (message: string, progress?: number) => void,
-): Promise<{ blob: Blob; duration: number; provider: string; generationSeconds: number }> {
+): Promise<SpeechResult> {
   if (text.length > MAX_INPUT_CHARS) throw new Error(`Mobile speech input exceeds ${MAX_INPUT_CHARS} characters.`);
   if (!Object.hasOwn(VOICE_SIZES, voice)) throw new Error(`Unknown Supertonic voice: ${voice}`);
   if (!Number.isSafeInteger(steps) || steps < 1 || steps > 64) throw new Error("Speech steps must be between 1 and 64.");
@@ -317,5 +318,6 @@ export async function synthesizeMobile(
     duration: dataBytes / (sampleRate * 2),
     provider: "WASM",
     generationSeconds: (performance.now() - generationStarted) / 1000,
+    generationStartedAt: performance.timeOrigin + generationStarted,
   };
 }

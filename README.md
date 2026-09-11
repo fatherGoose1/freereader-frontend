@@ -78,6 +78,8 @@ Mobile uses the [Soniqo INT8 export](https://huggingface.co/soniqo/Supertonic-3-
 
 Mobile classification includes iPhone, iPad (including desktop-mode Safari), and Android. It chooses the model size, not GPU eligibility. Model storage remains optional. Development console entries prefixed `[TTS]` include classification, GPU/adapter/device/probe results, exact fallback reasons, model/variant/bytes, provider, isolation/threads, inference time, generated duration, RTF (inference seconds / audio seconds), and playback-request-to-first-audio time including downloads and initialization. No document text is logged.
 
+For generated audio, the backend/PostHog `first_playable_audio.time_to_first_playable_seconds` measures **synthesis start → playback start**, excluding GPU checks, downloads, and model/voice initialization. Workers send a `performance.timeOrigin + performance.now()` synthesis-start timestamp so the window can measure through audio handoff and playback. Cached audio retains request-to-playback timing because it has no synthesis step. Total cold-start latency remains separate in development diagnostics.
+
 Run `npm test` for deterministic tests. For real browser inference:
 
 ```bash

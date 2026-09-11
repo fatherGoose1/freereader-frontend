@@ -26,6 +26,10 @@ import posthog from "posthog-js";
 import styles from "./reader.module.css";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
+type PreparedAudio = {
+  blob: Blob; provider: string; model: string; cached: boolean; duration: number;
+  generationStartedAt?: number;
+};
 
 const gutenbergCategories = [
   [649, "Classics"], [644, "Adventure"], [640, "Mystery"], [639, "Romance"],
@@ -178,18 +182,10 @@ export default function FreeReaderApp() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioBlock = useRef<number | null>(null);
   const audioUrl = useRef<string | null>(null);
-  const pendingAudio = useRef(new Map<string, Promise<Blob>>());
+  const pendingAudio = useRef(new Map<string, Promise<PreparedAudio>>());
   const generationEpoch = useRef(0);
-  const audioTelemetry = useRef<{
-    provider: string;
-    cached: boolean;
-    duration: number;
-    generationSeconds: number;
-    model: string;
-  } | null>(null);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
-  const audioProvider = useRef("");
   const PAGE_CHAR_LIMIT = 900;
   const [page, setPage] = useState({ bookId: "", start: 0 });
   const narrationLanguage = selected ? languageForBook(selected) : "en";
@@ -470,13 +466,12 @@ export default function FreeReaderApp() {
     return `${book.id}/${model}/${index}.wav`;
   }
 
-  async function ensureAudio(book: LibraryBook, index: number): Promise<Blob> {
+  async function ensureAudio(book: LibraryBook, index: number): Promise<PreparedAudio> {
     const route = await narrationRoute(voice, languageForBook(book));
     const key = audioCacheKey(book, index, route);
     const cached = await getAudio(key);
     if (cached) {
-      audioTelemetry.current = { provider: route.provider, model: route.model, cached: true, duration: 0, generationSeconds: 0 };
-      return cached;
+      return { blob: cached, provider: route.provider, model: route.model, cached: true, duration: 0 };
     }
     const existing = pendingAudio.current.get(key);
     if (existing) return existing;
@@ -497,12 +492,11 @@ export default function FreeReaderApp() {
         setMessage(status);
         setTtsProgress(undefined);
       }
-    }, block.isHeading, speechRate, language).then(async ({ blob, duration, provider, generationSeconds, route: actualRoute }) => {
-      audioProvider.current = provider;
-      audioTelemetry.current = { provider, model: actualRoute.model, cached: false, duration, generationSeconds };
+    }, block.isHeading, speechRate, language).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
       await saveAudio(audioCacheKey(book, index, actualRoute), blob);
-      return blob;
+      // Keep timing attached to this chunk so background generation cannot overwrite it.
+      return { blob, provider, model: actualRoute.model, cached: false, duration, generationStartedAt };
     }).finally(() => {
       setTtsProgress(undefined);
       pendingAudio.current.delete(key);
@@ -517,7 +511,7 @@ export default function FreeReaderApp() {
     for (let index = fromIndex; index < Math.min(book.blocks.length, fromIndex + 4); index += 1) {
       if (generationEpoch.current !== epoch) return;
       try {
-        const blob = await ensureAudio(book, index);
+        const { blob } = await ensureAudio(book, index);
         const wav = new DataView(await blob.slice(0, 44).arrayBuffer());
         bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true) / book.position.speed;
         if (bufferedSeconds >= 30) return;
@@ -539,7 +533,7 @@ export default function FreeReaderApp() {
     generationEpoch.current += 1;
     setBusy(true);
     try {
-      const blob = await ensureAudio(book, index);
+      const { blob, ...info } = await ensureAudio(book, index);
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
       audioUrl.current = URL.createObjectURL(blob);
       audio.src = audioUrl.current;
@@ -553,10 +547,15 @@ export default function FreeReaderApp() {
       const positioned = positionBook(book, index, offset);
       updateBook(positioned);
       await audio.play();
+      const playbackStartedAt = performance.timeOrigin + performance.now();
+      // Generated audio: actual synthesis start through playback, excluding setup.
+      // Cached audio has no synthesis start; retain its request-to-playback latency.
+      const timeToFirstPlayableSeconds = Math.max(0,
+        (playbackStartedAt - (info.generationStartedAt ?? performance.timeOrigin + requestedAt)) / 1000);
       setPlaying(true);
-      ttsLog("playback started", { timeToFirstAudioSeconds: (performance.now() - requestedAt) / 1000,
-        model: audioTelemetry.current?.model, provider: audioTelemetry.current?.provider,
-        cached: audioTelemetry.current?.cached });
+      ttsLog("playback started", { timeToFirstAudioSeconds: (playbackStartedAt - performance.timeOrigin - requestedAt) / 1000,
+        generationToPlaybackSeconds: info.cached ? undefined : timeToFirstPlayableSeconds,
+        model: info.model, provider: info.provider, cached: info.cached });
       if (!playedBooks.current.has(book.id)) {
         playedBooks.current.add(book.id);
         recordTelemetry("playback_first_started", {
@@ -572,8 +571,7 @@ export default function FreeReaderApp() {
           speed: book.position.speed,
         });
       }
-      const info = audioTelemetry.current;
-      if (info && !playableBooks.current.has(book.id)) {
+      if (!playableBooks.current.has(book.id)) {
         playableBooks.current.add(book.id);
         const language = languageForBook(book);
         const selectedVoice = voiceForLanguage(voice, language);
@@ -585,7 +583,7 @@ export default function FreeReaderApp() {
           language,
           ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
-          time_to_first_playable_seconds: (performance.now() - requestedAt) / 1000,
+          time_to_first_playable_seconds: timeToFirstPlayableSeconds,
           spoken_seconds: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : info.duration,
           cache_bytes: blob.size,
         });
@@ -595,7 +593,7 @@ export default function FreeReaderApp() {
           language,
           ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
-          time_to_first_playable_seconds: (performance.now() - requestedAt) / 1000,
+          time_to_first_playable_seconds: timeToFirstPlayableSeconds,
         });
       }
     } catch (error) {

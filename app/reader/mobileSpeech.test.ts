@@ -66,8 +66,8 @@ test("a stalled mobile worker is terminated and a fresh worker can retry", async
   assert.equal(terminated, 1);
   const retry = client.synthesize(request);
   await Promise.resolve();
-  fake.onmessage?.({ data: { kind: "result", result: { blob: new Blob(), duration: 1, provider: "WASM", generationSeconds: 1 } } } as MessageEvent);
-  await retry;
+  fake.onmessage?.({ data: { kind: "result", result: { blob: new Blob(), duration: 1, provider: "WASM", generationSeconds: 1, generationStartedAt: 1_000 } } } as MessageEvent);
+  assert.equal((await retry).generationStartedAt, 1_000);
   assert.equal(created, 2);
   client.stop();
 });

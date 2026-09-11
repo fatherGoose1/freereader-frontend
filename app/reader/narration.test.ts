@@ -3,7 +3,7 @@ import test from "node:test";
 import { NarrationRouter } from "./narration";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 
-const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, provider: "WebGPU" };
+const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, generationStartedAt: 1_000, provider: "WebGPU" };
 function setup(mobile: boolean, probeError?: Error, inferenceError?: Error) {
   const calls: string[] = [];
   const router = new NarrationRouter(mobile, {

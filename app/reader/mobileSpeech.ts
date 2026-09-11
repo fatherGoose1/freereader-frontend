@@ -6,7 +6,11 @@ export function usesMobileSpeech(device = typeof navigator === "undefined" ? und
     || (/Macintosh|MacIntel/i.test(`${device.userAgent} ${device.platform}`) && device.maxTouchPoints > 1));
 }
 
-export type SpeechResult = { blob: Blob; duration: number; provider: string; generationSeconds: number };
+export type SpeechResult = {
+  blob: Blob; duration: number; provider: string; generationSeconds: number;
+  // performance.timeOrigin + performance.now(), comparable across worker/window clocks.
+  generationStartedAt: number;
+};
 export type MobileRequest = { text: string; voice: Voice; steps: number; isHeading: boolean; speechSpeed: number; language: SpeechLanguage; mobile?: boolean };
 export type MobileResponse =
   | { kind: "status"; message: string; progress?: number }
