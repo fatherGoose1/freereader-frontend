@@ -18,6 +18,16 @@
 .appShell input,
 .appShell select { font: inherit; }
 
+.mobileWarning {
+  padding: 16px max(20px, calc((100vw - 1180px) / 2));
+  color: #713f12;
+  background: #fef3c7;
+  border-bottom: 1px solid #f59e0b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.mobileWarning p { margin: 4px 0 0; }
+
 .libraryHero {
   position: sticky;
   z-index: 12;

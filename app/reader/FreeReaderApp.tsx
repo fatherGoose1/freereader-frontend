@@ -146,6 +146,7 @@ function folderPath(folder: LibraryFolder, folders: LibraryFolder[]): string {
 }
 
 export default function FreeReaderApp() {
+  const [isMobile, setIsMobile] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -204,6 +205,7 @@ export default function FreeReaderApp() {
   const lastPositionSave = useRef(0);
 
   useEffect(() => {
+    setIsMobile(usesMobileSpeech());
     recordTelemetry("app_launch");
     posthog.capture("app_launched");
     Promise.all([listBooks(), listFolders()])
@@ -873,6 +875,13 @@ export default function FreeReaderApp() {
     }
   }
 
+  const mobileWarning = isMobile ? (
+    <div className={styles.mobileWarning} role="alert">
+      <strong>FreeReader only works on desktop.</strong>
+      <p>Please open this page on a desktop or laptop computer to use FreeReader.</p>
+    </div>
+  ) : null;
+
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
     const chapter = selected.chapters[block?.chapterIndex] ?? selected.chapters[0];
@@ -881,6 +890,7 @@ export default function FreeReaderApp() {
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
     return (
       <main className={styles.appShell}>
+        {mobileWarning}
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
@@ -1003,6 +1013,7 @@ export default function FreeReaderApp() {
 
   return (
     <main className={styles.appShell}>
+      {mobileWarning}
       <header className={styles.libraryHero}>
         <div><span className={styles.kicker}>On this device</span><h1>FreeReader</h1></div>
         <div className={styles.actions}>
