@@ -185,6 +185,9 @@ export default function FreeReaderApp() {
   const playbackEpoch = useRef(0);
   const wantsPlayback = useRef(false);
   const generationEpoch = useRef(0);
+  // Cold start: the very first passage is requested alone so audio can begin playing
+  // quickly; later look-ahead requests batch several passages per backend call.
+  const audioPrimed = useRef(false);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
   const PAGE_CHAR_LIMIT = 900;
@@ -526,9 +529,11 @@ export default function FreeReaderApp() {
 
     if (route.provider === "Server") {
       // Batch consecutive passages so runs of short chunks share one backend round trip.
+      // Until audio exists, request a single passage so playback can start sooner.
+      const maxBlocks = audioPrimed.current ? BATCH_MAX_BLOCKS : 1;
       const batch: Array<{ index: number; key: string; text: string; isHeading: boolean }> = [];
       let characters = 0;
-      for (let cursor = index; cursor < book.blocks.length && batch.length < BATCH_MAX_BLOCKS; cursor += 1) {
+      for (let cursor = index; cursor < book.blocks.length && batch.length < maxBlocks; cursor += 1) {
         const candidate = book.blocks[cursor];
         if (batch.length && characters + candidate.text.length > BATCH_MAX_CHARS) break;
         const cursorKey = cursor === index ? key : audioCacheKey(book, cursor, route);
@@ -542,6 +547,7 @@ export default function FreeReaderApp() {
         selectedVoice, steps, onStatus, speechRate, language, () => request.isCurrent(),
       ).then(async ({ parts, route: actualRoute }) => {
         if (parts.length !== batch.length) throw new Error("Speech batch size did not match the request.");
+        audioPrimed.current = true;
         return Promise.all(batch.map(async (item, position) => {
           const part = parts[position];
           // A failed remote request may have completed with a local variant. Cache its real route.
@@ -853,6 +859,7 @@ export default function FreeReaderApp() {
 
   function openBook(book: LibraryBook) {
     resetPlayback();
+    audioPrimed.current = false;
     const language = languageForBook(book);
     const ready = book.language ? book : { ...book, language };
     selectedRef.current = ready;
@@ -875,6 +882,7 @@ export default function FreeReaderApp() {
     const selected = selectedRef.current;
     if (!selected) return;
     resetPlayback();
+    audioPrimed.current = false;
     setVoice((current) => voiceForLanguage(current, language));
     updateBook({ ...selected, language, updatedAt: new Date().toISOString() });
     posthog.capture("voice_settings_changed", { setting: "language", value: language });
@@ -1023,13 +1031,13 @@ export default function FreeReaderApp() {
               </select>
             </label>
             <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
-              <select value={narrationVoice} onChange={(event) => { resetPlayback(); setVoice(event.target.value as NarratorVoice); posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
+              <select value={narrationVoice} onChange={(event) => { resetPlayback(); audioPrimed.current = false; setVoice(event.target.value as NarratorVoice); posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
             <div className={styles.qualitySetting}><span>Speaking Rate</span><div>
               {[[0.8, "0.8x"], [0.9, "0.9x"], [1, "1x"], [1.1, "1.1x"], [1.2, "1.2x"]].map(([value, label]) => (
-                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); setSpeechRate(Number(value)); posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
+                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); audioPrimed.current = false; setSpeechRate(Number(value)); posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
               ))}
             </div></div>
             <div className={styles.qualitySetting}><span>Quality</span><div>

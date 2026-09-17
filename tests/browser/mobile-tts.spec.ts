@@ -74,9 +74,11 @@ test("plays the first chunk before look-ahead and reports backend generation tim
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentTime > 0 || !audio.paused), { timeout: 60_000 }).toBe(true);
   await expect.poll(() => requests.length, { timeout: 60_000 }).toBeGreaterThanOrEqual(1);
+  // The cold start asks for one passage so audio begins sooner...
+  expect(requests[0].texts?.length ?? 1).toBe(1);
+  // ...then look-ahead batches the following passages into one round trip.
+  await expect.poll(() => requests.some((request) => (request.texts?.length ?? 1) > 1), { timeout: 60_000 }).toBe(true);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  // Short passages are batched: the first request carries several chunks in one round trip.
-  expect(requests[0].texts?.length ?? 1).toBeGreaterThan(1);
   await expect.poll(() => events.filter((event) => event.event_name === "first_playable_audio").length).toBe(1);
   const reported = events.find((event) => event.event_name === "first_playable_audio")!.properties;
   expect(reported.audio_source).toBe("generated");
