@@ -1,4 +1,3 @@
-import { franc } from "franc-min";
 import {
   KOKORO_VOICES,
   isKokoroVoice,
@@ -6,6 +5,9 @@ import {
   supertonicVoices,
   type NarratorVoice,
 } from "./voices";
+import { ISO6393_TO_LANGUAGE, detectSpeechLanguage } from "./languageDetection";
+
+export { detectSpeechLanguage };
 
 export const SPEECH_LANGUAGES = [
   ["en", "English"], ["ko", "Korean"], ["ja", "Japanese"], ["ar", "Arabic"],
@@ -22,22 +24,12 @@ export type SpeechLanguage = (typeof SPEECH_LANGUAGES)[number][0];
 export type SpeechEngine = "kokoro" | "supertonic";
 
 const languageCodes = new Set<string>(SPEECH_LANGUAGES.map(([code]) => code));
-const iso6393: Record<string, SpeechLanguage> = {
-  eng: "en", kor: "ko", jpn: "ja", arb: "ar", bul: "bg", ces: "cs", dan: "da", deu: "de",
-  ell: "el", spa: "es", est: "et", fin: "fi", fra: "fr", hin: "hi", hrv: "hr", hun: "hu",
-  ind: "id", ita: "it", lit: "lt", lav: "lv", nld: "nl", pol: "pl", por: "pt", ron: "ro",
-  rus: "ru", slk: "sk", slv: "sl", swe: "sv", tur: "tr", ukr: "uk", vie: "vi",
-};
+const iso6393 = ISO6393_TO_LANGUAGE;
 
 export function normalizeLanguage(value?: string | null): SpeechLanguage | undefined {
   const code = value?.trim().toLowerCase().split(/[-_]/)[0];
   if (!code) return undefined;
   return languageCodes.has(code) ? code as SpeechLanguage : iso6393[code];
-}
-
-export function detectSpeechLanguage(text: string): SpeechLanguage | undefined {
-  const detected = franc(text.slice(0, 20_000), { minLength: 50, only: Object.keys(iso6393) });
-  return iso6393[detected];
 }
 
 export function speechEngine(language: SpeechLanguage): SpeechEngine {

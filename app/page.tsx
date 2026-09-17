@@ -1,6 +1,5 @@
-import Image from "next/image";
-import Link from "next/link";
 import CtaButton from "./components/CtaButton";
+import HeroDemo from "./components/HeroDemo";
 
 export default function Home() {
   return (
@@ -23,15 +22,8 @@ export default function Home() {
           </div>
           <small className="subnote">Web app is live · iPhone app coming soon</small>
         </div>
-        <div className="hero-shot" aria-label="FreeReader app preview">
-          <Image
-            src="/hero-image.png"
-            alt="FreeReader reading Alice's Adventures in Wonderland aloud, with playback controls at 42% book progress"
-            width={724}
-            height={1470}
-            priority
-            sizes="(max-width: 760px) 88vw, 400px"
-          />
+        <div className="hero-shot" aria-label="FreeReader live speech demo">
+          <HeroDemo />
         </div>
       </section>
 
