@@ -1,8 +1,27 @@
+import JSZip from "jszip";
 import type { TtsStatus } from "./tts";
 import { normalizeForSpeech } from "./speechText";
 import { telemetryContext } from "./telemetry";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
+
+type BatchItem = { text: string; isHeading: boolean };
+
+function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
+  if (typeof payload?.error === "string" && payload.error) return payload.error;
+  if (response.status === 413) return "This passage is too long to narrate.";
+  return "Speech service is unavailable. Tap Play to retry.";
+}
+
+function speechResult(blob: Blob, duration: number, generationSeconds: number, generationStartedAt: number): SpeechResult {
+  return {
+    blob,
+    duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
+    provider: "Server",
+    generationSeconds: Number.isFinite(generationSeconds) && generationSeconds >= 0 ? generationSeconds : 0,
+    generationStartedAt,
+  };
+}
 
 export class RemoteSpeechClient {
   private controller?: AbortController;
@@ -13,11 +32,16 @@ export class RemoteSpeechClient {
   }
 
   async synthesize(text: string, speechSpeed: number, isHeading = false, status?: TtsStatus): Promise<SpeechResult> {
+    const [result] = await this.synthesizeBatch([{ text, isHeading }], speechSpeed, status);
+    return result;
+  }
+
+  async synthesizeBatch(items: BatchItem[], speechSpeed: number, status?: TtsStatus): Promise<SpeechResult[]> {
     this.stop();
     const controller = new AbortController();
     this.controller = controller;
     const started = performance.now();
-    status?.("Generating mobile speech");
+    status?.(items.length > 1 ? `Generating ${items.length} passages` : "Generating speech");
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
@@ -25,28 +49,39 @@ export class RemoteSpeechClient {
           "Content-Type": "application/json",
           "X-FreeReader-Context": JSON.stringify(telemetryContext()),
         },
-        body: JSON.stringify({ text: normalizeForSpeech(text, isHeading), speed: speechSpeed }),
+        body: JSON.stringify({
+          texts: items.map((item) => normalizeForSpeech(item.text, item.isHeading)),
+          speed: speechSpeed,
+        }),
         signal: controller.signal,
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: unknown } | null;
-        throw new Error(typeof payload?.error === "string" ? payload.error : "Mobile speech service is unavailable. Tap Play to retry.");
+        throw new Error(unavailableMessage(response, payload));
+      }
+      const generationSeconds = Number(response.headers.get("X-Generation-Seconds"));
+      const generationStartedAt = performance.timeOrigin + started;
+      const contentType = response.headers.get("Content-Type") ?? "";
+      if (contentType.includes("zip")) {
+        const durations = (response.headers.get("X-Audio-Durations") ?? "").split(",").map(Number);
+        const archive = await JSZip.loadAsync(await response.arrayBuffer());
+        const parts: SpeechResult[] = [];
+        for (let index = 0; index < items.length; index += 1) {
+          const entry = archive.file(`${index}.m4a`);
+          if (!entry) throw new Error("Speech service returned an incomplete batch.");
+          const blob = await entry.async("blob");
+          parts.push(speechResult(new Blob([blob], { type: "audio/mp4" }), durations[index],
+            generationSeconds, generationStartedAt));
+        }
+        status?.("Speech ready", 1);
+        return parts;
       }
       const blob = await response.blob();
-      if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Mobile speech service returned invalid audio.");
-      const duration = Number(response.headers.get("X-Audio-Duration"));
-      const generationSeconds = Number(response.headers.get("X-Generation-Seconds"));
-      status?.("Mobile speech ready", 1);
-      return {
-        blob,
-        duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
-        provider: "Server",
-        generationSeconds: Number.isFinite(generationSeconds) && generationSeconds >= 0
-          ? generationSeconds : (performance.now() - started) / 1000,
-        generationStartedAt: performance.timeOrigin + started,
-      };
+      if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");
+      status?.("Speech ready", 1);
+      return [speechResult(blob, Number(response.headers.get("X-Audio-Duration")), generationSeconds, generationStartedAt)];
     } catch (error) {
-      if (controller.signal.aborted) throw new SpeechCancelledError("Mobile speech was cancelled.");
+      if (controller.signal.aborted) throw new SpeechCancelledError("Speech was cancelled.");
       throw error;
     } finally {
       if (this.controller === controller) this.controller = undefined;

@@ -3,11 +3,18 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as { text?: unknown; speed?: unknown } | null;
-  if (!body || typeof body.text !== "string" || !body.text.trim()
-    || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
+  const body = await request.json().catch(() => null) as { text?: unknown; texts?: unknown; speed?: unknown } | null;
+  if (!body || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
+  const texts = Array.isArray(body.texts)
+    ? body.texts.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : null;
+  const single = typeof body.text === "string" && body.text.trim() ? body.text : null;
+  if (!single && !texts?.length) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+  const upstreamBody = texts ? { texts, speed: body.speed } : { text: single, speed: body.speed };
   const backend = process.env.KOKO_BACKEND_URL
     ?? "https://koko-backend-production-c887.up.railway.app";
   const token = process.env.FREEREADER_TTS_API_TOKEN ?? process.env.PARRYT_API_TOKEN;
@@ -27,7 +34,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
         ...(upstreamContext ? { "X-FreeReader-Context": upstreamContext } : {}),
       },
-      body: JSON.stringify({ text: body.text, speed: body.speed }),
+      body: JSON.stringify(upstreamBody),
       signal: controller.signal,
       cache: "no-store",
     });
@@ -45,11 +52,12 @@ export async function POST(request: Request) {
     });
   }
   const contentType = response.headers.get("Content-Type") ?? "";
-  if (!contentType.startsWith("audio/") || !response.body) {
+  const valid = contentType.startsWith("audio/") || contentType.startsWith("application/zip");
+  if (!valid || !response.body) {
     return NextResponse.json({ error: "invalid_speech_response" }, { status: 502 });
   }
   const headers = new Headers({ "Content-Type": contentType, "Cache-Control": "private, no-store" });
-  for (const name of ["X-Audio-Duration", "X-Generation-Seconds", "X-TTS-Model"]) {
+  for (const name of ["X-Audio-Duration", "X-Audio-Durations", "X-Generation-Seconds", "X-TTS-Model"]) {
     const value = response.headers.get(name);
     if (value) headers.set(name, value);
   }

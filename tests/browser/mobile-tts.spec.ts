@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import JSZip from "jszip";
 
 const SAMPLE_RATE = 24_000;
 
@@ -24,21 +25,31 @@ function wavBuffer(seconds: number): Buffer {
   return buffer;
 }
 
-async function mockSpeech(page: Page, options: { delayMs?: number; seconds?: number; onRequest?: (body: unknown) => void } = {}) {
+async function mockSpeech(page: Page, options: { delayMs?: number; seconds?: number; onRequest?: (body: { text?: string; texts?: string[]; speed: number }) => void } = {}) {
   const seconds = options.seconds ?? 12;
   await page.route("**/api/tts", async (route) => {
-    options.onRequest?.(route.request().postDataJSON());
+    const body = route.request().postDataJSON() as { text?: string; texts?: string[]; speed: number };
+    const texts = body.texts ?? (body.text ? [body.text] : []);
+    options.onRequest?.(body);
     if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
-    await route.fulfill({
-      status: 200,
-      headers: {
-        "Content-Type": "audio/wav",
-        "X-Audio-Duration": String(seconds),
-        "X-Generation-Seconds": "0.05",
-        "X-TTS-Model": "kokoro-7m-distill-fp32",
-      },
-      body: wavBuffer(seconds),
-    });
+    const headers = {
+      "X-Generation-Seconds": "0.05",
+      "X-TTS-Model": "kokoro-7m-distill-fp32",
+    };
+    if (texts.length > 1) {
+      const zip = new JSZip();
+      texts.forEach((_, index) => zip.file(`${index}.wav`, wavBuffer(seconds)));
+      const archive = await zip.generateAsync({ type: "nodebuffer" });
+      await route.fulfill({ status: 200, headers: {
+        ...headers,
+        "Content-Type": "application/zip",
+        "X-Audio-Durations": texts.map(() => seconds.toFixed(6)).join(","),
+      }, body: archive });
+      return;
+    }
+    await route.fulfill({ status: 200, headers: {
+      ...headers, "Content-Type": "audio/wav", "X-Audio-Duration": String(seconds),
+    }, body: wavBuffer(seconds) });
   });
 }
 
@@ -56,15 +67,16 @@ test("plays the first chunk before look-ahead and reports backend generation tim
     events.push(...route.request().postDataJSON().events);
     return route.fulfill({ status: 202, json: {} });
   });
-  const requests: Array<{ text: string; speed: number }> = [];
-  await mockSpeech(page, { delayMs: 150, onRequest: (body) => requests.push(body as { text: string; speed: number }) });
+  const requests: Array<{ text?: string; texts?: string[]; speed: number }> = [];
+  await mockSpeech(page, { delayMs: 150, onRequest: (body) => requests.push(body) });
   await page.goto("/reader");
   await importText(page, "Pipeline.txt", ENGLISH.repeat(30));
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentTime > 0 || !audio.paused), { timeout: 60_000 }).toBe(true);
   await expect.poll(() => requests.length, { timeout: 60_000 }).toBeGreaterThanOrEqual(1);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  expect(requests[0].text.length).toBeGreaterThan(0);
+  // Short passages are batched: the first request carries several chunks in one round trip.
+  expect(requests[0].texts?.length ?? 1).toBeGreaterThan(1);
   await expect.poll(() => events.filter((event) => event.event_name === "first_playable_audio").length).toBe(1);
   const reported = events.find((event) => event.event_name === "first_playable_audio")!.properties;
   expect(reported.audio_source).toBe("generated");

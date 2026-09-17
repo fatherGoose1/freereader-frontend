@@ -13,6 +13,7 @@ function setup(mobile: boolean, remoteError?: Error) {
     },
     remote: {
       async synthesize(text) { calls.push(`remote:${text}`); if (remoteError) throw remoteError; return audio; },
+      async synthesizeBatch(items) { calls.push(`remote-batch:${items.map((item) => item.text).join("|")}`); if (remoteError) throw remoteError; return items.map(() => audio); },
       stop() { calls.push("dispose-remote"); },
     },
   });
@@ -38,6 +39,15 @@ for (const mobile of [false, true]) {
     assert.deepEqual(calls, ["remote:Hello"]);
   });
 }
+
+test("batches English passages into a single remote call", async () => {
+  const { router, calls } = setup(false);
+  const { parts, route } = await router.synthesizeBatch(
+    ["One", "Two", "Three"], [false, false, true], "af_heart", 4, undefined, 1, "en");
+  assert.equal(parts.length, 3);
+  assert.equal(route.provider, "Server");
+  assert.deepEqual(calls, ["remote-batch:One|Two|Three"]);
+});
 
 test("desktop: non-English still runs Supertonic on device", async () => {
   const { calls, speakFrench } = setup(false);
@@ -80,6 +90,11 @@ test("a seek drops stale queued synthesis while retaining an in-flight result", 
         calls.push(text);
         if (text === "first") { started.resolve(); return first.promise; }
         return audio;
+      },
+      async synthesizeBatch(items) {
+        calls.push(items.map((item) => item.text).join("|"));
+        if (items[0].text === "first") { started.resolve(); return [await first.promise]; }
+        return items.map(() => audio);
       },
       stop() { calls.push("stop"); },
     },

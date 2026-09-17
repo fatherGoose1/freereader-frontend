@@ -8,7 +8,7 @@ import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
 type Clients = {
   supertonic: Pick<MobileSpeechClient, "synthesize" | "stop">;
-  remote: Pick<RemoteSpeechClient, "synthesize" | "stop">;
+  remote: Pick<RemoteSpeechClient, "synthesize" | "synthesizeBatch" | "stop">;
 };
 export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WASM" | "Server"; mobile: boolean };
 
@@ -80,6 +80,46 @@ export class NarrationRouter {
     this.tail = task.catch(() => undefined);
     return task;
   }
+
+  synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
+    speechSpeed: number, language: SpeechLanguage,
+    isNeeded: () => boolean = () => true): Promise<{ parts: SpeechResult[]; route: NarrationRoute }> {
+    const epoch = this.epoch;
+    const checkRequest = () => {
+      if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
+    };
+    const task = this.tail.then(async () => {
+      const started = performance.now();
+      checkRequest();
+      const route = await this.route(voice, language);
+      checkRequest();
+      let parts: SpeechResult[];
+      if (route.provider === "Server") {
+        if (this.active === "supertonic") this.clients.supertonic.stop();
+        this.active = "remote";
+        parts = await this.clients.remote.synthesizeBatch(
+          texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status);
+      } else {
+        if (this.active === "remote") this.clients.remote.stop();
+        this.active = "supertonic";
+        if (!isSupertonicVoice(route.voice)) throw new Error("Non-English narration requires a Supertonic voice.");
+        parts = [];
+        for (let position = 0; position < texts.length; position += 1) {
+          checkRequest();
+          parts.push(await this.clients.supertonic.synthesize({
+            text: texts[position], voice: route.voice, steps,
+            isHeading: headings[position] ?? false, speechSpeed, language, mobile: this.mobile,
+          }, status));
+        }
+      }
+      const spoken = parts.reduce((total, part) => total + part.duration, 0);
+      ttsLog("inference", { ...route, passages: parts.length, audioSeconds: spoken,
+        requestToAudioSeconds: (performance.now() - started) / 1000 });
+      return { parts, route };
+    });
+    this.tail = task.catch(() => undefined);
+    return task;
+  }
 }
 
 let router: NarrationRouter | undefined;
@@ -98,4 +138,9 @@ export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage) {
 export function synthesize(text: string, voice: NarratorVoice = "af_heart", steps = 8, status?: TtsStatus,
   isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean) {
   return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded);
+}
+
+export function synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice = "af_heart", steps = 8,
+  status?: TtsStatus, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean) {
+  return getRouter().synthesizeBatch(texts, headings, voice, steps, status, speechSpeed, language, isNeeded);
 }

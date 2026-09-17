@@ -17,7 +17,7 @@ import {
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
-import { narrationRoute, synthesize, UnsupportedMobileLanguageError, type NarrationRoute } from "./narration";
+import { narrationRoute, synthesize, synthesizeBatch, UnsupportedMobileLanguageError, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
@@ -28,6 +28,9 @@ import posthog from "posthog-js";
 import styles from "./reader.module.css";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
+// Backend English synthesis is batched: several short passages share one round trip.
+const BATCH_MAX_BLOCKS = 4;
+const BATCH_MAX_CHARS = 1200;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   generationStartedAt?: number;
@@ -489,7 +492,8 @@ export default function FreeReaderApp() {
     };
     checkRequest();
     if (usesMobileSpeech() && languageForBook(book) !== "en") throw new UnsupportedMobileLanguageError();
-    const route = await narrationRoute(voice, languageForBook(book));
+    const language = languageForBook(book);
+    const route = await narrationRoute(voice, language);
     checkRequest();
     const key = audioCacheKey(book, index, route);
     const cached = await getAudio(key);
@@ -509,17 +513,56 @@ export default function FreeReaderApp() {
       }
     }
     const block = book.blocks[index];
-    const language = languageForBook(book);
     const selectedVoice = voiceForLanguage(voice, language);
     const request = { isCurrent };
-    const promise = synthesize(block.text, selectedVoice, steps, (status, progress) => {
+    const onStatus = (status: string, progress?: number) => {
       if (!request.isCurrent()) return;
       // Only surface real model downloads; generation statuses made the UI flash.
       if (status.startsWith("Downloading voice model")) {
         setMessage(status);
         setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
       }
-    }, block.isHeading, speechRate, language, () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
+    };
+
+    if (route.provider === "Server") {
+      // Batch consecutive passages so runs of short chunks share one backend round trip.
+      const batch: Array<{ index: number; key: string; text: string; isHeading: boolean }> = [];
+      let characters = 0;
+      for (let cursor = index; cursor < book.blocks.length && batch.length < BATCH_MAX_BLOCKS; cursor += 1) {
+        const candidate = book.blocks[cursor];
+        if (batch.length && characters + candidate.text.length > BATCH_MAX_CHARS) break;
+        const cursorKey = cursor === index ? key : audioCacheKey(book, cursor, route);
+        if (cursor !== index && pendingAudio.current.has(cursorKey)) break;
+        batch.push({ index: cursor, key: cursorKey, text: candidate.text, isHeading: candidate.isHeading });
+        characters += candidate.text.length;
+      }
+      const master = synthesizeBatch(
+        batch.map((item) => item.text),
+        batch.map((item) => item.isHeading),
+        selectedVoice, steps, onStatus, speechRate, language, () => request.isCurrent(),
+      ).then(async ({ parts, route: actualRoute }) => {
+        if (parts.length !== batch.length) throw new Error("Speech batch size did not match the request.");
+        return Promise.all(batch.map(async (item, position) => {
+          const part = parts[position];
+          // A failed remote request may have completed with a local variant. Cache its real route.
+          await saveAudio(audioCacheKey(book, item.index, actualRoute), part.blob);
+          return { blob: part.blob, provider: part.provider, model: actualRoute.model, cached: false,
+            duration: part.duration, generationStartedAt: part.generationStartedAt };
+        }));
+      }).finally(() => {
+        if (request.isCurrent()) setTtsProgress(undefined);
+        for (const item of batch) pendingAudio.current.delete(item.key);
+      });
+      batch.forEach((item, position) => {
+        const derived = master.then((results) => results[position]);
+        derived.catch(() => undefined); // Unawaited look-ahead entries must not be unhandled rejections.
+        pendingAudio.current.set(item.key, { promise: derived, request });
+      });
+      return pendingAudio.current.get(key)!.promise;
+    }
+
+    const promise = synthesize(block.text, selectedVoice, steps, onStatus, block.isHeading, speechRate, language,
+      () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
       await saveAudio(audioCacheKey(book, index, actualRoute), blob);
       // Keep timing attached to this chunk so background generation cannot overwrite it.
