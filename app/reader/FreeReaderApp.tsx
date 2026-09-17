@@ -480,7 +480,7 @@ export default function FreeReaderApp() {
     const language = languageForBook(book);
     const quality = route.provider === "WASM" ? `${steps}-` : "";
     const model = `${TEXT_PIPELINE_REVISION}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
-    return `${book.id}/${model}/${index}.wav`;
+    return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
 
   async function ensureAudio(book: LibraryBook, index: number, isCurrent: () => boolean): Promise<PreparedAudio> {
@@ -546,10 +546,15 @@ export default function FreeReaderApp() {
     for (let index = fromIndex; index < Math.min(book.blocks.length, fromIndex + 4); index += 1) {
       if (!isCurrent()) return;
       try {
-        const { blob } = await ensureAudio(book, index, isCurrent);
+        const { blob, duration } = await ensureAudio(book, index, isCurrent);
         if (!isCurrent()) return;
-        const wav = new DataView(await blob.slice(0, 44).arrayBuffer());
-        bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true) / book.position.speed;
+        if (duration > 0) bufferedSeconds += duration / book.position.speed;
+        else if (blob.type === "audio/wav") {
+          const wav = new DataView(await blob.slice(0, 44).arrayBuffer());
+          bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true) / book.position.speed;
+        } else {
+          bufferedSeconds += book.blocks[index].text.split(/\s+/).length / 2.5 / book.position.speed;
+        }
         if (bufferedSeconds >= 30) return;
       } catch { return; }
     }
@@ -654,7 +659,7 @@ export default function FreeReaderApp() {
         recordTelemetry("first_playable_audio", {
           document_id: book.id,
           model,
-          ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
+          ...(info.provider && { engine: info.provider === "Server" ? "server" : `onnxruntime_${info.provider.toLowerCase()}` }),
           language,
           ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
@@ -664,7 +669,7 @@ export default function FreeReaderApp() {
         });
         posthog.capture("first_playable_audio", {
           model,
-          ...(info.provider && { engine: `onnxruntime_${info.provider.toLowerCase()}` }),
+          ...(info.provider && { engine: info.provider === "Server" ? "server" : `onnxruntime_${info.provider.toLowerCase()}` }),
           language,
           ...(!isKokoroVoice(selectedVoice) && { inference_steps: steps }),
           audio_source: info.cached ? "cache" : "generated",
@@ -674,7 +679,7 @@ export default function FreeReaderApp() {
     } catch (error) {
       if (!isCurrent()) return;
       pausePlayback();
-      setMessage(error instanceof Error ? error.message : "Local speech generation failed.");
+      setMessage(error instanceof Error ? error.message : "Speech generation failed.");
     } finally {
       if (isCurrent()) setBusy(false);
     }

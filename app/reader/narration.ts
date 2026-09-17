@@ -1,6 +1,7 @@
 import { MobileSpeechClient, usesMobileSpeech, type SpeechResult } from "./mobileSpeech";
 import { KokoroWebSpeechClient } from "./kokoroWebSpeech";
 import type { KokoroProvider } from "./kokoroWebInference";
+import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngine, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import { isKokoroVoice, type NarratorVoice } from "./voices";
@@ -9,18 +10,19 @@ import { errorReason, SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 type Clients = {
   kokoro: Pick<KokoroWebSpeechClient, "probe" | "synthesize" | "stop">;
   supertonic: Pick<MobileSpeechClient, "synthesize" | "stop">;
+  remote: Pick<RemoteSpeechClient, "synthesize" | "stop">;
 };
-export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WebGPU" | "WASM"; mobile: boolean };
+export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WebGPU" | "WASM" | "Server"; mobile: boolean };
 
 export class NarrationRouter {
   private gpu?: Promise<KokoroProvider | false>;
   private fallbackReason?: string;
-  private active?: "kokoro" | "supertonic";
+  private active?: "kokoro" | "supertonic" | "remote";
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
 
   constructor(private readonly mobile = usesMobileSpeech(), private readonly clients: Clients = {
-    kokoro: new KokoroWebSpeechClient(), supertonic: new MobileSpeechClient(),
+    kokoro: new KokoroWebSpeechClient(), supertonic: new MobileSpeechClient(), remote: new RemoteSpeechClient(),
   }) {
     ttsLog("classification", { device: mobile ? "mobile" : "desktop", navigatorGpu: !!(globalThis.navigator as Navigator & { gpu?: unknown } | undefined)?.gpu });
   }
@@ -29,6 +31,7 @@ export class NarrationRouter {
     this.epoch += 1;
     this.clients.kokoro.stop();
     this.clients.supertonic.stop();
+    this.clients.remote.stop();
     this.active = undefined;
     // The worker owns the tested device; a replacement worker must probe again.
     this.gpu = undefined;
@@ -43,6 +46,9 @@ export class NarrationRouter {
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
     const selected = voiceForLanguage(voice, language);
+    if (this.mobile && speechEngine(language) === "kokoro") {
+      return { model: "kokoro-7m-fp32-server-v1", voice: selected, provider: "Server", mobile: true };
+    }
     if (speechEngine(language) === "kokoro" && !this.fallbackReason) {
       this.gpu ??= this.clients.kokoro.probe(this.mobile).catch((error) => {
         if (error instanceof SpeechCancelledError) throw error;
@@ -72,8 +78,14 @@ export class NarrationRouter {
       let route = await this.route(voice, language);
       checkRequest();
       let result: SpeechResult | undefined;
-      if (route.model.startsWith("kokoro-") && isKokoroVoice(route.voice)) {
+      if (route.provider === "Server") {
+        if (this.active === "kokoro") this.clients.kokoro.stop();
         if (this.active === "supertonic") this.clients.supertonic.stop();
+        this.active = "remote";
+        result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status);
+      } else if (route.model.startsWith("kokoro-") && isKokoroVoice(route.voice)) {
+        if (this.active === "supertonic") this.clients.supertonic.stop();
+        if (this.active === "remote") this.clients.remote.stop();
         this.active = "kokoro";
         try {
           result = await this.clients.kokoro.synthesize(text, route.voice, speechSpeed, isHeading, status, this.mobile);
@@ -87,6 +99,7 @@ export class NarrationRouter {
       if (!result) {
         checkRequest();
         if (this.active === "kokoro") { this.clients.kokoro.stop(); this.gpu = undefined; }
+        if (this.active === "remote") this.clients.remote.stop();
         this.active = "supertonic";
         if (isKokoroVoice(route.voice)) throw new Error("Invalid fallback voice");
         result = await this.clients.supertonic.synthesize({ text, voice: route.voice, steps, isHeading, speechSpeed, language, mobile: this.mobile }, status);
