@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { detectSpeechLanguage } from "../reader/languageDetection";
+import { isLikelyEnglish } from "../reader/languageDetection";
 
 const DEFAULT_TEXT =
   "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it,";
@@ -43,7 +43,7 @@ export default function HeroDemo() {
       setStatus({ kind: "error", message: "Type a few words to hear the demo." });
       return;
     }
-    if (detectSpeechLanguage(trimmed) !== "en") {
+    if (!isLikelyEnglish(trimmed)) {
       setStatus({ kind: "error", message: "Only English is allowed." });
       return;
     }
