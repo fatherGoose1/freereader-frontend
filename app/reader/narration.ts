@@ -1,68 +1,51 @@
 import { MobileSpeechClient, usesMobileSpeech, type SpeechResult } from "./mobileSpeech";
-import { KokoroWebSpeechClient } from "./kokoroWebSpeech";
-import type { KokoroProvider } from "./kokoroWebInference";
 import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngine, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
-import { isKokoroVoice, type NarratorVoice } from "./voices";
-import { errorReason, SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
+import type { NarratorVoice } from "./voices";
+import { isSupertonicVoice } from "./voices";
+import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
 type Clients = {
-  kokoro: Pick<KokoroWebSpeechClient, "probe" | "synthesize" | "stop">;
   supertonic: Pick<MobileSpeechClient, "synthesize" | "stop">;
   remote: Pick<RemoteSpeechClient, "synthesize" | "stop">;
 };
-export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WebGPU" | "WASM" | "Server"; mobile: boolean };
+export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WASM" | "Server"; mobile: boolean };
+
+export class UnsupportedMobileLanguageError extends Error {
+  constructor() {
+    super("FreeReader offers English narration only on mobile.");
+    this.name = "UnsupportedMobileLanguageError";
+  }
+}
 
 export class NarrationRouter {
-  private gpu?: Promise<KokoroProvider | false>;
-  private fallbackReason?: string;
-  private active?: "kokoro" | "supertonic" | "remote";
+  private active?: "supertonic" | "remote";
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
 
   constructor(private readonly mobile = usesMobileSpeech(), private readonly clients: Clients = {
-    kokoro: new KokoroWebSpeechClient(), supertonic: new MobileSpeechClient(), remote: new RemoteSpeechClient(),
+    supertonic: new MobileSpeechClient(), remote: new RemoteSpeechClient(),
   }) {
-    ttsLog("classification", { device: mobile ? "mobile" : "desktop", navigatorGpu: !!(globalThis.navigator as Navigator & { gpu?: unknown } | undefined)?.gpu });
+    ttsLog("classification", { device: mobile ? "mobile" : "desktop" });
   }
 
   stop() {
     this.epoch += 1;
-    this.clients.kokoro.stop();
     this.clients.supertonic.stop();
     this.clients.remote.stop();
     this.active = undefined;
-    // The worker owns the tested device; a replacement worker must probe again.
-    this.gpu = undefined;
-  }
-
-  private fallback(error: unknown) {
-    this.fallbackReason = errorReason(error);
-    this.clients.kokoro.stop(); // Termination also reclaims ORT memory after a worker crash/stall.
-    this.gpu = Promise.resolve(false);
-    ttsLog("fallback", { reason: this.fallbackReason, model: this.mobile ? "Supertonic 3 INT8" : "Supertonic 3 FP32", provider: "WASM" });
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
     const selected = voiceForLanguage(voice, language);
-    if (this.mobile && speechEngine(language) === "kokoro") {
-      return { model: "kokoro-7m-fp32-server-v1", voice: selected, provider: "Server", mobile: true };
+    // English is synthesized by the backend on every device; on-device Kokoro is retired.
+    if (speechEngine(language) === "kokoro") {
+      return { model: "kokoro-7m-fp32-server-v1", voice: selected, provider: "Server", mobile: this.mobile };
     }
-    if (speechEngine(language) === "kokoro" && !this.fallbackReason) {
-      this.gpu ??= this.clients.kokoro.probe(this.mobile).catch((error) => {
-        if (error instanceof SpeechCancelledError) throw error;
-        this.fallback(error);
-        return false;
-      });
-      const provider = await this.gpu;
-      if (provider) return { model: this.mobile ? `kokoro-7m-int8-${provider.toLowerCase()}-v4` : "kokoro-fp32-webgpu-v2",
-        voice: selected, provider, mobile: this.mobile };
-    }
-    // Preserve the existing 31-language support. Map an English Kokoro voice to
-    // a Supertonic style of the same gender when its GPU route cannot be used.
-    const fallbackVoice = isKokoroVoice(selected) ? (selected[1] === "f" ? "F1" : "M3") : selected;
-    return { model: this.mobile ? "supertonic-int8-wasm-v2" : "supertonic-fp32-wasm-v2", voice: fallbackVoice, provider: "WASM", mobile: this.mobile };
+    // Non-English still runs Supertonic locally, but only desktop ships that path.
+    if (this.mobile) throw new UnsupportedMobileLanguageError();
+    return { model: "supertonic-fp32-wasm-v2", voice: selected, provider: "WASM", mobile: false };
   }
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
@@ -75,34 +58,19 @@ export class NarrationRouter {
     const task = this.tail.then(async () => {
       const started = performance.now();
       checkRequest();
-      let route = await this.route(voice, language);
+      const route = await this.route(voice, language);
       checkRequest();
-      let result: SpeechResult | undefined;
+      let result: SpeechResult;
       if (route.provider === "Server") {
-        if (this.active === "kokoro") this.clients.kokoro.stop();
         if (this.active === "supertonic") this.clients.supertonic.stop();
         this.active = "remote";
         result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status);
-      } else if (route.model.startsWith("kokoro-") && isKokoroVoice(route.voice)) {
-        if (this.active === "supertonic") this.clients.supertonic.stop();
-        if (this.active === "remote") this.clients.remote.stop();
-        this.active = "kokoro";
-        try {
-          result = await this.clients.kokoro.synthesize(text, route.voice, speechSpeed, isHeading, status, this.mobile);
-        } catch (error) {
-          if (epoch !== this.epoch || error instanceof SpeechCancelledError) throw error;
-          checkRequest();
-          this.fallback(error);
-          route = await this.route(voice, language);
-        }
-      }
-      if (!result) {
-        checkRequest();
-        if (this.active === "kokoro") { this.clients.kokoro.stop(); this.gpu = undefined; }
+      } else {
         if (this.active === "remote") this.clients.remote.stop();
         this.active = "supertonic";
-        if (isKokoroVoice(route.voice)) throw new Error("Invalid fallback voice");
-        result = await this.clients.supertonic.synthesize({ text, voice: route.voice, steps, isHeading, speechSpeed, language, mobile: this.mobile }, status);
+        if (!isSupertonicVoice(route.voice)) throw new Error("Non-English narration requires a Supertonic voice.");
+        result = await this.clients.supertonic.synthesize(
+          { text, voice: route.voice, steps, isHeading, speechSpeed, language, mobile: this.mobile }, status);
       }
       ttsLog("inference", { ...route, inferenceSeconds: result.generationSeconds,
         audioSeconds: result.duration, rtf: result.generationSeconds / result.duration,

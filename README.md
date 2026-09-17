@@ -11,8 +11,8 @@ The existing marketing site remains at `/`; the local-first web reader is at `/r
 - Markdown: a local parser mirroring the iOS app's readable-markdown rules
 - Metadata, extracted blocks, and reading position: IndexedDB
 - Supertonic models: optional OPFS cache; generated WAV chunks: OPFS with byte-based IndexedDB fallback
-- English speech: full Kokoro on desktop WebGPU; mobile always uses Kokoro-7M-Distill, preferring WebGPU and falling back to WASM; Supertonic 3 WASM if Kokoro fails
-- Supertonic speech: full FP32 on desktop, INT8 on mobile, both in a dedicated SIMD WASM worker; also used for the existing non-English languages
+- English speech: always streamed from the Coco backend (`/api/tts` -> Kokoro-7M-Distill FP32, compressed AAC) on desktop and mobile; no English model runs on device
+- Supertonic speech: on-device SIMD WASM, full FP32 on desktop, for the non-English languages; mobile blocks non-English narration with an English-only warning
 - Playback: play the first passage, then generate ahead while playback continues (30-second target, capped at four passages)
 - Offline app shell: service worker and web app manifest
 
@@ -51,30 +51,22 @@ npm run build
 
 ## Browser speech routing
 
-| Device | Primary English engine | Fallback |
+| Device | English | Non-English |
 | --- | --- | --- |
-| Desktop | Full Kokoro FP32, 325,532,232 bytes | Full Supertonic 3 FP32, ~398 MB, WASM |
-| Mobile | Kokoro-7M-Distill INT8 plus `af_msa`, 26,981,312 bytes, WebGPU then WASM | Supertonic 3 INT8, 102,090,195 bytes, WASM |
+| Desktop | Coco backend `POST /api/v1/freereader/speech` (Kokoro-7M-Distill FP32, compressed AAC) | Supertonic 3 FP32, ~398 MB, on-device WASM |
+| Mobile | Coco backend `POST /api/v1/freereader/speech` (Kokoro-7M-Distill FP32, compressed AAC) | Unsupported: blocked with an "English only on mobile" warning |
 
-Kokoro remains the English engine; the other supported languages use Supertonic. Desktop uses the full multi-voice Kokoro model. Mobile uses the single-voice Kokoro-7M-Distill with the required `af_msa` style pack, regardless of the selected Kokoro voice. `narration.ts` owns routing and serializes generation across both workers. A Kokoro failure releases its sessions/device and terminates the worker before Supertonic loads, with no reload or intermediate error shown. English fallback maps female Kokoro voices to F1 and male voices to M3. The failed route stays disabled for the page lifetime. Audio cache keys include the actual engine, variant, voice, and settings, including when fallback happens during synthesis.
+English is always synthesized by the backend; on-device Kokoro has been retired. `narration.ts` owns routing: English returns a `Server` route through `remoteSpeech.ts` and the same-origin `/api/tts` proxy (which holds the backend token), while non-English returns a local WASM route. On mobile, non-English is rejected before any model loads; the reader shows a warning banner and disables Listen. Desktop non-English keeps the existing Supertonic path with transparent fallback. Audio cache keys include the engine, variant, voice, and settings.
 
-Before downloading any Kokoro assets, `webgpuProbe.ts` checks worker `navigator.gpu`, requests an adapter and device, and runs a 101-byte ONNX MatMul with CPU fallback disabled. It verifies GPU-resident output and the computed result. Mobile uses the distilled model with that WebGPU device when the probe passes, otherwise it configures the SIMD WASM runtime and still uses the distilled model. Initialization/inference errors trigger Supertonic.
+The backend model is pinned to `oddadmix/Kokoro-7M-Distill` FP32 with the required `af_msa` style pack, and returns mono AAC in fragmented MP4. Desktop and mobile no longer download any English Kokoro model.
 
-### iPhone/Safari findings
-
-Mobile always runs the Kokoro-7M-Distill INT8 export, using WebGPU when available and WASM otherwise. It never loads full Kokoro, and reduces the model download from 92 MB to about 27 MB including its voice.
-
-ORT remains pinned to **1.29.0**. Desktop FreeReader uses `/all` for its established **JSEP WebGPU** backend, with matching JSEP glue/WASM. Browser testing also exposed single-use adapters: after the explicit device check, JSEP must obtain a **fresh adapter** to create its own device. Reusing the consumed adapter failed in Chromium and WebKit. Desktop FP32 Kokoro is not gated on `shader-f16`.
-
-Real distilled Kokoro audio has been exercised in mobile Chromium and WebKit automation, and the full model plus tiny GPU probe in desktop-hosted Chromium and WebKit. Physical iPhone validation is still needed for device-specific performance, memory limits, and background suspension.
+Generation starts on playback demand. Once the first passage plays, both device classes prefetch a bounded window (30-second target, at most four following passages). Pause/navigation invalidates the look-ahead loop; an already-running passage may finish. Entire documents are not generated upfront.
 
 ### WASM and buffering
 
-`scripts/prepare-ort.mjs` copies the pinned standard/JSEP runtimes into `public/onnxruntime-web/1.29.0` before development/build. `next.config.ts` supplies COOP `same-origin` and COEP `require-corp` to documents and workers. Deployment proxies must preserve these headers. Model fetches use CORS; runtime glue and pthread workers are same-origin.
+`scripts/prepare-ort.mjs` copies the pinned runtimes into `public/onnxruntime-web/1.29.0` before development/build. `next.config.ts` supplies COOP `same-origin` and COEP `require-corp` to documents and workers. Deployment proxies must preserve these headers.
 
-Both Supertonic variants use SIMD and graph optimization in a worker, with no nested ORT inference proxy. With `crossOriginIsolated` and `SharedArrayBuffer`, thread counts are capped at half the logical cores, at most **2 on mobile / 4 on desktop**; otherwise they use one thread. The denoising loop reuses output tensors as inputs and disposes intermediates. Kokoro transfers its finished WAV buffer; Supertonic posts an immutable Blob.
-
-Generation starts on playback demand. Once the first passage plays, both device classes prefetch a bounded window (30-second target, at most four following passages). Pause/navigation invalidates the look-ahead loop; an already-running passage may finish. Entire documents are not generated upfront.
+Supertonic uses SIMD and graph optimization in a worker, with no nested ORT inference proxy. With `crossOriginIsolated` and `SharedArrayBuffer`, thread counts are capped at half the logical cores, at most **2 on mobile / 4 on desktop**; otherwise they use one thread. The denoising loop reuses output tensors as inputs and disposes intermediates. Supertonic posts an immutable Blob.
 
 ### Models and diagnostics
 

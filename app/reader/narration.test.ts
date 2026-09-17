@@ -1,87 +1,65 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { NarrationRouter } from "./narration";
+import { NarrationRouter, UnsupportedMobileLanguageError } from "./narration";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 
-const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, generationStartedAt: 1_000, provider: "WebGPU" };
-function setup(mobile: boolean, probeError?: Error, inferenceError?: Error, provider: "WebGPU" | "WASM" = "WebGPU",
-  remoteError?: Error) {
+const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, generationStartedAt: 1_000, provider: "Server" };
+function setup(mobile: boolean, remoteError?: Error) {
   const calls: string[] = [];
   const router = new NarrationRouter(mobile, {
-    kokoro: {
-      async probe() { calls.push("probe"); if (probeError) throw probeError; return provider; },
-      async synthesize(...args) { calls.push(`kokoro:${args[5]}`); if (inferenceError) throw inferenceError; return audio; },
-      stop() { calls.push("dispose-kokoro"); },
-    },
     supertonic: {
       async synthesize(request) { calls.push(`supertonic:${request.mobile}:${request.voice}:${request.language}`); return { ...audio, provider: "WASM" }; },
       stop() { calls.push("dispose-supertonic"); },
     },
     remote: {
-      async synthesize(text) { calls.push(`remote:${text}`); if (remoteError) throw remoteError; return { ...audio, provider: "Server" }; },
+      async synthesize(text) { calls.push(`remote:${text}`); if (remoteError) throw remoteError; return audio; },
       stop() { calls.push("dispose-remote"); },
     },
   });
-  return { router, calls, speak: () => router.synthesize("Hello", "af_heart", 4, undefined, false, 1, "en") };
+  return {
+    router, calls,
+    speakEnglish: () => router.synthesize("Hello", "af_heart", 4, undefined, false, 1, "en"),
+    speakFrench: () => router.synthesize("Bonjour", "M3", 4, undefined, false, 1, "fr"),
+  };
 }
 
 for (const mobile of [false, true]) {
-  if (mobile) {
-    test("mobile: English always uses the backend speech service", async () => {
-      const { calls, speak } = setup(true);
-      const result = await speak();
-      assert.equal(result.route.model, "kokoro-7m-fp32-server-v1");
-      assert.equal(result.route.provider, "Server");
-      assert.deepEqual(calls, ["remote:Hello"]);
-    });
+  test(`${mobile ? "mobile" : "desktop"}: English uses the backend speech service`, async () => {
+    const { calls, speakEnglish } = setup(mobile);
+    const result = await speakEnglish();
+    assert.equal(result.route.model, "kokoro-7m-fp32-server-v1");
+    assert.equal(result.route.provider, "Server");
+    assert.deepEqual(calls, ["remote:Hello"]);
+  });
 
-    test("mobile: a backend failure surfaces without loading a local model", async () => {
-      const { calls, speak } = setup(true, undefined, undefined, "WebGPU", new Error("speech_unavailable"));
-      await assert.rejects(speak(), /speech_unavailable/);
-      assert.deepEqual(calls, ["remote:Hello"]);
-    });
-  } else {
-    test("desktop: usable runtime selects Kokoro FP32", async () => {
-      const { calls, speak } = setup(false);
-      const result = await speak();
-      assert.equal(result.route.model, "kokoro-fp32-webgpu-v2");
-      assert.equal(result.route.provider, "WebGPU");
-      assert.deepEqual(calls, ["probe", "kokoro:false"]);
-    });
-
-    test("desktop: unavailable Kokoro runtime uses Supertonic; route stays selected", async () => {
-      const { calls, speak } = setup(false, new Error("requestDevice rejected"));
-      const result = await speak();
-      assert.equal(result.route.model, "supertonic-fp32-wasm-v2");
-      assert.equal(result.provider, "WASM");
-      await speak();
-      assert.deepEqual(calls, ["probe", "dispose-kokoro", "supertonic:false:F1:en", "supertonic:false:F1:en"]);
-    });
-
-    test("desktop: Kokoro failure disposes before transparent fallback", async () => {
-      const { calls, speak } = setup(false, undefined, new Error("Unsupported operator / device lost"));
-      assert.equal((await speak()).provider, "WASM");
-      await speak();
-      assert.equal(calls.filter((call) => call === "probe").length, 1);
-      assert.ok(calls.indexOf("dispose-kokoro") < calls.indexOf("supertonic:false:F1:en"));
-      assert.equal(calls.filter((call) => call.startsWith("kokoro:")).length, 1);
-    });
-  }
+  test(`${mobile ? "mobile" : "desktop"}: a backend failure surfaces without a local model`, async () => {
+    const { calls, speakEnglish } = setup(mobile, new Error("speech_unavailable"));
+    await assert.rejects(speakEnglish(), /speech_unavailable/);
+    assert.deepEqual(calls, ["remote:Hello"]);
+  });
 }
 
-test("language switches release the previous large model worker", async () => {
-  const { router, calls, speak } = setup(false);
-  await speak();
-  await router.synthesize("Bonjour", "M3", 4, undefined, false, 1, "fr");
-  await speak();
-  assert.deepEqual(calls, ["probe", "kokoro:false", "dispose-kokoro", "supertonic:false:M3:fr",
-    "probe", "dispose-supertonic", "kokoro:false"]);
+test("desktop: non-English still runs Supertonic on device", async () => {
+  const { calls, speakFrench } = setup(false);
+  const result = await speakFrench();
+  assert.equal(result.route.model, "supertonic-fp32-wasm-v2");
+  assert.equal(result.route.provider, "WASM");
+  assert.deepEqual(calls, ["supertonic:false:M3:fr"]);
 });
 
-test("page exit cancellation does not trigger model downloads for fallback", async () => {
-  const { calls, speak } = setup(false, undefined, new SpeechCancelledError("pagehide"));
-  await assert.rejects(speak(), SpeechCancelledError);
-  assert.deepEqual(calls, ["probe", "kokoro:false"]);
+test("mobile: non-English is rejected before any model loads", async () => {
+  const { calls, speakFrench } = setup(true);
+  await assert.rejects(speakFrench(), UnsupportedMobileLanguageError);
+  assert.deepEqual(calls, []);
+});
+
+test("switching from English to non-English releases the previous engine", async () => {
+  const { calls, speakEnglish, speakFrench } = setup(false);
+  await speakEnglish();
+  await speakFrench();
+  await speakEnglish();
+  assert.deepEqual(calls, ["remote:Hello", "dispose-remote", "supertonic:false:M3:fr",
+    "dispose-supertonic", "remote:Hello"]);
 });
 
 function deferred<T>() {
@@ -90,14 +68,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-test("a seek drops stale queued synthesis while retaining an in-flight result and the loaded worker", async () => {
+test("a seek drops stale queued synthesis while retaining an in-flight result", async () => {
   const first = deferred<typeof audio>();
   const started = deferred<void>();
   const calls: string[] = [];
   let current = 0;
   const router = new NarrationRouter(false, {
-    kokoro: {
-      async probe() { calls.push("probe"); return "WebGPU" as const; },
+    supertonic: { async synthesize() { throw new Error("Unexpected fallback"); }, stop() {} },
+    remote: {
       async synthesize(text) {
         calls.push(text);
         if (text === "first") { started.resolve(); return first.promise; }
@@ -105,8 +83,6 @@ test("a seek drops stale queued synthesis while retaining an in-flight result an
       },
       stop() { calls.push("stop"); },
     },
-    supertonic: { async synthesize() { throw new Error("Unexpected fallback"); }, stop() {} },
-    remote: { async synthesize() { throw new Error("Unexpected remote"); }, stop() {} },
   });
   const speak = (text: string, epoch: number) => router.synthesize(text, "af_heart", 4, undefined, false, 1, "en", () => current === epoch);
   const inFlight = speak("first", 0);
@@ -115,28 +91,8 @@ test("a seek drops stale queued synthesis while retaining an in-flight result an
   current = 1;
   const latest = speak("selected section", 1);
   first.resolve(audio);
-  assert.equal((await inFlight).blob, audio.blob); // Still useful to the audio cache.
+  assert.equal((await inFlight).blob, audio.blob);
   await obsolete;
   await latest;
-  assert.deepEqual(calls, ["probe", "first", "selected section"]);
-});
-
-test("a seek during the capability probe prevents obsolete inference", async () => {
-  const probe = deferred<void>();
-  const started = deferred<void>();
-  let needed = true;
-  const router = new NarrationRouter(false, {
-    kokoro: {
-      async probe() { started.resolve(); await probe.promise; return "WebGPU" as const; },
-      async synthesize() { throw new Error("Obsolete inference ran"); },
-      stop() {},
-    },
-    supertonic: { async synthesize() { throw new Error("Unexpected fallback"); }, stop() {} },
-    remote: { async synthesize() { throw new Error("Unexpected remote"); }, stop() {} },
-  });
-  const cancelled = assert.rejects(router.synthesize("Old selection", "af_heart", 4, undefined, false, 1, "en", () => needed), SpeechCancelledError);
-  await started.promise;
-  needed = false;
-  probe.resolve();
-  await cancelled;
+  assert.deepEqual(calls, ["first", "selected section"]);
 });

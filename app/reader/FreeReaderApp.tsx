@@ -17,7 +17,7 @@ import {
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
-import { narrationRoute, synthesize, type NarrationRoute } from "./narration";
+import { narrationRoute, synthesize, UnsupportedMobileLanguageError, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
@@ -488,6 +488,7 @@ export default function FreeReaderApp() {
       if (!isCurrent()) throw new SpeechCancelledError("Playback position changed");
     };
     checkRequest();
+    if (usesMobileSpeech() && languageForBook(book) !== "en") throw new UnsupportedMobileLanguageError();
     const route = await narrationRoute(voice, languageForBook(book));
     checkRequest();
     const key = audioCacheKey(book, index, route);
@@ -513,18 +514,10 @@ export default function FreeReaderApp() {
     const request = { isCurrent };
     const promise = synthesize(block.text, selectedVoice, steps, (status, progress) => {
       if (!request.isCurrent()) return;
-      if (isKokoroVoice(selectedVoice) || usesMobileSpeech()) {
+      // Only surface real model downloads; generation statuses made the UI flash.
+      if (status.startsWith("Downloading voice model")) {
         setMessage(status);
         setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
-      } else if (status.startsWith("Downloading voice model")) {
-        setMessage(status);
-        setTtsProgress(progress !== undefined && progress < 1 ? progress : undefined);
-      } else if (status.startsWith("Preparing voice model")) {
-        setMessage(status);
-        setTtsProgress(undefined);
-      } else if (status.startsWith("Voice model ready")) {
-        setMessage(status);
-        setTtsProgress(undefined);
       }
     }, block.isHeading, speechRate, language, () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
@@ -598,6 +591,10 @@ export default function FreeReaderApp() {
   async function playBlock(book: LibraryBook, index: number, offset = 0, offsetFromEnd = false) {
     const audio = audioRef.current;
     if (!audio || !book.blocks[index]) return;
+    if (usesMobileSpeech() && languageForBook(book) !== "en") {
+      setMessage("FreeReader narrates English only on mobile.");
+      return;
+    }
     const requestedAt = performance.now();
     resetPlayback();
     const epoch = playbackEpoch.current;
@@ -688,6 +685,10 @@ export default function FreeReaderApp() {
   async function togglePlayback() {
     const book = selectedRef.current;
     if (!book) return;
+    if (usesMobileSpeech() && languageForBook(book) !== "en") {
+      setMessage("FreeReader narrates English only on mobile.");
+      return;
+    }
     if (usesMobileSpeech()) void requestPersistentStorage().catch(() => false);
     const current = currentAudio();
     if (wantsPlayback.current) {
@@ -880,12 +881,7 @@ export default function FreeReaderApp() {
     }
   }
 
-  const mobileWarning = isMobile ? (
-    <div className={styles.mobileWarning} role="alert">
-      <strong>FreeReader only works on desktop.</strong>
-      <p>Please open this page on a desktop or laptop computer to use FreeReader.</p>
-    </div>
-  ) : null;
+  const mobileEnglishOnly = isMobile && narrationLanguage !== "en";
 
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
@@ -895,7 +891,12 @@ export default function FreeReaderApp() {
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
     return (
       <main className={styles.appShell}>
-        {mobileWarning}
+        {mobileEnglishOnly && (
+          <div className={styles.mobileWarning} role="alert">
+            <strong>FreeReader narrates English only on mobile.</strong>
+            <p>This document looks like another language, so audio is unavailable on this device. Open it on a desktop to listen.</p>
+          </div>
+        )}
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
@@ -959,7 +960,7 @@ export default function FreeReaderApp() {
             <div className={styles.transport}>
               <button className={styles.chapterSkip} onClick={() => moveChapter(-1)} disabled={!selected.chapters.some((item) => item.startBlockIndex < selected.position.blockIndex)} title="Previous chapter">|&lt;</button>
               <button onClick={() => seek(-10)} title="Back 10 seconds"><strong>-10</strong><span>seconds</span></button>
-              <button className={styles.playButton} onClick={togglePlayback}>{playing ? "Pause" : "Listen"}</button>
+              <button className={styles.playButton} onClick={togglePlayback} disabled={mobileEnglishOnly} title={mobileEnglishOnly ? "English narration only on mobile" : undefined}>{playing ? "Pause" : "Listen"}</button>
               <button onClick={() => seek(10)} title="Forward 10 seconds"><strong>+10</strong><span>seconds</span></button>
               <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter">&gt;|</button>
             </div>
@@ -968,10 +969,6 @@ export default function FreeReaderApp() {
                 {[0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => <option key={value} value={value}>{value}x</option>)}
               </select>
             </label>
-          </div>
-          <div className={styles.statusLine}>
-            {!isModelDownload && <span>{message}</span>}
-            {ttsProgress !== undefined && <progress value={ttsProgress} max={1} />}
           </div>
         </div>
         {panel === "voice" && (
@@ -1018,7 +1015,6 @@ export default function FreeReaderApp() {
 
   return (
     <main className={styles.appShell}>
-      {mobileWarning}
       <header className={styles.libraryHero}>
         <div><span className={styles.kicker}>On this device</span><h1>FreeReader</h1></div>
         <div className={styles.actions}>
