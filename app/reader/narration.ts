@@ -1,5 +1,6 @@
 import { MobileSpeechClient, usesMobileSpeech, type SpeechResult } from "./mobileSpeech";
 import { KokoroWebSpeechClient } from "./kokoroWebSpeech";
+import type { KokoroProvider } from "./kokoroWebInference";
 import { speechEngine, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import { isKokoroVoice, type NarratorVoice } from "./voices";
@@ -12,7 +13,7 @@ type Clients = {
 export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WebGPU" | "WASM"; mobile: boolean };
 
 export class NarrationRouter {
-  private gpu?: Promise<boolean>;
+  private gpu?: Promise<KokoroProvider | false>;
   private fallbackReason?: string;
   private active?: "kokoro" | "supertonic";
   private tail: Promise<unknown> = Promise.resolve();
@@ -43,13 +44,14 @@ export class NarrationRouter {
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
     const selected = voiceForLanguage(voice, language);
     if (speechEngine(language) === "kokoro" && !this.fallbackReason) {
-      this.gpu ??= this.clients.kokoro.probe(this.mobile).then(() => true).catch((error) => {
+      this.gpu ??= this.clients.kokoro.probe(this.mobile).catch((error) => {
         if (error instanceof SpeechCancelledError) throw error;
         this.fallback(error);
         return false;
       });
-      if (await this.gpu) return { model: this.mobile ? "kokoro-7m-fp32-wasm-v3" : "kokoro-fp32-webgpu-v2",
-        voice: selected, provider: this.mobile ? "WASM" : "WebGPU", mobile: this.mobile };
+      const provider = await this.gpu;
+      if (provider) return { model: this.mobile ? `kokoro-7m-fp32-${provider.toLowerCase()}-v4` : "kokoro-fp32-webgpu-v2",
+        voice: selected, provider, mobile: this.mobile };
     }
     // Preserve the existing 31-language support. Map an English Kokoro voice to
     // a Supertonic style of the same gender when its GPU route cannot be used.

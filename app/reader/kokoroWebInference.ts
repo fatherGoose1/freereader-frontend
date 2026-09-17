@@ -12,7 +12,8 @@ const ESPEAK_MODULE = "/kokoro-web/espeak-ng.js";
 const ESPEAK_WASM = "/kokoro-web/espeak-ng.wasm";
 type Ort = typeof import("onnxruntime-web/all");
 type Session = Awaited<ReturnType<Ort["InferenceSession"]["create"]>>;
-type Provider = "WebGPU" | "WASM";
+export type KokoroProvider = "WebGPU" | "WASM";
+type Provider = KokoroProvider;
 type Components = { ort: Ort; session: Session; voiceSession?: Session; provider: Provider };
 type Chunk = { tokens: number[] } | { silence: number };
 type Phonemizer = (text: string, language: "en-us" | "en-gb") => Promise<string>;
@@ -20,20 +21,28 @@ type Phonemizer = (text: string, language: "en-us" | "en-gb") => Promise<string>
 let componentsPromise: Promise<Components> | undefined;
 let gpuPromise: ReturnType<typeof probeWebGPU> | undefined;
 let mobileOrtPromise: Promise<Ort> | undefined;
+let providerPromise: Promise<Provider> | undefined;
 const voices = new Map<KokoroVoice, Promise<Float32Array>>();
 
-export async function prepareKokoroWebGPU(mobile: boolean): Promise<void> {
-  if (mobile) {
-    mobileOrtPromise ??= import("onnxruntime-web/wasm").then((module) => {
-      const ort = module as unknown as Ort;
-      configureMobileWasm(ort, globalThis.location.href);
-      return ort;
-    });
-    await mobileOrtPromise;
-    return;
-  }
-  gpuPromise ??= probeWebGPU(mobile);
-  (await gpuPromise).assertUsable();
+export function prepareKokoroWebGPU(mobile: boolean): Promise<Provider> {
+  providerPromise ??= (async () => {
+    gpuPromise ??= probeWebGPU(mobile);
+    try {
+      (await gpuPromise).assertUsable();
+      return "WebGPU";
+    } catch (error) {
+      if (!mobile) throw error;
+      ttsLog("provider fallback", { model: "Kokoro 7M Distill", from: "WebGPU", to: "WASM" });
+      mobileOrtPromise ??= import("onnxruntime-web/wasm").then((module) => {
+        const ort = module as unknown as Ort;
+        configureMobileWasm(ort, globalThis.location.href);
+        return ort;
+      });
+      await mobileOrtPromise;
+      return "WASM";
+    }
+  })();
+  return providerPromise;
 }
 
 export async function disposeKokoroWeb(): Promise<void> {
@@ -46,6 +55,7 @@ export async function disposeKokoroWeb(): Promise<void> {
   componentsPromise = undefined;
   gpuPromise = undefined;
   mobileOrtPromise = undefined;
+  providerPromise = undefined;
   voices.clear();
 }
 
@@ -165,16 +175,19 @@ function encodeWav(chunks: Float32Array[], sampleCount: number): ArrayBuffer {
 }
 
 async function createComponents(status?: TtsStatus, mobile = false): Promise<Components> {
-  await prepareKokoroWebGPU(mobile);
+  const provider = await prepareKokoroWebGPU(mobile);
   if (mobile) {
-    const ort = await mobileOrtPromise!;
+    const ort = provider === "WebGPU" ? (await gpuPromise!).ort : await mobileOrtPromise!;
     const [model, voice] = await Promise.all([
       loadKokoroAsset(KOKORO_MODELS.mobile, status, true),
       loadKokoroAsset(KOKORO_DISTILLED_VOICE, status, true),
     ]);
     ttsLog("model", { model: "Kokoro 7M Distill", variant: KOKORO_MODELS.mobile.label,
-      bytes: KOKORO_MODELS.mobile.size + KOKORO_DISTILLED_VOICE.size, provider: "WASM", mobile: true });
-    const options = {
+      bytes: KOKORO_MODELS.mobile.size + KOKORO_DISTILLED_VOICE.size, provider, mobile: true });
+    const options = provider === "WebGPU" ? {
+      executionProviders: ["webgpu"] as const,
+      graphOptimizationLevel: "all" as const,
+    } : {
       executionProviders: ["wasm"] as const,
       executionMode: "sequential" as const,
       graphOptimizationLevel: "all" as const,
@@ -184,10 +197,12 @@ async function createComponents(status?: TtsStatus, mobile = false): Promise<Com
     };
     let voiceSession: Session | undefined;
     try {
-      status?.("Preparing distilled voice model with WASM");
+      if (provider === "WebGPU") (await gpuPromise!).assertUsable();
+      status?.(`Preparing distilled voice model with ${provider}`);
       voiceSession = await ort.InferenceSession.create(voice, options);
       const session = await ort.InferenceSession.create(model, options);
-      return { ort, session, voiceSession, provider: "WASM" };
+      if (provider === "WebGPU") (await gpuPromise!).assertUsable();
+      return { ort, session, voiceSession, provider };
     } catch (error) {
       await voiceSession?.release().catch(() => undefined);
       throw error;
@@ -253,6 +268,7 @@ export async function synthesizeKokoroWeb(
     let voiceResult: Awaited<ReturnType<Session["run"]>> | undefined;
     let result: Awaited<ReturnType<typeof session.run>> | undefined;
     try {
+      if (provider === "WebGPU") (await gpuPromise!).assertUsable();
       if (voiceSession) {
         const index = new ort.Tensor("int64", BigInt64Array.of(BigInt(padded.length - 1)), [1]);
         try {
@@ -264,11 +280,10 @@ export async function synthesizeKokoroWeb(
       } else {
         const offset = (chunk.tokens.length - 1) * 256;
         style = new ort.Tensor("float32", voiceData!.subarray(offset, offset + 256), [1, 256]);
-        (await gpuPromise!).assertUsable();
       }
       result = await session.run({ input_ids: inputIds, style, speed });
       const waveform = trimWaveform(await result[session.outputNames[0]].getData() as Float32Array);
-      if (!mobile) (await gpuPromise!).assertUsable();
+      if (provider === "WebGPU") (await gpuPromise!).assertUsable();
       waveforms.push(waveform); sampleCount += waveform.length;
     } finally {
       inputIds.dispose(); speed.dispose();

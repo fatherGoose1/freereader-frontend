@@ -9,8 +9,8 @@ self.onmessage = async (event: MessageEvent<KokoroWebRequest>) => {
   busy = true;
   try {
     if (event.data.kind === "probe") {
-      await prepareKokoroWebGPU(event.data.mobile);
-      send({ kind: "ready" });
+      const provider = await prepareKokoroWebGPU(event.data.mobile);
+      send({ kind: "ready", provider });
       return;
     }
     const result = await synthesizeKokoroWeb(event.data.text, event.data.voice, event.data.speechSpeed, event.data.isHeading,

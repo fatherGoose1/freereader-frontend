@@ -4,11 +4,11 @@ import { NarrationRouter } from "./narration";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 
 const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, generationStartedAt: 1_000, provider: "WebGPU" };
-function setup(mobile: boolean, probeError?: Error, inferenceError?: Error) {
+function setup(mobile: boolean, probeError?: Error, inferenceError?: Error, provider: "WebGPU" | "WASM" = "WebGPU") {
   const calls: string[] = [];
   const router = new NarrationRouter(mobile, {
     kokoro: {
-      async probe() { calls.push("probe"); if (probeError) throw probeError; },
+      async probe() { calls.push("probe"); if (probeError) throw probeError; return provider; },
       async synthesize(...args) { calls.push(`kokoro:${args[5]}`); if (inferenceError) throw inferenceError; return audio; },
       stop() { calls.push("dispose-kokoro"); },
     },
@@ -24,11 +24,12 @@ for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: usable runtime selects ${mobile ? "Kokoro 7M" : "Kokoro FP32"}`, async () => {
     const { calls, speak } = setup(mobile);
     const result = await speak();
-    assert.equal(result.route.model, mobile ? "kokoro-7m-fp32-wasm-v3" : "kokoro-fp32-webgpu-v2");
+    assert.equal(result.route.model, mobile ? "kokoro-7m-fp32-webgpu-v4" : "kokoro-fp32-webgpu-v2");
+    assert.equal(result.route.provider, "WebGPU");
     assert.deepEqual(calls, ["probe", `kokoro:${mobile}`]);
   });
 
-  test(`${mobile ? "mobile" : "desktop"}: unavailable GPU uses Supertonic; route stays selected`, async () => {
+  test(`${mobile ? "mobile" : "desktop"}: unavailable Kokoro runtime uses Supertonic; route stays selected`, async () => {
     const { calls, speak } = setup(mobile, new Error("requestDevice rejected"));
     const result = await speak();
     assert.equal(result.route.model, mobile ? "supertonic-int8-wasm-v2" : "supertonic-fp32-wasm-v2");
@@ -46,6 +47,14 @@ for (const mobile of [false, true]) {
     assert.equal(calls.filter((call) => call.startsWith("kokoro:")).length, 1);
   });
 }
+
+test("mobile: unavailable WebGPU keeps the distilled Kokoro model on WASM", async () => {
+  const { calls, speak } = setup(true, undefined, undefined, "WASM");
+  const result = await speak();
+  assert.equal(result.route.model, "kokoro-7m-fp32-wasm-v4");
+  assert.equal(result.route.provider, "WASM");
+  assert.deepEqual(calls, ["probe", "kokoro:true"]);
+});
 
 test("language switches release the previous large model worker", async () => {
   const { router, calls, speak } = setup(false);
@@ -75,7 +84,7 @@ test("a seek drops stale queued synthesis while retaining an in-flight result an
   let current = 0;
   const router = new NarrationRouter(false, {
     kokoro: {
-      async probe() { calls.push("probe"); },
+      async probe() { calls.push("probe"); return "WebGPU" as const; },
       async synthesize(text) {
         calls.push(text);
         if (text === "first") { started.resolve(); return first.promise; }
@@ -104,7 +113,7 @@ test("a seek during the capability probe prevents obsolete inference", async () 
   let needed = true;
   const router = new NarrationRouter(false, {
     kokoro: {
-      async probe() { started.resolve(); await probe.promise; },
+      async probe() { started.resolve(); await probe.promise; return "WebGPU" as const; },
       async synthesize() { throw new Error("Obsolete inference ran"); },
       stop() {},
     },

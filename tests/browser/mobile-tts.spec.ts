@@ -27,7 +27,7 @@ test("plays the first chunk before look-ahead and measures synthesis-to-playback
       postMessage(request: { kind?: string }) {
         if (request.kind === "probe") {
           // Cold initialization must not be counted as audio generation.
-          setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready" } })), 1_000);
+          setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready", provider: "WebGPU" } })), 1_000);
           return;
         }
         state.generated += 1;
@@ -200,9 +200,8 @@ test("synthesizes English with device-appropriate Kokoro or Supertonic and reuse
   expect(models.some((url) => url.endsWith(mobile ? "/onnx/model.onnx" : "/onnx/model_quantized.onnx"))).toBe(false);
   if (mobile) expect(models.some((url) => url.includes("Shadow0482/Kokoro-7M-ONNX"))).toBe(true);
   if (models.some((url) => url.includes("Kokoro"))) {
-    expect(runtime).toContainEqual(expect.stringContaining(mobile
-      ? "/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.wasm"
-      : "ort-wasm-simd-threaded.jsep.wasm"));
+    expect(runtime.some((url) => url.includes("ort-wasm-simd-threaded.jsep.wasm")
+      || mobile && url.includes("/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.wasm"))).toBe(true);
   } else {
     expect(models.filter((url) => url.includes(mobile ? "soniqo/Supertonic-3-ONNX-INT8" : "Supertone/supertonic-3"))).toHaveLength(4);
     expect(runtime).toContainEqual(expect.stringContaining("/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.wasm"));

@@ -41,7 +41,7 @@ async function setup(page: Page, held: number[] = [], delayFirstPlay = false) {
       terminate() {}
       postMessage(request: { kind?: string; text: string }) {
         if (request.kind === "probe") {
-          setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready" } })), 0);
+          setTimeout(() => this.onmessage?.(new MessageEvent("message", { data: { kind: "ready", provider: "WebGPU" } })), 0);
           return;
         }
         const index = Number(request.text.match(/Section (\d+)/)![1]);

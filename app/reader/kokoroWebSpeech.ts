@@ -1,12 +1,13 @@
 import type { TtsStatus } from "./tts";
 import type { KokoroVoice } from "./voices";
 import { SpeechCancelledError } from "./ttsDiagnostics";
+import type { KokoroProvider } from "./kokoroWebInference";
 
 export type KokoroWebRequest = { kind: "probe"; mobile: boolean }
   | { kind: "synthesize"; text: string; voice: KokoroVoice; speechSpeed: number; isHeading: boolean; mobile: boolean };
 export type KokoroWebResponse =
   | { kind: "status"; message: string; progress?: number }
-  | { kind: "ready" }
+  | { kind: "ready"; provider: KokoroProvider }
   | { kind: "result"; audio: ArrayBuffer; duration: number; provider: string; generationSeconds: number; generationStartedAt: number }
   | { kind: "error"; message: string };
 
@@ -26,7 +27,9 @@ export class KokoroWebSpeechClient {
   }
 
   async probe(mobile: boolean) {
-    await this.request({ kind: "probe", mobile });
+    const reply = await this.request({ kind: "probe", mobile });
+    if (reply.kind !== "ready") throw new Error("Missing Kokoro provider result");
+    return reply.provider;
   }
 
   async synthesize(text: string, voice: KokoroVoice, speechSpeed: number, isHeading = false, status?: TtsStatus, mobile = false) {
