@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     ?? "https://koko-backend-production-c887.up.railway.app";
   const token = process.env.FREEREADER_TTS_API_TOKEN ?? process.env.PARRYT_API_TOKEN;
   if (!token) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
+  const upstreamContext = (request.headers.get("x-freereader-context") ?? "").slice(0, 2048);
 
   let response: Response;
   const controller = new AbortController();
@@ -21,7 +22,11 @@ export async function POST(request: Request) {
   try {
     response = await fetch(`${backend.replace(/\/$/, "")}/api/v1/freereader/speech`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(upstreamContext ? { "X-FreeReader-Context": upstreamContext } : {}),
+      },
       body: JSON.stringify({ text: body.text, speed: body.speed }),
       signal: controller.signal,
       cache: "no-store",

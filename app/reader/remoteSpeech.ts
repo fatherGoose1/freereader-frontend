@@ -1,5 +1,6 @@
 import type { TtsStatus } from "./tts";
 import { normalizeForSpeech } from "./speechText";
+import { telemetryContext } from "./telemetry";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
 
@@ -20,7 +21,10 @@ export class RemoteSpeechClient {
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-FreeReader-Context": JSON.stringify(telemetryContext()),
+        },
         body: JSON.stringify({ text: normalizeForSpeech(text, isHeading), speed: speechSpeed }),
         signal: controller.signal,
       });

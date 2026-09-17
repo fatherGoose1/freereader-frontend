@@ -144,6 +144,22 @@ export function flushTelemetry() {
   void flush();
 }
 
+// The backend records server-side audio events in the same table, so it needs the
+// same anonymous installation/session identity the client already uses.
+export function telemetryContext() {
+  const context = deviceContext();
+  return {
+    installation_id: persistentId(),
+    session_id: sessionIdentifier(),
+    platform_class: context.platformClass,
+    os_version: osVersion(),
+    app_version: APP_VERSION,
+    app_build: APP_BUILD,
+    device_model: "Web Browser",
+    hardware_model: context.hardware,
+  };
+}
+
 async function flush() {
   let events = queue();
   while (events.length) {
