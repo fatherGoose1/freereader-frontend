@@ -50,7 +50,7 @@ export class NarrationRouter {
         return false;
       });
       const provider = await this.gpu;
-      if (provider) return { model: this.mobile ? `kokoro-7m-fp32-${provider.toLowerCase()}-v4` : "kokoro-fp32-webgpu-v2",
+      if (provider) return { model: this.mobile ? `kokoro-7m-int8-${provider.toLowerCase()}-v4` : "kokoro-fp32-webgpu-v2",
         voice: selected, provider, mobile: this.mobile };
     }
     // Preserve the existing 31-language support. Map an English Kokoro voice to

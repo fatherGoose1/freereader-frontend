@@ -24,7 +24,7 @@ for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: usable runtime selects ${mobile ? "Kokoro 7M" : "Kokoro FP32"}`, async () => {
     const { calls, speak } = setup(mobile);
     const result = await speak();
-    assert.equal(result.route.model, mobile ? "kokoro-7m-fp32-webgpu-v4" : "kokoro-fp32-webgpu-v2");
+    assert.equal(result.route.model, mobile ? "kokoro-7m-int8-webgpu-v4" : "kokoro-fp32-webgpu-v2");
     assert.equal(result.route.provider, "WebGPU");
     assert.deepEqual(calls, ["probe", `kokoro:${mobile}`]);
   });
@@ -51,7 +51,7 @@ for (const mobile of [false, true]) {
 test("mobile: unavailable WebGPU keeps the distilled Kokoro model on WASM", async () => {
   const { calls, speak } = setup(true, undefined, undefined, "WASM");
   const result = await speak();
-  assert.equal(result.route.model, "kokoro-7m-fp32-wasm-v4");
+  assert.equal(result.route.model, "kokoro-7m-int8-wasm-v4");
   assert.equal(result.route.provider, "WASM");
   assert.deepEqual(calls, ["probe", "kokoro:true"]);
 });

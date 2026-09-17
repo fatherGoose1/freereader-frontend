@@ -54,7 +54,7 @@ npm run build
 | Device | Primary English engine | Fallback |
 | --- | --- | --- |
 | Desktop | Full Kokoro FP32, 325,532,232 bytes | Full Supertonic 3 FP32, ~398 MB, WASM |
-| Mobile | Kokoro-7M-Distill FP32 plus `af_msa`, 30,738,420 bytes, WebGPU then WASM | Supertonic 3 INT8, 102,090,195 bytes, WASM |
+| Mobile | Kokoro-7M-Distill INT8 plus `af_msa`, 26,981,312 bytes, WebGPU then WASM | Supertonic 3 INT8, 102,090,195 bytes, WASM |
 
 Kokoro remains the English engine; the other supported languages use Supertonic. Desktop uses the full multi-voice Kokoro model. Mobile uses the single-voice Kokoro-7M-Distill with the required `af_msa` style pack, regardless of the selected Kokoro voice. `narration.ts` owns routing and serializes generation across both workers. A Kokoro failure releases its sessions/device and terminates the worker before Supertonic loads, with no reload or intermediate error shown. English fallback maps female Kokoro voices to F1 and male voices to M3. The failed route stays disabled for the page lifetime. Audio cache keys include the actual engine, variant, voice, and settings, including when fallback happens during synthesis.
 
@@ -62,7 +62,7 @@ Before downloading any Kokoro assets, `webgpuProbe.ts` checks worker `navigator.
 
 ### iPhone/Safari findings
 
-Mobile always runs the Kokoro-7M-Distill FP32 export, using WebGPU when available and WASM otherwise. It never loads full Kokoro, and reduces the model download from 92 MB to about 31 MB including its voice.
+Mobile always runs the Kokoro-7M-Distill INT8 export, using WebGPU when available and WASM otherwise. It never loads full Kokoro, and reduces the model download from 92 MB to about 27 MB including its voice.
 
 ORT remains pinned to **1.29.0**. Desktop FreeReader uses `/all` for its established **JSEP WebGPU** backend, with matching JSEP glue/WASM. Browser testing also exposed single-use adapters: after the explicit device check, JSEP must obtain a **fresh adapter** to create its own device. Reusing the consumed adapter failed in Chromium and WebKit. Desktop FP32 Kokoro is not gated on `shader-f16`.
 

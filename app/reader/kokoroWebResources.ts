@@ -14,7 +14,7 @@ export type KokoroAsset = { url: string; path: string; size: number; label: stri
 
 export const KOKORO_MODELS = {
   full: { url: `${ROOT}/onnx/model.onnx`, path: `models/kokoro-web/${REVISION}/model.onnx`, size: 325_532_232, label: "Kokoro FP32 (326 MB)" },
-  mobile: { url: `${DISTILLED_ROOT}/kokoro_7m.onnx`, path: `models/kokoro-web/${DISTILLED_REVISION}/kokoro_7m.onnx`, size: 30_215_767, label: "Kokoro 7M Distill FP32 (30 MB)" },
+  mobile: { url: `${DISTILLED_ROOT}/kokoro_7m_int8.onnx`, path: `models/kokoro-web/${DISTILLED_REVISION}/kokoro_7m_int8.onnx`, size: 26_458_659, label: "Kokoro 7M Distill INT8 (26 MB)" },
 } as const satisfies Record<string, KokoroAsset>;
 
 export const KOKORO_DISTILLED_VOICE = {
