@@ -173,7 +173,7 @@ test("synthesizes non-English text with the correct Supertonic 3 WASM variant", 
   expect(onnx.filter((url) => url.includes(modelRoot))).toHaveLength(retained ? 4 : 8);
 });
 
-test("synthesizes English with WebGPU Kokoro or Supertonic WASM and reuses retained weights", async ({ page }, testInfo) => {
+test("synthesizes English with device-appropriate Kokoro or Supertonic and reuses retained weights", async ({ page }, testInfo) => {
   test.setTimeout(420_000);
   const mobile = !testInfo.project.name.startsWith("desktop");
   test.skip(process.env.RUN_MOBILE_TTS !== "1", "Set RUN_MOBILE_TTS=1 to download and test real voice models.");
@@ -198,9 +198,11 @@ test("synthesizes English with WebGPU Kokoro or Supertonic WASM and reuses retai
     return state.src && Number.isFinite(state.duration) && state.duration > 0 && state.played;
   }, { timeout: 360_000, intervals: [2_000] }).toBe(true);
   expect(models.some((url) => url.endsWith(mobile ? "/onnx/model.onnx" : "/onnx/model_quantized.onnx"))).toBe(false);
-  if (mobile) expect(models.every((url) => url.includes("soniqo/Supertonic-3-ONNX-INT8"))).toBe(true);
+  if (mobile) expect(models.some((url) => url.includes("Shadow0482/Kokoro-7M-ONNX"))).toBe(true);
   if (models.some((url) => url.includes("Kokoro"))) {
-    expect(runtime).toContainEqual(expect.stringContaining("ort-wasm-simd-threaded.jsep.wasm"));
+    expect(runtime).toContainEqual(expect.stringContaining(mobile
+      ? "/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.wasm"
+      : "ort-wasm-simd-threaded.jsep.wasm"));
   } else {
     expect(models.filter((url) => url.includes(mobile ? "soniqo/Supertonic-3-ONNX-INT8" : "Supertone/supertonic-3"))).toHaveLength(4);
     expect(runtime).toContainEqual(expect.stringContaining("/onnxruntime-web/1.29.0/ort-wasm-simd-threaded.wasm"));
@@ -272,18 +274,20 @@ for (const gpuDisabled of [true, false]) {
     await page.getByRole("button", { name: "Listen", exact: true }).click();
     await expect.poll(() => models.length, { timeout: 90_000 }).toBeGreaterThan(0);
     const mobile = !testInfo.project.name.startsWith("desktop");
-    if (mobile || gpuDisabled || !models[0].includes("Kokoro")) {
-      expect(models[0]).toContain(mobile ? "soniqo/Supertonic-3-ONNX-INT8" : "Supertone/supertonic-3");
+    if (mobile) {
+      expect(models[0]).toContain("Shadow0482/Kokoro-7M-ONNX");
+      await expect.poll(() => models.some((url) => url.includes("soniqo/Supertonic-3-ONNX-INT8")), { timeout: 30_000 }).toBe(true);
+    } else if (gpuDisabled || !models[0].includes("Kokoro")) {
+      expect(models[0]).toContain("Supertone/supertonic-3");
       expect(requests.some((url) => url.includes("Kokoro"))).toBe(false);
-      if (mobile) expect(models.every((url) => url.includes("soniqo/Supertonic-3-ONNX-INT8"))).toBe(true);
     } else {
       // This branch executes the real tiny ONNX GPU probe, never a mocked ORT.
-      expect(models[0]).toContain(mobile ? "model_quantized.onnx" : "/onnx/model.onnx");
+      expect(models[0]).toContain("/onnx/model.onnx");
       const runtimeIndex = requests.findIndex((url) => url.includes("ort-wasm-simd-threaded.jsep.wasm"));
       expect(runtimeIndex).toBeGreaterThanOrEqual(0);
       expect(runtimeIndex).toBeLessThan(requests.indexOf(models[0]));
       // Aborting Kokoro initialization must transparently begin the correct fallback.
-      await expect.poll(() => models.some((url) => url.includes(mobile ? "soniqo/Supertonic-3-ONNX-INT8" : "Supertone/supertonic-3")), { timeout: 30_000 }).toBe(true);
+      await expect.poll(() => models.some((url) => url.includes("Supertone/supertonic-3")), { timeout: 30_000 }).toBe(true);
     }
   });
 }

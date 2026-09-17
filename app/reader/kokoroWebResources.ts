@@ -6,14 +6,23 @@ import type { KokoroVoice } from "./voices";
 
 const REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 const ROOT = `https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/${REVISION}`;
+const DISTILLED_REVISION = "231bfd7fac82aa916e8e5600d527c48a591ff193";
+const DISTILLED_ROOT = `https://huggingface.co/Shadow0482/Kokoro-7M-ONNX/resolve/${DISTILLED_REVISION}`;
 const CACHE_NAME = "kokoro-web-resources-v1";
 
 export type KokoroAsset = { url: string; path: string; size: number; label: string };
 
 export const KOKORO_MODELS = {
   full: { url: `${ROOT}/onnx/model.onnx`, path: `models/kokoro-web/${REVISION}/model.onnx`, size: 325_532_232, label: "Kokoro FP32 (326 MB)" },
-  mobile: { url: `${ROOT}/onnx/model_quantized.onnx`, path: `models/kokoro-web/${REVISION}/model_quantized.onnx`, size: 92_361_116, label: "Kokoro quantized (92 MB)" },
+  mobile: { url: `${DISTILLED_ROOT}/kokoro_7m.onnx`, path: `models/kokoro-web/${DISTILLED_REVISION}/kokoro_7m.onnx`, size: 30_215_767, label: "Kokoro 7M Distill FP32 (30 MB)" },
 } as const satisfies Record<string, KokoroAsset>;
+
+export const KOKORO_DISTILLED_VOICE = {
+  url: `${DISTILLED_ROOT}/af_msa.onnx`,
+  path: `models/kokoro-web/${DISTILLED_REVISION}/af_msa.onnx`,
+  size: 522_653,
+  label: "af_msa distilled voice",
+} as const satisfies KokoroAsset;
 
 export function kokoroVoiceAsset(voice: KokoroVoice): KokoroAsset {
   return {

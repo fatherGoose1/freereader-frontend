@@ -42,14 +42,14 @@ export class NarrationRouter {
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
     const selected = voiceForLanguage(voice, language);
-    // Temporary mobile override: always use the existing Supertonic 3 INT8 WASM path below.
-    if (!this.mobile && speechEngine(language) === "kokoro" && !this.fallbackReason) {
+    if (speechEngine(language) === "kokoro" && !this.fallbackReason) {
       this.gpu ??= this.clients.kokoro.probe(this.mobile).then(() => true).catch((error) => {
         if (error instanceof SpeechCancelledError) throw error;
         this.fallback(error);
         return false;
       });
-      if (await this.gpu) return { model: this.mobile ? "kokoro-q8-webgpu-v2" : "kokoro-fp32-webgpu-v2", voice: selected, provider: "WebGPU", mobile: this.mobile };
+      if (await this.gpu) return { model: this.mobile ? "kokoro-7m-fp32-wasm-v3" : "kokoro-fp32-webgpu-v2",
+        voice: selected, provider: this.mobile ? "WASM" : "WebGPU", mobile: this.mobile };
     }
     // Preserve the existing 31-language support. Map an English Kokoro voice to
     // a Supertonic style of the same gender when its GPU route cannot be used.
@@ -70,7 +70,7 @@ export class NarrationRouter {
       let route = await this.route(voice, language);
       checkRequest();
       let result: SpeechResult | undefined;
-      if (route.provider === "WebGPU" && isKokoroVoice(route.voice)) {
+      if (route.model.startsWith("kokoro-") && isKokoroVoice(route.voice)) {
         if (this.active === "supertonic") this.clients.supertonic.stop();
         this.active = "kokoro";
         try {

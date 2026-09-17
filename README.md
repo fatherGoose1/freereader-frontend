@@ -11,7 +11,7 @@ The existing marketing site remains at `/`; the local-first web reader is at `/r
 - Markdown: a local parser mirroring the iOS app's readable-markdown rules
 - Metadata, extracted blocks, and reading position: IndexedDB
 - Supertonic models: optional OPFS cache; generated WAV chunks: OPFS with byte-based IndexedDB fallback
-- English speech: GPU/ORT capability probe, then full Kokoro on desktop WebGPU or quantized Kokoro on mobile WebGPU; Supertonic 3 WASM if the probe or Kokoro fails
+- English speech: full Kokoro on desktop WebGPU or Kokoro-7M-Distill on mobile WASM; Supertonic 3 WASM if initialization or inference fails
 - Supertonic speech: full FP32 on desktop, INT8 on mobile, both in a dedicated SIMD WASM worker; also used for the existing non-English languages
 - Playback: play the first passage, then generate ahead while playback continues (30-second target, capped at four passages)
 - Offline app shell: service worker and web app manifest
@@ -51,22 +51,22 @@ npm run build
 
 ## Browser speech routing
 
-| Device | Usable WebGPU | GPU unavailable or unusable |
+| Device | Primary English engine | Fallback |
 | --- | --- | --- |
 | Desktop | Full Kokoro FP32, 325,532,232 bytes | Full Supertonic 3 FP32, ~398 MB, WASM |
-| Mobile | Existing Kokoro quantized export, 92,361,116 bytes | Supertonic 3 INT8, 102,090,195 bytes, WASM |
+| Mobile | Kokoro-7M-Distill FP32 plus `af_msa`, 30,738,420 bytes, WASM | Supertonic 3 INT8, 102,090,195 bytes, WASM |
 
-Kokoro remains the English engine; the other supported languages use Supertonic. `narration.ts` owns routing and serializes generation across both workers. A Kokoro failure releases its sessions/device and terminates the worker before Supertonic loads, with no reload or intermediate error shown. English fallback maps female Kokoro voices to F1 and male voices to M3. The failed GPU route stays disabled for the page lifetime. Audio cache keys include the actual engine, variant, voice, and settings, including when fallback happens during synthesis.
+Kokoro remains the English engine; the other supported languages use Supertonic. Desktop uses the full multi-voice Kokoro model. Mobile uses the single-voice Kokoro-7M-Distill with the required `af_msa` style pack, regardless of the selected Kokoro voice. `narration.ts` owns routing and serializes generation across both workers. A Kokoro failure releases its sessions/device and terminates the worker before Supertonic loads, with no reload or intermediate error shown. English fallback maps female Kokoro voices to F1 and male voices to M3. The failed route stays disabled for the page lifetime. Audio cache keys include the actual engine, variant, voice, and settings, including when fallback happens during synthesis.
 
-Before downloading **any** Kokoro assets, `webgpuProbe.ts` checks worker `navigator.gpu`, requests an adapter and device, and runs a 101-byte ONNX MatMul with CPU fallback disabled. It verifies GPU-resident output and the computed result. This tests GPU execution and readback, not just API presence. It does not guarantee that every Kokoro operator or future allocation will succeed; initialization/inference errors still trigger Supertonic.
+Before downloading desktop Kokoro assets, `webgpuProbe.ts` checks worker `navigator.gpu`, requests an adapter and device, and runs a 101-byte ONNX MatMul with CPU fallback disabled. It verifies GPU-resident output and the computed result. Mobile instead configures the SIMD WASM runtime before downloading Kokoro-7M-Distill. Initialization/inference errors still trigger Supertonic.
 
 ### iPhone/Safari findings
 
-The previous mobile branch unconditionally imported `onnxruntime-web/wasm` and selected Kokoro WASM. It never tested WebGPU, so an iPhone 14 Pro on iOS 26 could not take the GPU route even if supported. This implementation issue explains the previous behavior; it was not evidence that the device lacked WebGPU or required a different model precision.
+Mobile intentionally runs the Kokoro-7M-Distill FP32 export through WASM, avoiding a WebGPU requirement and reducing the model download from 92 MB to about 31 MB including its voice.
 
-ORT remains pinned to **1.29.0**. Its `/webgpu` export now uses native WebGPU/Asyncify; FreeReader uses `/all` for its established **JSEP WebGPU** backend, with matching JSEP glue/WASM. Browser testing also exposed single-use adapters: after the explicit device check, JSEP must obtain a **fresh adapter** to create its own device. Reusing the consumed adapter failed in Chromium and WebKit. Both full FP32 Kokoro and the existing mobile quantized model retain their original precision; neither is gated on `shader-f16`.
+ORT remains pinned to **1.29.0**. Desktop FreeReader uses `/all` for its established **JSEP WebGPU** backend, with matching JSEP glue/WASM. Browser testing also exposed single-use adapters: after the explicit device check, JSEP must obtain a **fresh adapter** to create its own device. Reusing the consumed adapter failed in Chromium and WebKit. Desktop FP32 Kokoro is not gated on `shader-f16`.
 
-Real Kokoro audio and the tiny GPU probe have been exercised in desktop-hosted, headed Chromium and WebKit. Physical iPhone 14 Pro/iOS 26 validation is still needed for device-specific performance, memory limits, and background suspension.
+Real distilled Kokoro audio has been exercised in mobile Chromium and WebKit automation, and the full model plus tiny GPU probe in desktop-hosted Chromium and WebKit. Physical iPhone validation is still needed for device-specific performance, memory limits, and background suspension.
 
 ### WASM and buffering
 

@@ -21,11 +21,11 @@ function setup(mobile: boolean, probeError?: Error, inferenceError?: Error) {
 }
 
 for (const mobile of [false, true]) {
-  test(`${mobile ? "mobile" : "desktop"}: usable GPU selects ${mobile ? "Supertonic INT8" : "Kokoro FP32"}`, async () => {
+  test(`${mobile ? "mobile" : "desktop"}: usable runtime selects ${mobile ? "Kokoro 7M" : "Kokoro FP32"}`, async () => {
     const { calls, speak } = setup(mobile);
     const result = await speak();
-    assert.equal(result.route.model, mobile ? "supertonic-int8-wasm-v2" : "kokoro-fp32-webgpu-v2");
-    assert.deepEqual(calls, mobile ? ["supertonic:true:F1:en"] : ["probe", "kokoro:false"]);
+    assert.equal(result.route.model, mobile ? "kokoro-7m-fp32-wasm-v3" : "kokoro-fp32-webgpu-v2");
+    assert.deepEqual(calls, ["probe", `kokoro:${mobile}`]);
   });
 
   test(`${mobile ? "mobile" : "desktop"}: unavailable GPU uses Supertonic; route stays selected`, async () => {
@@ -34,20 +34,16 @@ for (const mobile of [false, true]) {
     assert.equal(result.route.model, mobile ? "supertonic-int8-wasm-v2" : "supertonic-fp32-wasm-v2");
     assert.equal(result.provider, "WASM");
     await speak();
-    assert.deepEqual(calls, [...(mobile ? [] : ["probe", "dispose-kokoro"]), `supertonic:${mobile}:F1:en`, `supertonic:${mobile}:F1:en`]);
+    assert.deepEqual(calls, ["probe", "dispose-kokoro", `supertonic:${mobile}:F1:en`, `supertonic:${mobile}:F1:en`]);
   });
 
-  test(mobile ? "mobile: bypasses Kokoro even if it would fail" : "desktop: Kokoro failure disposes before transparent fallback", async () => {
+  test(`${mobile ? "mobile" : "desktop"}: Kokoro failure disposes before transparent fallback`, async () => {
     const { calls, speak } = setup(mobile, undefined, new Error("Unsupported operator / device lost"));
     assert.equal((await speak()).provider, "WASM");
     await speak();
-    if (mobile) {
-      assert.deepEqual(calls, ["supertonic:true:F1:en", "supertonic:true:F1:en"]);
-    } else {
-      assert.equal(calls.filter((call) => call === "probe").length, 1);
-      assert.ok(calls.indexOf("dispose-kokoro") < calls.indexOf(`supertonic:${mobile}:F1:en`));
-      assert.equal(calls.filter((call) => call.startsWith("kokoro:")).length, 1);
-    }
+    assert.equal(calls.filter((call) => call === "probe").length, 1);
+    assert.ok(calls.indexOf("dispose-kokoro") < calls.indexOf(`supertonic:${mobile}:F1:en`));
+    assert.equal(calls.filter((call) => call.startsWith("kokoro:")).length, 1);
   });
 }
 

@@ -1,5 +1,6 @@
 import type { TtsStatus } from "./tts";
-import { KOKORO_MODELS, kokoroVoiceAsset, loadKokoroAsset } from "./kokoroWebResources";
+import { KOKORO_DISTILLED_VOICE, KOKORO_MODELS, kokoroVoiceAsset, loadKokoroAsset } from "./kokoroWebResources";
+import { configureMobileWasm } from "./mobileWasm";
 import { normalizeForSpeech } from "./speechText";
 import type { KokoroVoice } from "./voices";
 import { probeWebGPU } from "./webgpuProbe";
@@ -11,16 +12,26 @@ const ESPEAK_MODULE = "/kokoro-web/espeak-ng.js";
 const ESPEAK_WASM = "/kokoro-web/espeak-ng.wasm";
 type Ort = typeof import("onnxruntime-web/all");
 type Session = Awaited<ReturnType<Ort["InferenceSession"]["create"]>>;
-type Provider = "WebGPU";
-type Components = { ort: Ort; session: Session; provider: Provider };
+type Provider = "WebGPU" | "WASM";
+type Components = { ort: Ort; session: Session; voiceSession?: Session; provider: Provider };
 type Chunk = { tokens: number[] } | { silence: number };
 type Phonemizer = (text: string, language: "en-us" | "en-gb") => Promise<string>;
 
 let componentsPromise: Promise<Components> | undefined;
 let gpuPromise: ReturnType<typeof probeWebGPU> | undefined;
+let mobileOrtPromise: Promise<Ort> | undefined;
 const voices = new Map<KokoroVoice, Promise<Float32Array>>();
 
 export async function prepareKokoroWebGPU(mobile: boolean): Promise<void> {
+  if (mobile) {
+    mobileOrtPromise ??= import("onnxruntime-web/wasm").then((module) => {
+      const ort = module as unknown as Ort;
+      configureMobileWasm(ort, globalThis.location.href);
+      return ort;
+    });
+    await mobileOrtPromise;
+    return;
+  }
   gpuPromise ??= probeWebGPU(mobile);
   (await gpuPromise).assertUsable();
 }
@@ -29,10 +40,12 @@ export async function disposeKokoroWeb(): Promise<void> {
   const components = await componentsPromise?.catch(() => undefined);
   const gpu = await gpuPromise?.catch(() => undefined);
   await components?.session.release().catch(() => undefined);
+  await components?.voiceSession?.release().catch(() => undefined);
   await gpu?.session.release().catch(() => undefined);
   gpu?.device.destroy();
   componentsPromise = undefined;
   gpuPromise = undefined;
+  mobileOrtPromise = undefined;
   voices.clear();
 }
 
@@ -153,8 +166,35 @@ function encodeWav(chunks: Float32Array[], sampleCount: number): ArrayBuffer {
 
 async function createComponents(status?: TtsStatus, mobile = false): Promise<Components> {
   await prepareKokoroWebGPU(mobile);
+  if (mobile) {
+    const ort = await mobileOrtPromise!;
+    const [model, voice] = await Promise.all([
+      loadKokoroAsset(KOKORO_MODELS.mobile, status, true),
+      loadKokoroAsset(KOKORO_DISTILLED_VOICE, status, true),
+    ]);
+    ttsLog("model", { model: "Kokoro 7M Distill", variant: KOKORO_MODELS.mobile.label,
+      bytes: KOKORO_MODELS.mobile.size + KOKORO_DISTILLED_VOICE.size, provider: "WASM", mobile: true });
+    const options = {
+      executionProviders: ["wasm"] as const,
+      executionMode: "sequential" as const,
+      graphOptimizationLevel: "all" as const,
+      enableCpuMemArena: false,
+      enableMemPattern: false,
+      extra: { session: { disable_prepacking: "1" } },
+    };
+    let voiceSession: Session | undefined;
+    try {
+      status?.("Preparing distilled voice model with WASM");
+      voiceSession = await ort.InferenceSession.create(voice, options);
+      const session = await ort.InferenceSession.create(model, options);
+      return { ort, session, voiceSession, provider: "WASM" };
+    } catch (error) {
+      await voiceSession?.release().catch(() => undefined);
+      throw error;
+    }
+  }
   const { ort, assertUsable } = await gpuPromise!;
-  const asset = mobile ? KOKORO_MODELS.mobile : KOKORO_MODELS.full;
+  const asset = KOKORO_MODELS.full;
   ttsLog("model", { model: "Kokoro", variant: asset.label, bytes: asset.size, provider: "WebGPU", mobile });
   const model = await loadKokoroAsset(asset, status, mobile);
   assertUsable();
@@ -192,8 +232,9 @@ export async function synthesizeKokoroWeb(
   if (!Number.isFinite(speechSpeed) || speechSpeed < 0.1 || speechSpeed > 5) throw new Error("Speech speed must be between 0.1 and 5.");
   // No Kokoro assets (including the voice) are fetched before the GPU/ORT probe.
   await prepareKokoroWebGPU(mobile);
-  const [{ ort, session, provider }, voiceData, chunks] = await Promise.all([
-    getComponents(status, mobile), getVoice(voice, status, mobile), preprocessKokoroText(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
+  const [{ ort, session, voiceSession, provider }, voiceData, chunks] = await Promise.all([
+    getComponents(status, mobile), mobile ? undefined : getVoice(voice, status),
+    preprocessKokoroText(normalizeForSpeech(text, isHeading), voice.startsWith("b") ? "en-gb" : "en-us"),
   ]);
   status?.("Generating speech");
   const started = performance.now();
@@ -206,22 +247,33 @@ export async function synthesizeKokoroWeb(
     }
     if (!chunk.tokens.length) continue;
     const padded = [0, ...chunk.tokens, 0];
-    const offset = (chunk.tokens.length - 1) * 256;
-    const styleData = voiceData.subarray(offset, offset + 256);
-    const feeds = {
-      input_ids: new ort.Tensor("int64", BigInt64Array.from(padded, BigInt), [1, padded.length]),
-      style: new ort.Tensor("float32", styleData, [1, 256]),
-      speed: new ort.Tensor("float32", [speechSpeed], [1]),
-    };
+    const inputIds = new ort.Tensor("int64", BigInt64Array.from(padded, BigInt), [1, padded.length]);
+    const speed = new ort.Tensor("float32", [speechSpeed], [1]);
+    let style: InstanceType<Ort["Tensor"]> | undefined;
+    let voiceResult: Awaited<ReturnType<Session["run"]>> | undefined;
     let result: Awaited<ReturnType<typeof session.run>> | undefined;
     try {
-      (await gpuPromise!).assertUsable();
-      result = await session.run(feeds);
-      const waveform = trimWaveform(await result.waveform.getData() as Float32Array);
-      (await gpuPromise!).assertUsable();
+      if (voiceSession) {
+        const index = new ort.Tensor("int64", BigInt64Array.of(BigInt(padded.length - 1)), [1]);
+        try {
+          voiceResult = await voiceSession.run({ index });
+          style = voiceResult[voiceSession.outputNames[0]];
+        } finally {
+          index.dispose();
+        }
+      } else {
+        const offset = (chunk.tokens.length - 1) * 256;
+        style = new ort.Tensor("float32", voiceData!.subarray(offset, offset + 256), [1, 256]);
+        (await gpuPromise!).assertUsable();
+      }
+      result = await session.run({ input_ids: inputIds, style, speed });
+      const waveform = trimWaveform(await result[session.outputNames[0]].getData() as Float32Array);
+      if (!mobile) (await gpuPromise!).assertUsable();
       waveforms.push(waveform); sampleCount += waveform.length;
     } finally {
-      Object.values(feeds).forEach((tensor) => tensor.dispose());
+      inputIds.dispose(); speed.dispose();
+      if (voiceResult) Object.values(voiceResult).forEach((tensor) => tensor.dispose());
+      else style?.dispose();
       Object.values(result ?? {}).forEach((tensor) => tensor.dispose());
     }
   }
