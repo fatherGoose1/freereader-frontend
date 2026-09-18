@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { isLikelyEnglish } from "../reader/languageDetection";
 
 const DEFAULT_TEXT =
-  "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.\n\n- Frank Herbert, Dune";
+  "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.";
 const MAX_LENGTH = 800;
 
 type Status = { kind: "error" | "info"; message: string } | null;
