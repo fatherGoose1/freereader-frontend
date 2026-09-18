@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeForSpeech } from "./speechText.ts";
+import { normalizeForSpeech, normalizeForSupertonic } from "./speechText.ts";
+
+const polish = "Motyl chciał wybrać sobie piękną żonę, więc naturalnie zwrócił się do kwiatów.";
 
 test("matches the iOS capitalization and punctuation pipeline", () => {
   assert.equal(normalizeForSpeech("HELLO"), "Hello.");
@@ -40,4 +42,28 @@ test("expands abbreviated titles for natural pronunciation", () => {
   assert.equal(normalizeForSpeech("Dr. Patel and Prof. Williams spoke."), "Doctor Patel and Professor Williams spoke.");
   assert.equal(normalizeForSpeech("Capt. Lewis briefed Sen. Adams."), "Captain Lewis briefed Senator Adams.");
   assert.equal(normalizeForSpeech("El Dr. García habló.", false, "es"), "El Dr. García habló.");
+});
+
+test("preserves Unicode text and decomposes accents only for the local Supertonic tokenizer", () => {
+  assert.equal(normalizeForSpeech(polish, false, "pl"), polish);
+
+  const modelText = normalizeForSupertonic(polish, false, "pl");
+  assert.equal(modelText, polish.normalize("NFKD"));
+  assert.equal(modelText.normalize("NFC"), polish);
+  assert.match(modelText, /a\u0328/);
+  assert.match(modelText, /c\u0301/);
+  assert.match(modelText, /z\u0307/);
+});
+
+test("retains accented characters across supported languages", () => {
+  const samples = [
+    ["cs", "Příliš žluťoučký kůň úpěl ďábelské ódy."],
+    ["es", "El pingüino pidió información también."],
+    ["vi", "Tiếng Việt có đầy đủ dấu thanh."],
+  ] as const;
+
+  for (const [language, text] of samples) {
+    assert.equal(normalizeForSpeech(text, false, language), text);
+    assert.equal(normalizeForSupertonic(text, false, language).normalize("NFC"), text);
+  }
 });

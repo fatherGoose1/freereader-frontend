@@ -278,6 +278,13 @@ test("pasted HTML and Markdown retain their format and reject headings-only cont
   } finally { restoreDom(); }
 });
 
+test("pasted Polish text preserves every character and detects its language", () => {
+  const text = "Motyl chciał wybrać sobie piękną żonę, więc naturalnie zwrócił się do kwiatów.";
+  const parsed = parsePastedText(text, "Polish");
+  assert.equal(parsed.blocks[0].text, text);
+  assert.equal(parsed.language, "pl");
+});
+
 test("HTML extraction omits scripts and duplicate nested list/quote paragraphs", async () => {
   const restoreDom = installDom();
   try {

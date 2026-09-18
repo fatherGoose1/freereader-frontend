@@ -1,4 +1,4 @@
-export const TEXT_PIPELINE_REVISION = "text-9";
+export const TEXT_PIPELINE_REVISION = "text-10";
 
 const ROMAN_NUMERAL = /^(?=[MDCLXVI]+$)M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/i;
 
@@ -95,7 +95,7 @@ function replaceTitles(text: string): string {
 export function normalizeForSpeech(text: string, isHeading = false, language = "en"): string {
   const numeralsReplaced = replaceRomanNumerals(text, isHeading);
   let normalized = normalizeCapitalization(language === "en" ? replaceTitles(numeralsReplaced) : numeralsReplaced)
-    .normalize("NFKD").normalize("NFC")
+    .normalize("NFC")
     .replace(/[\u2600-\u27bf\u{1f300}-\u{1faff}]/gu, "")
     .replace(/\s*(?:-{2,}|[‒–—―]+)\s*/g, ", ")
     .replace(/\s+-\s+/g, ", ")
@@ -105,4 +105,10 @@ export function normalizeForSpeech(text: string, isHeading = false, language = "
     .trim();
   if (normalized && !/[.!?;:,)'"”。！？]$/.test(normalized)) normalized += ".";
   return normalized;
+}
+
+export function normalizeForSupertonic(text: string, isHeading = false, language = "en"): string {
+  // Supertonic's index contains base letters and combining marks rather than
+  // many precomposed accented characters, so it requires compatibility decomposition.
+  return normalizeForSpeech(text, isHeading, language).normalize("NFKD");
 }

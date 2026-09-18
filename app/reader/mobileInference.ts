@@ -1,6 +1,6 @@
 import { loadMobileModelAsset } from "./mobileModelCache";
 import { configureMobileWasm } from "./mobileWasm";
-import { normalizeForSpeech } from "./speechText";
+import { normalizeForSupertonic } from "./speechText";
 import type { SpeechLanguage } from "./speech";
 import { ttsLog } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
@@ -261,7 +261,7 @@ export async function synthesizeMobile(
   if (!Object.hasOwn(VOICE_SIZES, voice)) throw new Error(`Unknown Supertonic voice: ${voice}`);
   if (!Number.isSafeInteger(steps) || steps < 1 || steps > 64) throw new Error("Speech steps must be between 1 and 64.");
   if (!Number.isFinite(speechSpeed) || speechSpeed <= 0) throw new Error("Speech speed must be finite and positive.");
-  const normalized = normalizeForSpeech(text, isHeading, language);
+  const normalized = normalizeForSupertonic(text, isHeading, language);
   if (!normalized) throw new Error("Mobile speech input is empty after normalization.");
   const chunks = splitMobileText(normalized);
   componentsPromise ??= initialize(status).catch((error) => {

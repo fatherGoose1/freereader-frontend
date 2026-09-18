@@ -1,7 +1,7 @@
 import { getLocalFile, putLocalFile } from "./storage";
 import { loadModelSessions } from "./modelSessions";
 import { downloadModel } from "./modelDownload";
-import { normalizeForSpeech } from "./speechText";
+import { normalizeForSupertonic } from "./speechText";
 import type { SpeechLanguage } from "./speech";
 import { configureMobileWasm } from "./mobileWasm";
 import { ttsLog } from "./ttsDiagnostics";
@@ -151,7 +151,7 @@ async function loadStyle(voice: Voice, components: Components, status?: TtsStatu
 }
 
 function normalizeText(text: string, language: string, isHeading: boolean): string {
-  return `<${language}>${normalizeForSpeech(text, isHeading, language)}</${language}>`;
+  return `<${language}>${normalizeForSupertonic(text, isHeading, language)}</${language}>`;
 }
 
 function lengthMask(length: number): Float32Array {

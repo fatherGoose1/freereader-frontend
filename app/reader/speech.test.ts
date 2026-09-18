@@ -18,4 +18,5 @@ test("normalizes metadata language tags and detects imported prose", () => {
   assert.equal(detectSpeechLanguage("This is a long English passage written to provide enough natural language context for reliable automatic identification in the reader."), "en");
   assert.equal(detectSpeechLanguage("Dies ist ein langer deutscher Text, der genügend sprachlichen Kontext für eine zuverlässige automatische Erkennung im Lesegerät bereitstellt."), "de");
   assert.equal(detectSpeechLanguage("Hola. Esta es una prueba larga de la voz móvil en español para confirmar que el idioma se detecta correctamente."), "es");
+  assert.equal(detectSpeechLanguage("Motyl chciał wybrać sobie piękną żonę, więc naturalnie zwrócił się do kwiatów."), "pl");
 });
