@@ -1,5 +1,6 @@
 import CtaButton from "./components/CtaButton";
 import HeroDemo from "./components/HeroDemo";
+import { SPEECH_LANGUAGES } from "./languages";
 
 export default function Home() {
   return (
@@ -79,6 +80,23 @@ export default function Home() {
               <li>31 supported languages</li>
             </ul>
           </div>
+        </div>
+      </section>
+
+      <section className="section tint" aria-labelledby="languages-heading">
+        <div className="wrap">
+          <div className="center languages-heading">
+            <span className="eyebrow">Listen your way</span>
+            <h2 id="languages-heading">{SPEECH_LANGUAGES.length} supported languages.</h2>
+            <p className="lead">
+              Choose the narration language that matches what you are reading.
+            </p>
+          </div>
+          <ul className="language-list">
+            {SPEECH_LANGUAGES.map(([code, name]) => (
+              <li key={code}>{name}</li>
+            ))}
+          </ul>
         </div>
       </section>
     </main>

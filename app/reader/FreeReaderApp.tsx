@@ -1079,12 +1079,12 @@ export default function FreeReaderApp() {
         <div className={styles.actions}>
           <div className={styles.addMenuWrap} ref={addMenuRef}>
             <button
-              className={`${styles.primaryAction} ${styles.addMenuButton}`}
+              className={styles.primaryAction}
               aria-haspopup="menu"
               aria-expanded={addMenuOpen}
               title="Add reading to your library"
               onClick={() => setAddMenuOpen((open) => !open)}
-            >+ Add<span className={styles.addCaret} aria-hidden="true">{addMenuOpen ? "▴" : "▾"}</span></button>
+            >+ Add</button>
             {addMenuOpen && (
               <div className={styles.addMenu} role="menu" aria-label="Add reading">
                 <button role="menuitem" onClick={() => { setAddMenuOpen(false); fileInputRef.current?.click(); }}>
@@ -1139,7 +1139,6 @@ export default function FreeReaderApp() {
             event.target.value = "";
             if (file) void importDocument(file);
           }} /></label>
-          <div className={styles.privacyNote}><strong>Private by design</strong><span>Books, reading positions, and audio stay in this browser.</span></div>
         </aside>
         <section className={styles.shelf}>
           <div className={styles.shelfHeading}>

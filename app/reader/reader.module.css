@@ -144,20 +144,6 @@
 .librarySidebar label .sidebarIcon { background: var(--app-blue); }
 .librarySidebar button:nth-of-type(2) .sidebarIcon { background: var(--app-orange); }
 .librarySidebar button:nth-of-type(3) .sidebarIcon { background: var(--app-teal); }
-.privacyNote {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 20px 7px 6px;
-  padding: 12px;
-  color: var(--app-secondary);
-  background: rgba(25, 156, 168, .08);
-  border-radius: 10px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-.privacyNote strong { color: var(--app-teal); }
-
 .shelf { min-width: 0; }
 .shelfHeading {
   display: flex;
@@ -397,8 +383,6 @@
 .primaryAction .addSpinner { border-color: rgba(255, 255, 255, .4); border-top-color: #fff; }
 
 .addMenuWrap { position: relative; }
-.addMenuButton { display: inline-flex; align-items: center; gap: 6px; }
-.addCaret { font-size: 9px; opacity: .8; }
 .addMenu {
   position: absolute;
   top: calc(100% + 8px);
