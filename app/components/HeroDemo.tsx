@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { isLikelyEnglish } from "../reader/languageDetection";
 
 const DEFAULT_TEXT =
-  "I must not fear. Fear is the mind-killer. Fear is the little-death that brings total obliteration. I will face my fear. I will permit it to pass over me and through me. And when it has gone past I will turn the inner eye to see its path. Where the fear has gone there will be nothing. Only I will remain.\n\n― Frank Herbert, Dune";
+  "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.\n\n- Frank Herbert, Dune";
 const MAX_LENGTH = 800;
 
 type Status = { kind: "error" | "info"; message: string } | null;

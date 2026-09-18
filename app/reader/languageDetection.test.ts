@@ -12,6 +12,15 @@ test("accepts ordinary English prose", () => {
   assert.equal(isLikelyEnglish("This is a long English passage about reading books and listening to stories."), true);
 });
 
+test("accepts English quotes with an attribution", () => {
+  assert.equal(
+    isLikelyEnglish(
+      "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.\n\n- Frank Herbert, Dune",
+    ),
+    true,
+  );
+});
+
 test("rejects long Latin text in another language", () => {
   assert.equal(isLikelyEnglish("Hola amigo, cómo estás hoy? Espero que todo vaya muy bien."), false);
   assert.equal(isLikelyEnglish("Bonjour, comment allez-vous aujourd'hui mon cher ami?"), false);

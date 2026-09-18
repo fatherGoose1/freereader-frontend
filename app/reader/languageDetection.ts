@@ -16,7 +16,7 @@ export function detectSpeechLanguage(text: string): SpeechLanguage | undefined {
 }
 
 // Any character that is not Latin script (Cyrillic, Arabic, CJK, Greek, ...).
-const NON_LATIN_SCRIPT = /[^\p{Script=Latin}\p{N}\p{P}\p{Z}\p{S}\p{M}]/u;
+const NON_LATIN_SCRIPT = /[^\p{Script=Latin}\p{N}\p{P}\p{Z}\p{S}\p{M}\s]/u;
 // Accented Latin letters, which English words rarely use.
 const EXTENDED_LATIN = /[\u00c0-\u024f\u1e00-\u1eff]/;
 // Around this many letters, franc is reliable enough to distrust its answer.
