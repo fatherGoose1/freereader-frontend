@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { isLikelyEnglish } from "../reader/languageDetection";
 
 const DEFAULT_TEXT =
-  "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it,";
+  "I must not fear. Fear is the mind-killer. Fear is the little-death that brings total obliteration. I will face my fear. I will permit it to pass over me and through me. And when it has gone past I will turn the inner eye to see its path. Where the fear has gone there will be nothing. Only I will remain.\n\n― Frank Herbert, Dune";
 const MAX_LENGTH = 800;
 
 type Status = { kind: "error" | "info"; message: string } | null;
