@@ -3,26 +3,28 @@ import Link from "next/link";
 import { LegalPage } from "../components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Terms of Use and EULA",
+  title: "VoiceReader Terms of Use and EULA",
   description:
-    "Terms of Use and End User License Agreement for the FreeReader iOS app and website.",
+    "Terms of Use and End User License Agreement for the VoiceReader iOS app and its web version, FreeReader.",
   alternates: { canonical: "/terms" },
 };
 
 export default function Terms() {
   return (
     <LegalPage
-      title="Terms of Use and EULA"
-      updated="September 3, 2026"
-      intro="These terms govern your use of the FreeReader iPhone app, its locally generated audio, and the FreeReader website."
+      title="VoiceReader Terms of Use and EULA"
+      updated="September 18, 2026"
+      intro="These terms govern your use of the VoiceReader iPhone app, its locally generated audio, and the FreeReader website."
     >
       <aside className="legal-callout">
         <strong>Important notice about generated speech</strong>
         <p>
-          FreeReader uses text-to-speech technology to generate spoken audio.
+          VoiceReader and FreeReader use text-to-speech technology to generate
+          spoken audio.
           Generated speech may mispronounce words, misinterpret abbreviations,
           skip or repeat content, or render formatting incorrectly. Do not rely
-          on FreeReader for critical, medical, legal, or safety information.
+          on the App or Website for critical, medical, legal, or safety
+          information.
         </p>
       </aside>
 
@@ -30,26 +32,28 @@ export default function Terms() {
       <p>
         These Terms of Use and End User License Agreement (the &quot;Terms&quot;)
         are a binding agreement between you and Prism Labs LLC
-        (&quot;Prism Labs,&rdquo; &ldquo;FreeReader,&rdquo; &ldquo;we,&rdquo;
+        (&quot;Prism Labs,&rdquo; &ldquo;we,&rdquo;
         &ldquo;us,&rdquo; or &ldquo;our&rdquo;). They govern your use of the
-        FreeReader iOS application (the &quot;App&quot;), the FreeReader
-        website (the &quot;Website&quot;), and related services.
+        VoiceReader iOS application (the &quot;App&quot;) and related services.
+        VoiceReader is also available on the web under the name FreeReader (the
+        &quot;Website&quot;).
       </p>
       <p>
-        By downloading, installing, accessing, or using FreeReader, you agree to
-        these Terms. If you do not agree, do not use FreeReader. If you are
-        under the age of legal majority where you live, your parent or legal
-        guardian must review and agree to these Terms on your behalf.
+        By downloading, installing, accessing, or using the App or Website, you
+        agree to these Terms. If you do not agree, do not use the App or Website.
+        If you are under the age of legal majority where you live, your parent or
+        legal guardian must review and agree to these Terms on your behalf.
       </p>
 
-      <h2>2. What FreeReader provides</h2>
+      <h2>2. What VoiceReader and FreeReader provide</h2>
       <p>
-        FreeReader is a tool for turning supported documents into spoken audio.
-        Its document import, text extraction, speech generation, and playback
-        features are designed to operate locally on a compatible iPhone.
-        FreeReader is provided free of charge, does not require an account, and
-        is not a professional narration, translation, or accessibility service.
-        We do not guarantee any particular result, voice quality, or accuracy.
+        VoiceReader and FreeReader are tools for turning supported documents into
+        spoken audio. The App&apos;s document import, text extraction, speech
+        generation, and playback features are designed to operate locally on a
+        compatible iPhone. The App and Website are provided free of charge, do
+        not require an account, and are not professional narration, translation,
+        or accessibility services. We do not guarantee any particular result,
+        voice quality, or accuracy.
       </p>
 
       <h2>3. License to use the App</h2>
@@ -69,9 +73,9 @@ export default function Terms() {
 
       <h2>4. Generated speech</h2>
       <p>
-        FreeReader uses automated text-to-speech technology to generate spoken
-        audio from your documents. Generated speech may contain pronunciation
-        errors, awkward phrasing, incorrect pacing, omissions, or repetition,
+        VoiceReader and FreeReader use automated text-to-speech technology to
+        generate spoken audio from your documents. Generated speech may contain
+        pronunciation errors, awkward phrasing, incorrect pacing, omissions, or repetition,
         and may handle tables, footnotes, images, and unusual formatting poorly.
         The same text may produce different results across voices, languages,
         app versions, and iOS versions.
@@ -93,7 +97,10 @@ export default function Terms() {
       <h2>5. Acceptable use</h2>
       <p>You agree not to:</p>
       <ul>
-        <li>use FreeReader for unlawful, fraudulent, abusive, or harmful activity;</li>
+        <li>
+          use the App or Website for unlawful, fraudulent, abusive, or harmful
+          activity;
+        </li>
         <li>attempt to bypass security, usage limits, or device permissions;</li>
         <li>
           reverse engineer, decompile, or extract models or source code except
@@ -101,11 +108,11 @@ export default function Terms() {
         </li>
         <li>
           copy, modify, distribute, rent, sell, sublicense, or commercially
-          exploit FreeReader;
+          exploit the App or Website;
         </li>
         <li>
-          use FreeReader to infringe intellectual property, privacy, publicity,
-          or other rights; or
+          use the App or Website to infringe intellectual property, privacy,
+          publicity, or other rights; or
         </li>
         <li>
           misrepresent generated audio as professionally narrated, verified
@@ -117,10 +124,10 @@ export default function Terms() {
       <p>
         You are responsible for your device, its security, available storage,
         backups, and any content you choose to import. You represent that you
-        have the right to use the documents you import with FreeReader. Because
-        App data is designed to remain local, Prism Labs cannot access, recover,
-        restore, moderate, or back up your documents, generated audio, or
-        listening progress. Data may be lost if the App or device is deleted,
+        have the right to use the documents you import with the App or Website.
+        Because App data is designed to remain local, Prism Labs cannot access,
+        recover, restore, moderate, or back up your documents, generated audio,
+        or listening progress. Data may be lost if the App or device is deleted,
         damaged, reset, or replaced.
       </p>
       <p>
@@ -139,27 +146,27 @@ export default function Terms() {
 
       <h2>8. Website</h2>
       <p>
-        The Website is provided for general information about FreeReader and
-        does not guarantee compatibility or availability in any country. We may
-        suspend or discontinue the Website without liability.
+        The Website provides the web version of VoiceReader under the FreeReader
+        name. We do not guarantee compatibility or availability in any country.
+        We may suspend or discontinue the Website without liability.
       </p>
 
       <h2>9. Ownership and feedback</h2>
       <p>
-        FreeReader, including its software, models, design, text, graphics,
-        trademarks, and other materials, is owned by Prism Labs or its licensors
-        and is protected by intellectual-property laws. If you send suggestions
-        or feedback, you grant Prism Labs a perpetual, worldwide, royalty-free
-        license to use it without restriction or compensation, but you are not
-        required to provide feedback.
+        The App and Website, including their software, models, design, text,
+        graphics, trademarks, and other materials, are owned by Prism Labs or
+        its licensors and are protected by intellectual-property laws. If you
+        send suggestions or feedback, you grant Prism Labs a perpetual,
+        worldwide, royalty-free license to use it without restriction or
+        compensation, but you are not required to provide feedback.
       </p>
 
       <h2>10. Updates, compatibility, and availability</h2>
       <p>
-        FreeReader may require a compatible device, operating-system version,
+        VoiceReader may require a compatible device, operating-system version,
         and sufficient local resources. We may add, change, suspend, or remove
         features and may issue updates for security, compatibility, or product
-        improvements. We do not promise that FreeReader will always be
+        improvements. We do not promise that the App or Website will always be
         available, error-free, or compatible with every device or future iOS
         version.
       </p>
@@ -173,7 +180,7 @@ export default function Terms() {
       <ul>
         <li>
           Apple has no obligation to provide maintenance or support for the App.
-          Support is available through the link on FreeReader&apos;s App Store
+          Support is available through the link on VoiceReader&apos;s App Store
           listing.
         </li>
         <li>
@@ -213,13 +220,13 @@ export default function Terms() {
 
       <h2>12. Disclaimer of warranties</h2>
       <p>
-        TO THE MAXIMUM EXTENT PERMITTED BY LAW, FREEREADER AND ALL GENERATED
-        AUDIO ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE.&quot; PRISM
+        TO THE MAXIMUM EXTENT PERMITTED BY LAW, VOICEREADER, FREEREADER, AND ALL
+        GENERATED AUDIO ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE.&quot; PRISM
         LABS DISCLAIMS ALL EXPRESS, IMPLIED, AND STATUTORY WARRANTIES,
         INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY,
         QUIET ENJOYMENT, AND NON-INFRINGEMENT. PRISM LABS DOES NOT WARRANT THAT
-        FREEREADER OR ITS OUTPUT WILL BE ACCURATE, COMPLETE, SAFE, AVAILABLE, OR
-        FREE OF ERRORS OR HARMFUL COMPONENTS.
+        VOICEREADER, FREEREADER, OR THEIR OUTPUT WILL BE ACCURATE, COMPLETE, SAFE,
+        AVAILABLE, OR FREE OF ERRORS OR HARMFUL COMPONENTS.
       </p>
       <p>
         Some jurisdictions do not allow certain warranty exclusions, so parts of
@@ -233,13 +240,14 @@ export default function Terms() {
         MANAGERS, EMPLOYEES, CONTRACTORS, LICENSORS, AND AFFILIATES WILL NOT BE
         LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR
         PUNITIVE DAMAGES, OR FOR LOST DATA, PROFITS, REVENUE, GOODWILL, OR
-        OPPORTUNITIES, ARISING OUT OF OR RELATED TO FREEREADER OR GENERATED
-        AUDIO.
+        OPPORTUNITIES, ARISING OUT OF OR RELATED TO VOICEREADER, FREEREADER, OR
+        GENERATED AUDIO.
       </p>
       <p>
         To the maximum extent permitted by law, the total liability of Prism
-        Labs for all claims arising out of or relating to FreeReader will not
-        exceed 50 U.S. dollars, because FreeReader is provided free of charge.
+        Labs for all claims arising out of or relating to the App or Website will
+        not exceed 50 U.S. dollars, because the App and Website are provided free
+        of charge.
         These limitations apply regardless of the legal theory and even if a
         remedy fails of its essential purpose.
       </p>
@@ -249,9 +257,9 @@ export default function Terms() {
         To the extent permitted by law, you agree to defend, indemnify, and hold
         harmless Prism Labs and its affiliates from claims, losses, and
         expenses, including reasonable legal fees, arising from your unlawful
-        use of FreeReader, your violation of these Terms, or your infringement
-        of another person&apos;s rights. This obligation does not apply to the
-        extent a claim results from Prism Labs&apos; own unlawful conduct.
+        use of the App or Website, your violation of these Terms, or your
+        infringement of another person&apos;s rights. This obligation does not apply
+        to the extent a claim results from Prism Labs&apos; own unlawful conduct.
       </p>
 
       <h2>15. Termination</h2>
@@ -269,28 +277,28 @@ export default function Terms() {
         States, without regard to conflict-of-law principles. Subject to any
         mandatory consumer rights that apply where you live, courts located in
         New Jersey will have exclusive jurisdiction over disputes arising from
-        these Terms or FreeReader. The United Nations Convention on Contracts
-        for the International Sale of Goods does not apply.
+        these Terms, the App, or the Website. The United Nations Convention on
+        Contracts for the International Sale of Goods does not apply.
       </p>
 
       <h2>17. General terms</h2>
       <p>
         These Terms and the Privacy Policy are the entire agreement between you
-        and Prism Labs regarding FreeReader. If any provision is unenforceable,
-        it will be modified only as much as necessary, and the remaining
-        provisions will remain effective. Our failure to enforce a provision is
-        not a waiver. You may not assign these Terms without our consent; Prism
-        Labs may assign them as part of a merger, reorganization, financing, or
-        sale of assets.
+        and Prism Labs regarding the App and Website. If any provision is
+        unenforceable, it will be modified only as much as necessary, and the
+        remaining provisions will remain effective. Our failure to enforce a
+        provision is not a waiver. You may not assign these Terms without our
+        consent; Prism Labs may assign them as part of a merger, reorganization,
+        financing, or sale of assets.
       </p>
 
       <h2>18. Changes to these terms</h2>
       <p>
-        We may update these Terms as FreeReader or applicable law changes. We
-        will post the revised Terms and update the effective date. If a material
-        change requires additional notice or consent, we will provide it as
-        required by law. Continued use after an update takes effect constitutes
-        acceptance of the updated Terms.
+        We may update these Terms as the App, Website, or applicable law changes.
+        We will post the revised Terms and update the effective date. If a
+        material change requires additional notice or consent, we will provide
+        it as required by law. Continued use after an update takes effect
+        constitutes acceptance of the updated Terms.
       </p>
 
       <h2>19. Contact</h2>
@@ -300,7 +308,7 @@ export default function Terms() {
         New Jersey, United States
       </p>
       <p>
-        Product support is available through the link on FreeReader&apos;s App
+        Product support is available through the link on VoiceReader&apos;s App
         Store listing. Privacy requests and legal questions can also be
         submitted through that link.
       </p>

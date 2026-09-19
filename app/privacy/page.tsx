@@ -2,30 +2,31 @@ import type { Metadata } from "next";
 import { LegalPage } from "../components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy",
+  title: "VoiceReader Privacy Policy",
   description:
-    "FreeReader keeps your documents and audio on your device and collects only limited, content-free diagnostics.",
+    "Privacy Policy for the VoiceReader iOS app, also known as FreeReader on the web.",
   alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPolicy() {
   return (
     <LegalPage
-      title="Privacy Policy"
-      updated="September 3, 2026"
-      intro="FreeReader is built to keep your library on your device. This policy explains the limited information the app handles."
+      title="VoiceReader Privacy Policy"
+      updated="September 18, 2026"
+      intro="VoiceReader is the iOS app, also known as FreeReader on the web. This policy explains the limited information the App and Website handle."
     >
       <h2>1. Who we are</h2>
       <p>
-        FreeReader is provided by Prism Labs LLC (&ldquo;Prism Labs,&rdquo;
-        &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). This Privacy
-        Policy explains how information is handled by the FreeReader iOS
-        application (the &ldquo;App&rdquo;).
+        VoiceReader is provided by Prism Labs LLC (&ldquo;Prism Labs,&rdquo;
+        &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). VoiceReader is
+        the name of the iOS application (the &ldquo;App&rdquo;). Its web version
+        is known as FreeReader (the &ldquo;Website&rdquo;). This Privacy Policy
+        explains how the App and Website handle information.
       </p>
 
       <h2>2. What stays on your device</h2>
       <p>
-        FreeReader does not collect, upload, or store the following. This
+        VoiceReader does not collect, upload, or store the following. This
         information never leaves your device, and we cannot access, recover, or
         provide a copy of it:
       </p>
@@ -37,7 +38,7 @@ export default function PrivacyPolicy() {
         <li>advertising identifiers or tracking data.</li>
       </ul>
       <p>
-        Because FreeReader works without an account, we have no way to associate
+        Because VoiceReader works without an account, we have no way to associate
         your library or listening activity with you.
       </p>
 
@@ -91,13 +92,13 @@ export default function PrivacyPolicy() {
 
       <h2>7. Children&apos;s privacy</h2>
       <p>
-        FreeReader is not directed to children under 13, and children under 13
-        should not submit any personal information.
+        The App and Website are not directed to children under 13, and children
+        under 13 should not submit any personal information.
       </p>
 
       <h2>8. Changes to this policy</h2>
       <p>
-        We may update this Privacy Policy as FreeReader or applicable law
+        We may update this Privacy Policy as the App, Website, or applicable law
         changes. We will post the updated version here and revise the effective
         date.
       </p>
@@ -110,7 +111,7 @@ export default function PrivacyPolicy() {
       </p>
       <p>
         Questions about this policy may be submitted through the support link on
-        FreeReader&apos;s App Store listing.
+        VoiceReader&apos;s App Store listing.
       </p>
     </LegalPage>
   );
