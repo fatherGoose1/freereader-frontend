@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import type { TtsStatus } from "./tts";
-import { normalizeForSpeech } from "./speechText";
+import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext } from "./telemetry";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
@@ -46,14 +46,18 @@ export class RemoteSpeechClient {
     this.controller = controller;
     const started = performance.now();
     status?.(items.length > 1 ? `Generating ${items.length} passages` : "Generating speech");
+    const language = options?.language;
+    const supertonic = language !== undefined && language !== "en";
     const body: Record<string, unknown> = {
-      texts: items.map((item) => normalizeForSpeech(item.text, item.isHeading)),
+      texts: items.map((item) => supertonic
+        ? normalizeForSupertonic(item.text, item.isHeading, language)
+        : normalizeForSpeech(item.text, item.isHeading)),
       speed: speechSpeed,
     };
-    if (options && options.language !== "en") {
-      body.language = options.language;
-      body.voice = options.voice;
-      body.steps = options.steps;
+    if (supertonic) {
+      body.language = language;
+      body.voice = options?.voice;
+      body.steps = options?.steps;
     }
     try {
       const response = await fetch("/api/tts", {
