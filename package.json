@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@supabase/supabase-js": "^2.116.0",
     "epubjs": "^0.3.93",
     "franc-min": "^6.2.0",
     "jszip": "^3.10.2",

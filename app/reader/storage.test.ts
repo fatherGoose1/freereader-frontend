@@ -84,7 +84,7 @@ test("removes legacy source blobs without deleting reusable assets", async () =>
   await createVersionThreeDatabase();
   await listBooks();
 
-  const database = await requestResult(fakeIndexedDB.open(DATABASE, 4));
+  const database = await requestResult(fakeIndexedDB.open(DATABASE, 5));
   const transaction = database.transaction("assets", "readonly");
   const keys = await requestResult(transaction.objectStore("assets").getAllKeys());
   database.close();
@@ -190,7 +190,7 @@ for (const available of [false, true]) {
 }
 
 test("skips legacy model IDB reads while preserving legacy audio Blobs", async (t) => {
-  const database = await requestResult(fakeIndexedDB.open(DATABASE, 4));
+  const database = await requestResult(fakeIndexedDB.open(DATABASE, 5));
   const transaction = database.transaction("assets", "readwrite");
   transaction.objectStore("assets").put({ bytes: new Uint8Array([1]), type: "application/octet-stream" }, "models/legacy/model.onnx");
   await new Promise<void>((resolve) => { transaction.oncomplete = () => resolve(); });

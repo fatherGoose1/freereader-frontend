@@ -125,23 +125,30 @@ export default function Terms() {
         You are responsible for your device, its security, available storage,
         backups, and any content you choose to import. You represent that you
         have the right to use the documents you import with the App or Website.
-        Because App data is designed to remain local, Prism Labs cannot access,
-        recover, restore, moderate, or back up your documents, generated audio,
-        or listening progress. Data may be lost if the App or device is deleted,
-        damaged, reset, or replaced.
+        VoiceReader data and anonymous FreeReader data are designed to remain
+        local, so Prism Labs cannot recover or restore them. FreeReader web users
+        may optionally sign in and sync compressed parsed documents, library
+        organization, and listening progress. Synced data is subject to the
+        limits and availability of that service. Generated audio and original
+        source files are not synced. Data may be lost if local storage is cleared
+        or the sync service is unavailable.
       </p>
       <p>
-        You retain any rights you have in content you import. You grant Prism
-        Labs no license to App content that never leaves your device.
+        You retain any rights you have in content you import. For content you
+        choose to sync, you grant Prism Labs a limited license to host, copy,
+        transmit, and process it only as needed to provide sync. You grant Prism
+        Labs no license to content that never leaves your device.
       </p>
 
       <h2>7. Privacy</h2>
       <p>
         Our <Link href="/privacy">Privacy Policy</Link> explains how the App and
-        Website handle information and is incorporated into these Terms. The App
-        does not send us your documents, their text, or generated audio. The App
-        and the Website separately process limited diagnostics and analytics as
-        described in that policy.
+        Website handle information and is incorporated into these Terms.
+        VoiceReader and anonymous FreeReader users do not send us your documents
+        or generated audio. Signed-in FreeReader users intentionally send
+        compressed parsed documents and progress for account sync. The App and
+        Website also process limited diagnostics and analytics as described in
+        that policy.
       </p>
 
       <h2>8. Website</h2>

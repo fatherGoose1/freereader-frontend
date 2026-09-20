@@ -19,6 +19,7 @@ export interface ReadingPosition {
   blockIndex: number;
   offsetSeconds: number;
   speed: number;
+  updatedAt?: string;
 }
 
 export interface LibraryBook {
@@ -55,6 +56,16 @@ export interface ParsedBook {
   chapters: Chapter[];
   blocks: TextBlock[];
   cover?: Blob;
+}
+
+export interface AccountSyncRecord {
+  key: string;
+  ownerId: string;
+  kind: "document" | "folder";
+  itemId: string;
+  revision: number;
+  contentUpdatedAt: string;
+  syncedAt: string;
 }
 
 export interface GutenbergBook {

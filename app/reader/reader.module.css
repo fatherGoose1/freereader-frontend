@@ -62,6 +62,7 @@
 }
 
 .actions { display: flex; align-items: center; gap: 8px; }
+.accountButton { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobileAddButton { display: none; }
 .actions button,
 .primaryAction,
@@ -165,6 +166,7 @@
 .backFolder { display: block; margin-bottom: 5px; }
 .localNote { display: flex; align-items: center; gap: 7px; max-width: 440px; color: var(--app-secondary); font-size: 12px; text-align: right; }
 .localDot { width: 7px; height: 7px; flex: none; background: #34c759; border-radius: 50%; }
+.cloudDot { background: var(--app-blue); }
 
 .libraryGrid {
   overflow: hidden;
@@ -294,6 +296,15 @@
 .modal p { color: var(--app-secondary); font-size: 14px; }
 .folderModal { width: min(430px, 100%); }
 .addModal { width: min(430px, 100%); }
+.accountModal { width: min(450px, 100%); }
+.accountSummary { display: grid; gap: 5px; margin: 20px 0; padding: 14px; background: #fff; border: 1px solid rgba(60, 60, 67, .12); border-radius: 11px; }
+.accountSummary strong { font-size: 14px; }
+.accountSummary span,
+.accountModal > small { color: var(--app-secondary); font-size: 11px; line-height: 1.5; }
+.accountActions { display: grid; gap: 8px; margin-bottom: 16px; }
+.accountActions button { padding: 10px 12px; color: var(--app-blue); background: #fff; border: 1px solid rgba(60, 60, 67, .16); border-radius: 9px; font-weight: 600; cursor: pointer; }
+.accountActions button:disabled { opacity: .5; cursor: default; }
+.accountActions .destructiveButton { color: #ff3b30; }
 .addChoices { margin-top: 20px; }
 .addChoiceIcon {
   display: grid;
@@ -580,6 +591,12 @@
   .libraryHero { align-items: flex-start; min-height: auto; padding: 17px 16px; }
   .libraryHero h1 { font-size: 28px; }
   .actions button { display: none; }
+  .actions .accountButton {
+    display: block;
+    max-width: 120px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
   .actions .mobileAddButton {
     display: grid;
     place-items: center;

@@ -9,14 +9,26 @@ The existing marketing site remains at `/`; the local-first web reader is at `/r
 - DOCX: Mammoth
 - HTML and web articles: DOMParser and Mozilla Readability
 - Markdown: a local parser mirroring the iOS app's readable-markdown rules
-- Metadata, extracted blocks, and reading position: IndexedDB
+- Metadata, extracted blocks, reading position, and per-account sync revisions: IndexedDB
 - Supertonic models: optional OPFS cache; generated WAV chunks: OPFS with byte-based IndexedDB fallback
 - English speech: always streamed from the Coco backend (`/api/tts` -> Kokoro-7M-Distill FP32, compressed AAC) on desktop and mobile; no English model runs on device
 - Supertonic speech: on-device SIMD WASM, full FP32 on desktop, for the non-English languages; mobile blocks non-English narration with an English-only warning
 - Playback: play the first passage, then generate ahead while playback continues (30-second target, capped at four passages)
 - Offline app shell: service worker and web app manifest
 
-EPUBs, PDFs, document text, and audio are never uploaded. Project Gutenberg OPDS metadata and EPUB files are fetched directly from `www.gutenberg.org`. Supertonic model and selected voice assets are downloaded directly from Hugging Face on first use and retained locally.
+Without an account, EPUBs, PDFs, document text, and audio are never uploaded. A web user can optionally sign in with Google through Supabase; FreeReader then gzip-compresses parsed document text and covers for private Supabase Storage and separately syncs small metadata and reading-position records through the Koko backend. Original source files, generated audio, and voice models do not sync. Accounts are limited to 100 documents and each compressed cloud document is limited to 10 MiB.
+
+## Account sync
+
+Configure the browser with:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+NEXT_PUBLIC_KOKO_BACKEND_URL=http://localhost:5001
+```
+
+Google OAuth uses a redirect back to `/reader`. IndexedDB remains authoritative and makes both anonymous and signed-in reading local-first. Document content uploads only after an import or metadata change; progress uploads at most every 30 seconds plus pause and background checkpoints. A versioned manifest and per-item revisions reserve conflict-detection semantics for future iOS support. Current reconciliation uses latest content and progress timestamps, while optimistic revisions reject stale document writes.
 
 ## iOS parser parity
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { browseGutenberg, downloadGutenbergBook } from "./gutenberg";
 import { parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
 import { asImportError, failureCategory, importFailureProperties, type ImportFileType, type ImportStage } from "./importErrors";
@@ -16,6 +17,16 @@ import {
   saveBook,
   saveFolder,
 } from "./storage";
+import {
+  AccountSyncError,
+  deleteCloudAccount,
+  deleteCloudDocument,
+  synchronizeLibrary,
+  uploadCloudDocument,
+  uploadCloudFolder,
+  uploadCloudProgress,
+} from "./accountSync";
+import { supabaseClient } from "./supabase";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { narrationRoute, synthesize, synthesizeBatch, UnsupportedMobileLanguageError, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
@@ -27,7 +38,7 @@ import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./tel
 import posthog from "posthog-js";
 import styles from "./reader.module.css";
 
-type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
+type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | "account" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 4;
 const BATCH_MAX_CHARS = 1200;
@@ -120,7 +131,7 @@ function makeBook(
     size,
     createdAt: now,
     updatedAt: now,
-    position: { blockIndex: 0, offsetSeconds: 0, speed: 1 },
+    position: { blockIndex: 0, offsetSeconds: 0, speed: 1, updatedAt: now },
   };
 }
 
@@ -162,6 +173,13 @@ export default function FreeReaderApp() {
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const sessionRef = useRef<Session | null>(null);
+  const syncedUser = useRef<string | undefined>(undefined);
+  const lastCloudPositionSave = useRef(new Map<string, number>());
   const [importErrorMessage, setImportErrorMessage] = useState("");
   const [url, setUrl] = useState("");
   const [pastedTitle, setPastedTitle] = useState("");
@@ -220,8 +238,12 @@ export default function FreeReaderApp() {
       .then(([storedBooks, storedFolders]) => {
         setBooks(storedBooks);
         setFolders(storedFolders);
+        setLibraryLoaded(true);
       })
-      .catch(() => setMessage("Local library storage is unavailable."));
+      .catch(() => {
+        setMessage("Local library storage is unavailable.");
+        setLibraryLoaded(true);
+      });
     requestPersistentStorage().catch(() => false);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     return () => {
@@ -230,6 +252,46 @@ export default function FreeReaderApp() {
       wantsPlayback.current = false;
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const supabase = supabaseClient();
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+    void supabase.auth.getSession().then(({ data }) => {
+      sessionRef.current = data.session;
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+      setAuthReady(true);
+      if (!nextSession) syncedUser.current = undefined;
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!libraryLoaded || !userId || syncedUser.current === userId) return;
+    syncedUser.current = userId;
+    void syncNow();
+  }, [libraryLoaded, session?.user.id]);
+
+  useEffect(() => {
+    const saveBeforeBackground = () => {
+      if (document.visibilityState !== "hidden") return;
+      const current = currentAudio();
+      if (!current) return;
+      const positioned = positionBook(current.book, current.source.index, current.audio.currentTime);
+      saveBook(positioned).catch(() => undefined);
+      void syncProgress(positioned, true);
+    };
+    document.addEventListener("visibilitychange", saveBeforeBackground);
+    return () => document.removeEventListener("visibilitychange", saveBeforeBackground);
   }, []);
 
   useEffect(() => {
@@ -248,6 +310,120 @@ export default function FreeReaderApp() {
     };
   }, [addMenuOpen]);
 
+  function syncFailureMessage(error: unknown): string {
+    if (error instanceof AccountSyncError) {
+      if (error.code === "document_limit_reached") return "Your cloud library is full. This book remains on this device.";
+      if (error.code === "document_too_large") return "This book is larger than the 10 MB cloud limit and remains on this device.";
+      if (error.code === "document_belongs_to_another_account") return "This book is linked to another account and remains only on this device.";
+      if (error.code === "compression_unavailable") return "This browser cannot prepare cloud documents. Your local library is unchanged.";
+      if (error.status === 401) return "Your session expired. Sign in again to resume syncing.";
+    }
+    return "Cloud sync is temporarily unavailable. Your local library is unchanged.";
+  }
+
+  async function syncNow() {
+    const activeSession = sessionRef.current;
+    if (!activeSession || syncing) return;
+    setSyncing(true);
+    setMessage("Syncing your library...");
+    try {
+      const [localBooks, localFolders] = await Promise.all([listBooks(), listFolders()]);
+      const result = await synchronizeLibrary(
+        activeSession.access_token,
+        activeSession.user.id,
+        localBooks,
+        localFolders,
+      );
+      setBooks(result.books);
+      setFolders(result.folders);
+      const changes = result.uploaded + result.downloaded;
+      setMessage(result.localOnly
+        ? `${result.localOnly} ${result.localOnly === 1 ? "book stays" : "books stay"} only on this device because of cloud limits.`
+        : changes
+          ? `Library synced: ${result.uploaded} uploaded, ${result.downloaded} downloaded.`
+          : "Your library is synced across devices.");
+    } catch (error) {
+      setMessage(syncFailureMessage(error));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function signIn() {
+    const supabase = supabaseClient();
+    if (!supabase) {
+      setMessage("Google sign-in has not been configured for this deployment.");
+      return;
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/reader` },
+    });
+    if (error) setMessage("Google sign-in could not be started.");
+  }
+
+  async function signOut() {
+    const supabase = supabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) setMessage("Sign out failed. Please try again.");
+    else {
+      setPanel(null);
+      setMessage("Signed out. Downloaded books remain on this device.");
+    }
+  }
+
+  async function deleteAccountAndCloudData() {
+    const activeSession = sessionRef.current;
+    const supabase = supabaseClient();
+    if (!activeSession || !supabase || !window.confirm("Delete your FreeReader account, every synced document, and every reading position? Downloaded books will remain on this device.")) return;
+    setSyncing(true);
+    try {
+      await deleteCloudAccount(activeSession.access_token, activeSession.user.id);
+      await supabase.auth.signOut();
+      setPanel(null);
+      setMessage("Your account and cloud copies were deleted. Downloaded books remain on this device.");
+    } catch (error) {
+      setMessage(syncFailureMessage(error));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function syncDocument(book: LibraryBook) {
+    const activeSession = sessionRef.current;
+    if (!activeSession) return;
+    try {
+      await uploadCloudDocument(activeSession.access_token, activeSession.user.id, book);
+      setMessage(`${book.title} is available on your signed-in devices.`);
+    } catch (error) {
+      setMessage(syncFailureMessage(error));
+    }
+  }
+
+  async function syncFolder(folder: LibraryFolder) {
+    const activeSession = sessionRef.current;
+    if (!activeSession) return;
+    try {
+      await uploadCloudFolder(activeSession.access_token, activeSession.user.id, folder);
+    } catch (error) {
+      setMessage(syncFailureMessage(error));
+    }
+  }
+
+  async function syncProgress(book: LibraryBook, force = false) {
+    const activeSession = sessionRef.current;
+    if (!activeSession) return;
+    const lastSave = lastCloudPositionSave.current.get(book.id) ?? 0;
+    if (!force && Date.now() - lastSave < 30_000) return;
+    lastCloudPositionSave.current.set(book.id, Date.now());
+    try {
+      await uploadCloudProgress(activeSession.access_token, book);
+    } catch {
+      // The local checkpoint remains authoritative until the next successful sync.
+    }
+  }
+
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
     setImportErrorMessage("");
@@ -264,7 +440,8 @@ export default function FreeReaderApp() {
       await saveBook(book);
       setBooks((current) => [book, ...current]);
       setPanel(null);
-      setMessage(`${book.title} was added to your private library.`);
+      setMessage(sessionRef.current ? `${book.title} was added and will sync shortly.` : `${book.title} was added to your private library.`);
+      void syncDocument(book);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
         source,
@@ -328,7 +505,8 @@ export default function FreeReaderApp() {
       setBooks((current) => [book, ...current]);
       setPanel(null);
       setUrl("");
-      setMessage(`${book.title} was saved for offline reading.`);
+      setMessage(sessionRef.current ? `${book.title} was saved and will sync shortly.` : `${book.title} was saved for offline reading.`);
+      void syncDocument(book);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
         source: "url",
@@ -387,7 +565,8 @@ export default function FreeReaderApp() {
       setPanel(null);
       setPastedText("");
       setPastedTitle("");
-      setMessage(`${book.title} was added to your private library.`);
+      setMessage(sessionRef.current ? `${book.title} was added and will sync shortly.` : `${book.title} was added to your private library.`);
+      void syncDocument(book);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
         source: "paste",
@@ -477,10 +656,10 @@ export default function FreeReaderApp() {
   }
 
   function positionBook(book: LibraryBook, blockIndex: number, offsetSeconds = 0): LibraryBook {
+    const now = new Date().toISOString();
     return {
       ...book,
-      updatedAt: new Date().toISOString(),
-      position: { ...book.position, blockIndex, offsetSeconds },
+      position: { ...book.position, blockIndex, offsetSeconds, updatedAt: now },
     };
   }
 
@@ -653,7 +832,9 @@ export default function FreeReaderApp() {
     wantsPlayback.current = true;
     setPlaying(true);
     // Selection/highlighting and the next playback position change synchronously, before generation.
-    updateBook(positionBook(book, index, offsetFromEnd ? 0 : offset));
+    const positioned = positionBook(book, index, offsetFromEnd ? 0 : offset);
+    updateBook(positioned);
+    void syncProgress(positioned);
     setBusy(true);
     try {
       const { blob, ...info } = await ensureAudio(book, index, isCurrent);
@@ -744,7 +925,11 @@ export default function FreeReaderApp() {
     const current = currentAudio();
     if (wantsPlayback.current) {
       pausePlayback();
-      if (current) updateBook(positionBook(book, current.source.index, current.audio.currentTime));
+      if (current) {
+        const positioned = positionBook(book, current.source.index, current.audio.currentTime);
+        updateBook(positioned);
+        void syncProgress(positioned, true);
+      }
       return;
     }
     if (current && !current.audio.ended) {
@@ -782,7 +967,12 @@ export default function FreeReaderApp() {
     const selected = selectedRef.current;
     if (!selected) return;
     if (audioRef.current) audioRef.current.playbackRate = speed;
-    updateBook({ ...selected, position: { ...selected.position, speed } });
+    const updated = {
+      ...selected,
+      position: { ...selected.position, speed, updatedAt: new Date().toISOString() },
+    };
+    updateBook(updated);
+    void syncProgress(updated, true);
     if (wantsPlayback.current && currentAudio() && !audioRef.current?.paused) {
       void pregenerate(selectedRef.current!, selected.position.blockIndex + 1);
     }
@@ -810,7 +1000,9 @@ export default function FreeReaderApp() {
     setAudioProgress(audio.duration ? audio.currentTime / audio.duration : 0);
     if (Date.now() - lastPositionSave.current > 5_000) {
       lastPositionSave.current = Date.now();
-      updateBook(positionBook(book, source.index, audio.currentTime));
+      const positioned = positionBook(book, source.index, audio.currentTime);
+      updateBook(positioned);
+      void syncProgress(positioned);
     }
   }
 
@@ -842,13 +1034,17 @@ export default function FreeReaderApp() {
     if (wantsPlayback.current) void playBlock(selected, blockIndex);
     else {
       resetPlayback();
-      updateBook(positionBook(selected, blockIndex));
+      const positioned = positionBook(selected, blockIndex);
+      updateBook(positioned);
+      void syncProgress(positioned, true);
     }
   }
 
   async function deleteBook(book: LibraryBook) {
     if (!window.confirm(`Remove "${book.title}" from this browser?`)) return;
     await removeBook(book.id);
+    const activeSession = sessionRef.current;
+    if (activeSession) void deleteCloudDocument(activeSession.access_token, book.id).catch(() => undefined);
     setBooks((current) => current.filter((value) => value.id !== book.id));
     setOrganizingBook(null);
     setMessage(`${book.title} was removed from this browser.`);
@@ -863,13 +1059,14 @@ export default function FreeReaderApp() {
     resetPlayback();
     audioPrimed.current = false;
     const language = languageForBook(book);
-    const ready = book.language ? book : { ...book, language };
+    const ready = book.language ? book : { ...book, language, updatedAt: new Date().toISOString() };
     selectedRef.current = ready;
     setSelected(ready);
     setVoice((current) => voiceForLanguage(current, language));
     if (!book.language) {
       setBooks((current) => current.map((value) => value.id === book.id ? ready : value));
       saveBook(ready).catch(() => undefined);
+      void syncDocument(ready);
     }
     recordTelemetry("document_opened", documentProperties(ready));
     posthog.capture("document_opened", {
@@ -886,7 +1083,9 @@ export default function FreeReaderApp() {
     resetPlayback();
     audioPrimed.current = false;
     setVoice((current) => voiceForLanguage(current, language));
-    updateBook({ ...selected, language, updatedAt: new Date().toISOString() });
+    const updated = { ...selected, language, updatedAt: new Date().toISOString() };
+    updateBook(updated);
+    void syncDocument(updated);
     posthog.capture("voice_settings_changed", { setting: "language", value: language });
   }
 
@@ -913,7 +1112,8 @@ export default function FreeReaderApp() {
       setFolders((current) => [...current, folder]);
       setFolderName("");
       setPanel(null);
-      setMessage(`${folder.name} was created on this device.`);
+      setMessage(sessionRef.current ? `${folder.name} was created and synced.` : `${folder.name} was created on this device.`);
+      void syncFolder(folder);
     } catch {
       setMessage("The folder could not be saved.");
     }
@@ -924,6 +1124,7 @@ export default function FreeReaderApp() {
     try {
       await saveBook(updated);
       setBooks((current) => current.map((value) => value.id === book.id ? updated : value));
+      void syncDocument(updated);
       setOrganizingBook(null);
       const destination = parentId ? folders.find((folder) => folder.id === parentId)?.name : undefined;
       setMessage(destination
@@ -1071,12 +1272,21 @@ export default function FreeReaderApp() {
   const parentFolder = activeFolder?.parentId
     ? folders.find((folder) => folder.id === activeFolder.parentId)
     : undefined;
+  const accountName = session?.user.user_metadata.full_name
+    ?? session?.user.user_metadata.name
+    ?? session?.user.email
+    ?? "Google account";
 
   return (
     <main className={styles.appShell}>
       <header className={styles.libraryHero}>
-        <div><span className={styles.kicker}>On this device</span><h1>FreeReader</h1></div>
+        <div><span className={styles.kicker}>{session ? "Synced library" : "On this device"}</span><h1>FreeReader</h1></div>
         <div className={styles.actions}>
+          <button
+            className={styles.accountButton}
+            disabled={!authReady || syncing}
+            onClick={() => session ? setPanel("account") : void signIn()}
+          >{session ? accountName : "Sign in with Google"}</button>
           <div className={styles.addMenuWrap} ref={addMenuRef}>
             <button
               className={styles.primaryAction}
@@ -1149,7 +1359,7 @@ export default function FreeReaderApp() {
             </div>
             <div className={styles.shelfStatus}>
               <button className={styles.newFolderButton} onClick={() => { setFolderName(""); setPanel("folder"); }}>+ New Folder</button>
-              <div className={styles.localNote}><span className={styles.localDot} /> {message}</div>
+              <div className={styles.localNote}><span className={`${styles.localDot} ${session ? styles.cloudDot : ""}`} /> {message}</div>
             </div>
           </div>
           {childFolders.length > 0 && (
@@ -1185,11 +1395,30 @@ export default function FreeReaderApp() {
             </div>
           ) : childFolders.length === 0 ? (
             <div className={styles.emptyLibrary}>
-              <span className={styles.emptyBooks}>|||</span><h2>{activeFolder ? "This folder is empty" : "Your shelf is empty"}</h2><p>Browse free books, import a web link, paste some text, or add an EPUB, PDF, or TXT file. Everything stays on this device.</p>
+              <span className={styles.emptyBooks}>|||</span><h2>{activeFolder ? "This folder is empty" : "Your shelf is empty"}</h2><p>Browse free books, import a web link, paste some text, or add an EPUB, PDF, or TXT file. {session ? "Your library will sync to your signed-in devices." : "Everything stays on this device."}</p>
             </div>
           ) : null}
         </section>
       </div>
+      {panel === "account" && session && (
+        <div className={styles.modalBackdrop} onMouseDown={() => !syncing && setPanel(null)}>
+          <div className={`${styles.modal} ${styles.accountModal}`} onMouseDown={(event) => event.stopPropagation()}>
+            <span className={styles.kicker}>Google Account</span>
+            <h2>{accountName}</h2>
+            <p>{session.user.email}</p>
+            <div className={styles.accountSummary}>
+              <strong>{books.length} documents on this device; up to 100 sync</strong>
+              <span>Documents are compressed before upload. Generated audio and voice models never sync.</span>
+            </div>
+            <div className={styles.accountActions}>
+              <button disabled={syncing} onClick={() => void syncNow()}>{syncing ? "Syncing..." : "Sync now"}</button>
+              <button disabled={syncing} onClick={() => void signOut()}>Sign out</button>
+              <button className={styles.destructiveButton} disabled={syncing} onClick={() => void deleteAccountAndCloudData()}>Delete account and cloud copies</button>
+            </div>
+            <small>Signing out keeps downloaded books on this device. Deleting your account also removes cloud copies and signs you out.</small>
+          </div>
+        </div>
+      )}
       {panel === "add" && (
         <div className={styles.modalBackdrop} onMouseDown={() => setPanel(null)}>
           <div className={`${styles.modal} ${styles.addModal}`} onMouseDown={(event) => event.stopPropagation()}>
@@ -1246,7 +1475,7 @@ export default function FreeReaderApp() {
                 {busy ? "Adding" : "Add to Library"}
               </button>
             </div>
-            <div className={styles.modalPrivacy}>Pasted text is parsed and stored only on this device.</div>
+            <div className={styles.modalPrivacy}>{session ? "Pasted text is parsed locally, then the compressed document syncs to your account." : "Pasted text is parsed and stored only on this device."}</div>
           </form>
         </div>
       )}
@@ -1295,14 +1524,14 @@ export default function FreeReaderApp() {
             <label className={styles.fieldLabel}>Article or document URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
             {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
             <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Import link"}</button></div>
-            <div className={styles.modalPrivacy}>Imported content is processed and stored only on this device.</div>
+            <div className={styles.modalPrivacy}>{session ? "Imported content is processed locally, then the compressed document syncs to your account." : "Imported content is processed and stored only on this device."}</div>
           </form>
         </div>
       )}
       {panel === "gutenberg" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
           <div className={`${styles.modal} ${styles.catalog}`} onMouseDown={(event) => event.stopPropagation()}>
-            <div className={styles.catalogHeader}><span>PG</span><div><strong>PROJECT GUTENBERG</strong><p>Choose a public-domain EPUB and FreeReader will keep it on this device for reading and narration.</p></div></div>
+            <div className={styles.catalogHeader}><span>PG</span><div><strong>PROJECT GUTENBERG</strong><p>Choose a public-domain EPUB and FreeReader will keep it on this device{session ? " and sync it to your account" : ""} for reading and narration.</p></div></div>
             <h2>Free Books</h2>
             <form className={styles.catalogSearch} onSubmit={(event) => { event.preventDefault(); void searchGutenberg(); }}>
               <input placeholder="Title or author" value={query} onChange={(event) => setQuery(event.target.value)} />

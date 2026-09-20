@@ -1,7 +1,7 @@
-import type { LibraryBook, LibraryFolder } from "./types";
+import type { AccountSyncRecord, LibraryBook, LibraryFolder } from "./types";
 
 const DATABASE = "freereader-web";
-const VERSION = 4;
+const VERSION = 5;
 const STORAGE_TIMEOUT_MS = 5_000;
 const failedOPFSWrites = new Set<string>();
 
@@ -60,6 +60,9 @@ function openDatabase(signal?: AbortSignal): Promise<IDBDatabase> {
       if (!request.result.objectStoreNames.contains("folders")) {
         request.result.createObjectStore("folders", { keyPath: "id" });
       }
+      if (!request.result.objectStoreNames.contains("sync")) {
+        request.result.createObjectStore("sync", { keyPath: "key" });
+      }
       if (event.oldVersion < 3) {
         const cursorRequest = request.transaction!.objectStore("books").openCursor();
         cursorRequest.onsuccess = () => {
@@ -94,7 +97,7 @@ function openDatabase(signal?: AbortSignal): Promise<IDBDatabase> {
 }
 
 async function transact<T>(
-  storeName: "books" | "assets" | "folders",
+  storeName: "books" | "assets" | "folders" | "sync",
   mode: IDBTransactionMode,
   operation: (store: IDBObjectStore) => IDBRequest<T>,
   signal?: AbortSignal,
@@ -168,6 +171,22 @@ export async function listFolders(): Promise<LibraryFolder[]> {
 
 export function saveFolder(folder: LibraryFolder): Promise<IDBValidKey> {
   return transact("folders", "readwrite", (store) => store.put(folder));
+}
+
+export async function listAccountSyncRecords(ownerId: string): Promise<AccountSyncRecord[]> {
+  return (await listAllAccountSyncRecords()).filter((record) => record.ownerId === ownerId);
+}
+
+export function listAllAccountSyncRecords(): Promise<AccountSyncRecord[]> {
+  return transact<AccountSyncRecord[]>("sync", "readonly", (store) => store.getAll());
+}
+
+export function saveAccountSyncRecord(record: AccountSyncRecord): Promise<IDBValidKey> {
+  return transact("sync", "readwrite", (store) => store.put(record));
+}
+
+export function removeAccountSyncRecord(key: string): Promise<undefined> {
+  return transact("sync", "readwrite", (store) => store.delete(key));
 }
 
 async function fileHandle(path: string, create: boolean, signal: AbortSignal): Promise<FileSystemFileHandle> {
