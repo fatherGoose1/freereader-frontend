@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { NarrationRouter, UnsupportedMobileLanguageError } from "./narration";
+import { NarrationRouter } from "./narration";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 
 const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, generationStartedAt: 1_000, provider: "Server" };
@@ -12,8 +12,16 @@ function setup(mobile: boolean, remoteError?: Error) {
       stop() { calls.push("dispose-supertonic"); },
     },
     remote: {
-      async synthesize(text) { calls.push(`remote:${text}`); if (remoteError) throw remoteError; return audio; },
-      async synthesizeBatch(items) { calls.push(`remote-batch:${items.map((item) => item.text).join("|")}`); if (remoteError) throw remoteError; return items.map(() => audio); },
+      async synthesize(text, _speed, _isHeading, _status, options) {
+        calls.push(`remote:${text}${options ? `:${options.language}:${options.voice}:${options.steps}` : ""}`);
+        if (remoteError) throw remoteError;
+        return audio;
+      },
+      async synthesizeBatch(items, _speed, _status, options) {
+        calls.push(`remote-batch:${items.map((item) => item.text).join("|")}${options ? `:${options.language}:${options.voice}:${options.steps}` : ""}`);
+        if (remoteError) throw remoteError;
+        return items.map(() => audio);
+      },
       stop() { calls.push("dispose-remote"); },
     },
   });
@@ -49,27 +57,22 @@ test("batches English passages into a single remote call", async () => {
   assert.deepEqual(calls, ["remote-batch:One|Two|Three"]);
 });
 
-test("desktop: non-English still runs Supertonic on device", async () => {
-  const { calls, speakFrench } = setup(false);
-  const result = await speakFrench();
-  assert.equal(result.route.model, "supertonic-fp32-wasm-v2");
-  assert.equal(result.route.provider, "WASM");
-  assert.deepEqual(calls, ["supertonic:false:M3:fr"]);
-});
+for (const mobile of [false, true]) {
+  test(`${mobile ? "mobile" : "desktop"}: non-English uses the server Supertonic voice and steps`, async () => {
+    const { calls, speakFrench } = setup(mobile);
+    const result = await speakFrench();
+    assert.equal(result.route.model, "supertonic-3-fp32-server-v1");
+    assert.equal(result.route.provider, "Server");
+    assert.deepEqual(calls, ["remote:Bonjour:fr:M3:4"]);
+  });
+}
 
-test("mobile: non-English is rejected before any model loads", async () => {
-  const { calls, speakFrench } = setup(true);
-  await assert.rejects(speakFrench(), UnsupportedMobileLanguageError);
-  assert.deepEqual(calls, []);
-});
-
-test("switching from English to non-English releases the previous engine", async () => {
+test("switching from English to non-English keeps every request on the server", async () => {
   const { calls, speakEnglish, speakFrench } = setup(false);
   await speakEnglish();
   await speakFrench();
   await speakEnglish();
-  assert.deepEqual(calls, ["remote:Hello", "dispose-remote", "supertonic:false:M3:fr",
-    "dispose-supertonic", "remote:Hello"]);
+  assert.deepEqual(calls, ["remote:Hello", "remote:Bonjour:fr:M3:4", "remote:Hello"]);
 });
 
 function deferred<T>() {

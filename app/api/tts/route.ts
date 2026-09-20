@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as { text?: unknown; texts?: unknown; speed?: unknown } | null;
+  const body = await request.json().catch(() => null) as {
+    text?: unknown; texts?: unknown; speed?: unknown;
+    language?: unknown; voice?: unknown; steps?: unknown;
+  } | null;
   if (!body || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
@@ -14,7 +17,15 @@ export async function POST(request: Request) {
   if (!single && !texts?.length) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-  const upstreamBody = texts ? { texts, speed: body.speed } : { text: single, speed: body.speed };
+  const upstreamBody: Record<string, unknown> = texts
+    ? { texts, speed: body.speed }
+    : { text: single, speed: body.speed };
+  // Non-English narration forwards the reader's language, voice, and quality to Supertonic.
+  if (typeof body.language === "string" && body.language !== "en") {
+    upstreamBody.language = body.language;
+    if (typeof body.voice === "string") upstreamBody.voice = body.voice;
+    if (typeof body.steps === "number") upstreamBody.steps = body.steps;
+  }
   const backend = process.env.KOKO_BACKEND_URL
     ?? "https://koko-backend-production-c887.up.railway.app";
   const token = process.env.FREEREADER_TTS_API_TOKEN ?? process.env.PARRYT_API_TOKEN;
