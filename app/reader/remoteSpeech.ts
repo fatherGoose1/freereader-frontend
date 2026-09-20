@@ -6,6 +6,8 @@ import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
+// Server-side Supertonic accepts the reader's chosen voice and quality; Kokoro ignores these.
+type SupertonicOptions = { language: string; voice: string; steps: number };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (typeof payload?.error === "string" && payload.error) return payload.error;
@@ -31,17 +33,28 @@ export class RemoteSpeechClient {
     this.controller = undefined;
   }
 
-  async synthesize(text: string, speechSpeed: number, isHeading = false, status?: TtsStatus): Promise<SpeechResult> {
-    const [result] = await this.synthesizeBatch([{ text, isHeading }], speechSpeed, status);
+  async synthesize(text: string, speechSpeed: number, isHeading = false, status?: TtsStatus,
+    options?: SupertonicOptions): Promise<SpeechResult> {
+    const [result] = await this.synthesizeBatch([{ text, isHeading }], speechSpeed, status, options);
     return result;
   }
 
-  async synthesizeBatch(items: BatchItem[], speechSpeed: number, status?: TtsStatus): Promise<SpeechResult[]> {
+  async synthesizeBatch(items: BatchItem[], speechSpeed: number, status?: TtsStatus,
+    options?: SupertonicOptions): Promise<SpeechResult[]> {
     this.stop();
     const controller = new AbortController();
     this.controller = controller;
     const started = performance.now();
     status?.(items.length > 1 ? `Generating ${items.length} passages` : "Generating speech");
+    const body: Record<string, unknown> = {
+      texts: items.map((item) => normalizeForSpeech(item.text, item.isHeading)),
+      speed: speechSpeed,
+    };
+    if (options && options.language !== "en") {
+      body.language = options.language;
+      body.voice = options.voice;
+      body.steps = options.steps;
+    }
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
@@ -49,10 +62,7 @@ export class RemoteSpeechClient {
           "Content-Type": "application/json",
           "X-FreeReader-Context": JSON.stringify(telemetryContext()),
         },
-        body: JSON.stringify({
-          texts: items.map((item) => normalizeForSpeech(item.text, item.isHeading)),
-          speed: speechSpeed,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
       if (!response.ok) {

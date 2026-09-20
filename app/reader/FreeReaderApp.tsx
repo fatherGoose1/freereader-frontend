@@ -17,7 +17,7 @@ import {
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
-import { narrationRoute, synthesize, synthesizeBatch, UnsupportedMobileLanguageError, type NarrationRoute } from "./narration";
+import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
@@ -149,7 +149,6 @@ function folderPath(folder: LibraryFolder, folders: LibraryFolder[]): string {
 }
 
 export default function FreeReaderApp() {
-  const [isMobile, setIsMobile] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -213,7 +212,6 @@ export default function FreeReaderApp() {
   const lastPositionSave = useRef(0);
 
   useEffect(() => {
-    setIsMobile(usesMobileSpeech());
     recordTelemetry("app_launch");
     posthog.capture("app_launched");
     Promise.all([listBooks(), listFolders()])
@@ -486,7 +484,7 @@ export default function FreeReaderApp() {
 
   function audioCacheKey(book: LibraryBook, index: number, route: NarrationRoute): string {
     const language = languageForBook(book);
-    const quality = route.provider === "WASM" ? `${steps}-` : "";
+    const quality = route.model.startsWith("supertonic") ? `${steps}-` : "";
     const model = `${TEXT_PIPELINE_REVISION}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
@@ -496,7 +494,6 @@ export default function FreeReaderApp() {
       if (!isCurrent()) throw new SpeechCancelledError("Playback position changed");
     };
     checkRequest();
-    if (usesMobileSpeech() && languageForBook(book) !== "en") throw new UnsupportedMobileLanguageError();
     const language = languageForBook(book);
     const route = await narrationRoute(voice, language);
     checkRequest();
@@ -642,10 +639,6 @@ export default function FreeReaderApp() {
   async function playBlock(book: LibraryBook, index: number, offset = 0, offsetFromEnd = false) {
     const audio = audioRef.current;
     if (!audio || !book.blocks[index]) return;
-    if (usesMobileSpeech() && languageForBook(book) !== "en") {
-      setMessage("FreeReader narrates English only on mobile.");
-      return;
-    }
     const requestedAt = performance.now();
     resetPlayback();
     const epoch = playbackEpoch.current;
@@ -736,10 +729,6 @@ export default function FreeReaderApp() {
   async function togglePlayback() {
     const book = selectedRef.current;
     if (!book) return;
-    if (usesMobileSpeech() && languageForBook(book) !== "en") {
-      setMessage("FreeReader narrates English only on mobile.");
-      return;
-    }
     if (usesMobileSpeech()) void requestPersistentStorage().catch(() => false);
     const current = currentAudio();
     if (wantsPlayback.current) {
@@ -934,8 +923,6 @@ export default function FreeReaderApp() {
     }
   }
 
-  const mobileEnglishOnly = isMobile && narrationLanguage !== "en";
-
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
     const chapter = selected.chapters[block?.chapterIndex] ?? selected.chapters[0];
@@ -944,12 +931,6 @@ export default function FreeReaderApp() {
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
     return (
       <main className={styles.appShell}>
-        {mobileEnglishOnly && (
-          <div className={styles.mobileWarning} role="alert">
-            <strong>FreeReader narrates English only on mobile.</strong>
-            <p>This document looks like another language, so audio is unavailable on this device. Open it on a desktop to listen.</p>
-          </div>
-        )}
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
@@ -1013,7 +994,7 @@ export default function FreeReaderApp() {
             <div className={styles.transport}>
               <button className={styles.chapterSkip} onClick={() => moveChapter(-1)} disabled={!selected.chapters.some((item) => item.startBlockIndex < selected.position.blockIndex)} title="Previous chapter">|&lt;</button>
               <button onClick={() => seek(-10)} title="Back 10 seconds"><strong>-10</strong><span>seconds</span></button>
-              <button className={styles.playButton} onClick={togglePlayback} disabled={mobileEnglishOnly} title={mobileEnglishOnly ? "English narration only on mobile" : undefined}>{playing ? "Pause" : "Listen"}</button>
+              <button className={styles.playButton} onClick={togglePlayback}>{playing ? "Pause" : "Listen"}</button>
               <button onClick={() => seek(10)} title="Forward 10 seconds"><strong>+10</strong><span>seconds</span></button>
               <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter">&gt;|</button>
             </div>

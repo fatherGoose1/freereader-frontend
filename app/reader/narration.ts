@@ -12,13 +12,6 @@ type Clients = {
 };
 export type NarrationRoute = { model: string; voice: NarratorVoice; provider: "WASM" | "Server"; mobile: boolean };
 
-export class UnsupportedMobileLanguageError extends Error {
-  constructor() {
-    super("FreeReader offers English narration only on mobile.");
-    this.name = "UnsupportedMobileLanguageError";
-  }
-}
-
 export class NarrationRouter {
   private active?: "supertonic" | "remote";
   private tail: Promise<unknown> = Promise.resolve();
@@ -39,13 +32,13 @@ export class NarrationRouter {
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
     const selected = voiceForLanguage(voice, language);
-    // English is synthesized by the backend on every device; on-device Kokoro is retired.
-    if (speechEngine(language) === "kokoro") {
-      return { model: "kokoro-7m-fp32-server-v1", voice: selected, provider: "Server", mobile: this.mobile };
-    }
-    // Non-English still runs Supertonic locally, but only desktop ships that path.
-    if (this.mobile) throw new UnsupportedMobileLanguageError();
-    return { model: "supertonic-fp32-wasm-v2", voice: selected, provider: "WASM", mobile: false };
+    // Every language is synthesized by the backend: English with Kokoro, every other
+    // supported language with server-side Supertonic. The on-device WASM path is
+    // retired, so `provider` is always "Server" and mobile narrates every language.
+    const model = speechEngine(language) === "kokoro"
+      ? "kokoro-7m-fp32-server-v1"
+      : "supertonic-3-fp32-server-v1";
+    return { model, voice: selected, provider: "Server", mobile: this.mobile };
   }
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
@@ -64,8 +57,12 @@ export class NarrationRouter {
       if (route.provider === "Server") {
         if (this.active === "supertonic") this.clients.supertonic.stop();
         this.active = "remote";
-        result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status);
+        result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status,
+          route.model.startsWith("supertonic")
+            ? { language, voice: String(route.voice), steps }
+            : undefined);
       } else {
+        // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
         this.active = "supertonic";
         if (!isSupertonicVoice(route.voice)) throw new Error("Non-English narration requires a Supertonic voice.");
@@ -98,8 +95,12 @@ export class NarrationRouter {
         if (this.active === "supertonic") this.clients.supertonic.stop();
         this.active = "remote";
         parts = await this.clients.remote.synthesizeBatch(
-          texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status);
+          texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status,
+          route.model.startsWith("supertonic")
+            ? { language, voice: String(route.voice), steps }
+            : undefined);
       } else {
+        // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
         this.active = "supertonic";
         if (!isSupertonicVoice(route.voice)) throw new Error("Non-English narration requires a Supertonic voice.");
