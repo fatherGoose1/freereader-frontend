@@ -11,6 +11,15 @@ export const ISO6393_TO_LANGUAGE: Record<string, SpeechLanguage> = {
 };
 
 export function detectSpeechLanguage(text: string): SpeechLanguage | undefined {
-  const detected = franc(text.slice(0, 20_000), { minLength: 50, only: Object.keys(ISO6393_TO_LANGUAGE) });
-  return ISO6393_TO_LANGUAGE[detected];
+  const sample = text.trim().slice(0, 20_000);
+  const languages = Object.keys(ISO6393_TO_LANGUAGE);
+  const detected = franc(sample, { minLength: 50, only: languages });
+  if (detected !== "und") return ISO6393_TO_LANGUAGE[detected];
+
+  // franc deliberately rejects short samples. Retry distinctive Unicode text so
+  // greetings such as "dzień dobry" and short non-Latin phrases do not default to English.
+  const hasDistinctiveLetters = Array.from(sample.normalize("NFD")).some((character) =>
+    (character.codePointAt(0) ?? 0) > 0x7f && /[\p{L}\p{M}]/u.test(character));
+  if (!hasDistinctiveLetters) return undefined;
+  return ISO6393_TO_LANGUAGE[franc(sample, { minLength: 3, only: languages })];
 }
