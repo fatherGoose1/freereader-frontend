@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as {
     text?: unknown; texts?: unknown; speed?: unknown;
-    language?: unknown; voice?: unknown; steps?: unknown;
+    language?: unknown; detectLanguage?: unknown; voice?: unknown; steps?: unknown;
   } | null;
   if (!body || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -20,8 +20,12 @@ export async function POST(request: Request) {
   const upstreamBody: Record<string, unknown> = texts
     ? { texts, speed: body.speed }
     : { text: single, speed: body.speed };
-  // Non-English narration forwards the reader's language, voice, and quality to Supertonic.
-  if (typeof body.language === "string" && body.language !== "en") {
+  // The landing demo lets the backend detect short text; reader narration supplies its language.
+  if (body.detectLanguage === true) {
+    upstreamBody.detect_language = true;
+    if (typeof body.voice === "string") upstreamBody.voice = body.voice;
+    if (typeof body.steps === "number") upstreamBody.steps = body.steps;
+  } else if (typeof body.language === "string" && body.language !== "en") {
     upstreamBody.language = body.language;
     if (typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
@@ -68,7 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_speech_response" }, { status: 502 });
   }
   const headers = new Headers({ "Content-Type": contentType, "Cache-Control": "private, no-store" });
-  for (const name of ["X-Audio-Duration", "X-Audio-Durations", "X-Generation-Seconds", "X-TTS-Model"]) {
+  for (const name of ["X-Audio-Duration", "X-Audio-Durations", "X-Generation-Seconds", "X-TTS-Model", "X-TTS-Language"]) {
     const value = response.headers.get(name);
     if (value) headers.set(name, value);
   }

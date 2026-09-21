@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SPEECH_LANGUAGES } from "../languages";
-import { detectSpeechLanguage } from "../reader/languageDetection";
 
 const DEFAULT_TEXT =
   "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.";
@@ -49,7 +48,6 @@ export default function HeroDemo() {
       setStatus({ kind: "error", message: "Type a few words to hear the demo." });
       return;
     }
-    const language = detectSpeechLanguage(trimmed) ?? "en";
     stop();
     setStatus(null);
     setNeedsManualPlay(false);
@@ -63,11 +61,9 @@ export default function HeroDemo() {
         body: JSON.stringify({
           text: trimmed,
           speed: 1,
-          ...(language !== "en" && {
-            language,
-            voice: SUPERTONIC_VOICE,
-            steps: SUPERTONIC_STEPS,
-          }),
+          detectLanguage: true,
+          voice: SUPERTONIC_VOICE,
+          steps: SUPERTONIC_STEPS,
         }),
         signal: controller.signal,
       });

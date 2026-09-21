@@ -21,14 +21,14 @@ test("landing demo lists supported languages and routes non-English speech", asy
   expect(names).toHaveLength(31);
   expect(names).toEqual([...names].sort((first, second) => first.localeCompare(second, "en")));
 
-  await page.getByLabel("Sample text to narrate").fill("dzień dobry!");
+  await page.getByLabel("Sample text to narrate").fill("Bonjour l'ami");
   const requestPromise = page.waitForRequest("**/api/tts");
   await page.getByRole("button", { name: "Play the sample" }).click();
   const body = (await requestPromise).postDataJSON();
   expect(body).toEqual({
-    text: "dzień dobry!",
+    text: "Bonjour l'ami",
     speed: 1,
-    language: "pl",
+    detectLanguage: true,
     voice: "M3",
     steps: 12,
   });
