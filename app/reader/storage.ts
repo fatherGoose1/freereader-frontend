@@ -1,7 +1,8 @@
 import type { AccountSyncRecord, LibraryBook, LibraryFolder } from "./types";
+import type { NarrationProject } from "../narration/model";
 
 const DATABASE = "freereader-web";
-const VERSION = 5;
+const VERSION = 6;
 const STORAGE_TIMEOUT_MS = 5_000;
 const failedOPFSWrites = new Set<string>();
 
@@ -63,6 +64,9 @@ function openDatabase(signal?: AbortSignal): Promise<IDBDatabase> {
       if (!request.result.objectStoreNames.contains("sync")) {
         request.result.createObjectStore("sync", { keyPath: "key" });
       }
+      if (!request.result.objectStoreNames.contains("narrations")) {
+        request.result.createObjectStore("narrations", { keyPath: "id" });
+      }
       if (event.oldVersion < 3) {
         const cursorRequest = request.transaction!.objectStore("books").openCursor();
         cursorRequest.onsuccess = () => {
@@ -97,7 +101,7 @@ function openDatabase(signal?: AbortSignal): Promise<IDBDatabase> {
 }
 
 async function transact<T>(
-  storeName: "books" | "assets" | "folders" | "sync",
+  storeName: "books" | "assets" | "folders" | "sync" | "narrations",
   mode: IDBTransactionMode,
   operation: (store: IDBObjectStore) => IDBRequest<T>,
   signal?: AbortSignal,
@@ -187,6 +191,26 @@ export function saveAccountSyncRecord(record: AccountSyncRecord): Promise<IDBVal
 
 export function removeAccountSyncRecord(key: string): Promise<undefined> {
   return transact("sync", "readwrite", (store) => store.delete(key));
+}
+
+export async function listNarrationProjects(): Promise<NarrationProject[]> {
+  const projects = await transact<NarrationProject[]>("narrations", "readonly", (store) => store.getAll());
+  return projects
+    .map((project) => ({
+      ...project,
+      segments: project.segments.map((segment) => segment.status === "generating"
+        ? { ...segment, status: "idle" as const }
+        : segment),
+    }))
+    .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt));
+}
+
+export function saveNarrationProject(project: NarrationProject): Promise<IDBValidKey> {
+  return transact("narrations", "readwrite", (store) => store.put(project));
+}
+
+export function removeNarrationProject(id: string): Promise<undefined> {
+  return transact("narrations", "readwrite", (store) => store.delete(id));
 }
 
 async function fileHandle(path: string, create: boolean, signal: AbortSignal): Promise<FileSystemFileHandle> {

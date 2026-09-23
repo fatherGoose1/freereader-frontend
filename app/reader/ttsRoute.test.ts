@@ -47,3 +47,39 @@ test("landing speech requests delegate language detection to the backend", async
   assert.equal(response.headers.get("X-TTS-Language"), "fr");
   assert.equal(fetch.mock.callCount(), 1);
 });
+
+test("English narration forwards the selected Kokoro voice", async (t) => {
+  const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
+  const originalBackend = process.env.KOKO_BACKEND_URL;
+  process.env.FREEREADER_TTS_API_TOKEN = "test-token";
+  process.env.KOKO_BACKEND_URL = "https://speech.example";
+  t.after(() => {
+    if (originalToken === undefined) delete process.env.FREEREADER_TTS_API_TOKEN;
+    else process.env.FREEREADER_TTS_API_TOKEN = originalToken;
+    if (originalBackend === undefined) delete process.env.KOKO_BACKEND_URL;
+    else process.env.KOKO_BACKEND_URL = originalBackend;
+  });
+  const fetch = t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      text: "A creator voice preview.",
+      speed: 1.1,
+      voice: "af_bella",
+      steps: 12,
+    });
+    return new Response(new Uint8Array([1]), { headers: { "Content-Type": "audio/mp4" } });
+  });
+  const response = await POST(new Request("http://localhost/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: "A creator voice preview.",
+      speed: 1.1,
+      language: "en",
+      voice: "af_bella",
+      steps: 12,
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  assert.equal(fetch.mock.callCount(), 1);
+});

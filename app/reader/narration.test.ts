@@ -38,13 +38,13 @@ for (const mobile of [false, true]) {
     const result = await speakEnglish();
     assert.equal(result.route.model, "kokoro-7m-fp32-server-v1");
     assert.equal(result.route.provider, "Server");
-    assert.deepEqual(calls, ["remote:Hello"]);
+    assert.deepEqual(calls, ["remote:Hello:en:af_heart:4"]);
   });
 
   test(`${mobile ? "mobile" : "desktop"}: a backend failure surfaces without a local model`, async () => {
     const { calls, speakEnglish } = setup(mobile, new Error("speech_unavailable"));
     await assert.rejects(speakEnglish(), /speech_unavailable/);
-    assert.deepEqual(calls, ["remote:Hello"]);
+    assert.deepEqual(calls, ["remote:Hello:en:af_heart:4"]);
   });
 }
 
@@ -54,7 +54,7 @@ test("batches English passages into a single remote call", async () => {
     ["One", "Two", "Three"], [false, false, true], "af_heart", 4, undefined, 1, "en");
   assert.equal(parts.length, 3);
   assert.equal(route.provider, "Server");
-  assert.deepEqual(calls, ["remote-batch:One|Two|Three"]);
+  assert.deepEqual(calls, ["remote-batch:One|Two|Three:en:af_heart:4"]);
 });
 
 for (const mobile of [false, true]) {
@@ -72,7 +72,7 @@ test("switching from English to non-English keeps every request on the server", 
   await speakEnglish();
   await speakFrench();
   await speakEnglish();
-  assert.deepEqual(calls, ["remote:Hello", "remote:Bonjour:fr:M3:4", "remote:Hello"]);
+  assert.deepEqual(calls, ["remote:Hello:en:af_heart:4", "remote:Bonjour:fr:M3:4", "remote:Hello:en:af_heart:4"]);
 });
 
 function deferred<T>() {

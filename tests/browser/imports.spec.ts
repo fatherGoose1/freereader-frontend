@@ -10,7 +10,7 @@ async function setup(page: Page) {
     events.push(...route.request().postDataJSON().events);
     return route.fulfill({ status: 202, json: {} });
   });
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   return events;
 }
 
@@ -18,6 +18,12 @@ async function openWebLink(page: Page) {
   const mobileAdd = page.getByRole("button", { name: "Add reading", exact: true });
   if (await mobileAdd.isVisible()) await mobileAdd.click();
   await page.locator("button:visible").filter({ hasText: "Web Link" }).click();
+}
+
+async function openInsertText(page: Page) {
+  const mobileAdd = page.getByRole("button", { name: "Add reading", exact: true });
+  if (await mobileAdd.isVisible()) await mobileAdd.click();
+  await page.locator("button:visible").filter({ hasText: "Insert Text" }).click();
 }
 
 test("Markdown URL imports preserve their format through conversion and storage", async ({ page }) => {
@@ -32,6 +38,18 @@ test("Markdown URL imports preserve their format through conversion and storage"
   await expect(page.getByRole("button", { name: /^md A Markdown Chapter/ })).toBeVisible();
   await expect.poll(() => events.find((event) => event.event_name === "import_completed")?.properties).toMatchObject({
     source: "url", file_type: "md",
+  });
+});
+
+test("inserted text reports a completed paste import", async ({ page }) => {
+  const events = await setup(page);
+  await openInsertText(page);
+  await page.getByLabel("Title (optional)").fill("Pasted Notes");
+  await page.getByLabel("Text", { exact: true }).fill(prose);
+  await page.getByRole("button", { name: "Add to Library", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^txt Pasted Notes/ })).toBeVisible();
+  await expect.poll(() => events.find((event) => event.event_name === "import_completed")?.properties).toMatchObject({
+    source: "paste", file_type: "txt",
   });
 });
 

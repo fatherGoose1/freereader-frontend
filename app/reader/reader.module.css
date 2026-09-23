@@ -635,3 +635,403 @@
   .catalogList img,
   .miniCover { width: 34px; height: 47px; }
 }
+
+/* Professional redesign */
+.appShell {
+  --app-blue: #245f52;
+  --app-indigo: #153d35;
+  --app-teal: #4f8c7c;
+  --app-orange: #d97855;
+  --app-label: #172520;
+  --app-secondary: #6b7672;
+  --app-fill: #e1e4de;
+  --app-grouped: #efede5;
+  min-height: 100vh;
+  padding-bottom: 92px;
+  background:
+    radial-gradient(circle at 80% 0, rgba(101, 145, 131, .1), transparent 30%),
+    var(--app-grouped);
+  font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.appShell button:focus-visible,
+.appShell input:focus-visible,
+.appShell textarea:focus-visible,
+.appShell select:focus-visible {
+  outline: 3px solid rgba(55, 108, 95, .22);
+  outline-offset: 2px;
+}
+
+.libraryHero {
+  min-height: 84px;
+  padding: 14px max(28px, calc((100vw - 1280px) / 2));
+  background: rgba(250, 249, 244, .9);
+  border-block: 0;
+  border-bottom: 1px solid rgba(23, 37, 32, .11);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8);
+  backdrop-filter: blur(20px) saturate(130%);
+}
+.libraryBrand { display: flex; align-items: center; gap: 13px; }
+.appMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 42px;
+  height: 42px;
+  color: #d9f99d;
+  background: #12342d;
+  border-radius: 12px;
+  box-shadow: 0 7px 16px rgba(18, 52, 45, .15);
+}
+.appMark i { display: block; width: 3px; background: currentColor; border-radius: 99px; }
+.appMark i:nth-child(1) { height: 10px; }
+.appMark i:nth-child(2) { height: 21px; }
+.appMark i:nth-child(3) { height: 15px; }
+.appMark i:nth-child(4) { height: 7px; }
+.libraryHero h1 { margin-top: 2px; font-size: 25px; font-weight: 700; letter-spacing: -.035em; }
+.kicker,
+.sidebarLabel { color: #76827e; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.actions { gap: 9px; }
+.actions button,
+.primaryAction,
+.modalActions button,
+.catalogSearch button,
+.catalogList button {
+  min-height: 38px;
+  padding: 9px 14px;
+  color: var(--app-blue);
+  background: #fff;
+  border: 1px solid rgba(23, 37, 32, .14);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 750;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.actions button:hover,
+.modalActions button:hover,
+.catalogSearch button:hover,
+.catalogList button:hover { border-color: rgba(36, 95, 82, .42); }
+.primaryAction {
+  color: #15332d !important;
+  background: #c8f75e !important;
+  border-color: #c8f75e !important;
+  box-shadow: 0 5px 14px rgba(125, 164, 41, .16);
+}
+.primaryAction:hover { background: #d4ff76 !important; transform: translateY(-1px); }
+
+.libraryLayout {
+  grid-template-columns: 228px minmax(0, 1fr);
+  gap: 38px;
+  width: min(1280px, calc(100% - 48px));
+  padding: 34px 0 90px;
+}
+.librarySidebar {
+  gap: 3px;
+  padding: 12px;
+  color: #fff;
+  background: #12342d;
+  border: 1px solid rgba(18, 52, 45, .2);
+  border-radius: 14px;
+  box-shadow: 0 16px 38px rgba(18, 52, 45, .13);
+}
+.librarySidebar .sidebarLabel { padding: 16px 11px 7px; color: rgba(255, 255, 255, .38); }
+.librarySidebar .sidebarSectionHeader .sidebarLabel { padding-bottom: 7px; }
+.librarySidebar .sidebarSectionHeader button { min-height: 0; padding: 2px 8px; color: #d9f99d; }
+.librarySidebar button,
+.librarySidebar label {
+  min-height: 39px;
+  padding: 8px 10px;
+  color: rgba(255, 255, 255, .72);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.librarySidebar button:hover,
+.librarySidebar label:hover { color: #fff; background: rgba(255, 255, 255, .08); }
+.librarySidebar .sidebarActive { color: #17372f; background: #d9f99d; font-weight: 750; }
+.librarySidebar button strong { color: currentColor; opacity: .55; font-size: 10px; }
+.sidebarIcon {
+  width: 23px;
+  height: 23px;
+  color: #18372f;
+  background: #c8f75e;
+  border-radius: 6px;
+  font-size: 9px;
+}
+.folderSidebarIcon { width: 23px; height: 16px; margin-block: 3px; background: #79a79a; }
+.librarySidebar label .sidebarIcon { background: #d9f99d; }
+.librarySidebar button:nth-of-type(2) .sidebarIcon { color: #fff; background: #d97855; }
+.librarySidebar button:nth-of-type(3) .sidebarIcon { color: #fff; background: #4f8c7c; }
+
+.shelfHeading { min-height: 71px; padding: 3px 2px 18px; }
+.shelfHeading h2 { font-size: 29px; font-weight: 650; letter-spacing: -.035em; }
+.shelfHeading > div:first-child > span { color: #7a8581; font-size: 11px; }
+.newFolderButton,
+.backFolder { color: var(--app-blue); font-size: 11px; font-weight: 750; }
+.localNote { color: #78837f; font-size: 10px; }
+.localDot { width: 6px; height: 6px; background: #5a9a75; box-shadow: 0 0 0 3px rgba(90,154,117,.12); }
+.cloudDot { background: #4c897b; }
+
+.libraryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.bookCard {
+  min-width: 0;
+  min-height: 245px;
+  margin: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .8);
+  border: 1px solid rgba(23, 37, 32, .11);
+  border-radius: 13px;
+  box-shadow: 0 1px 2px rgba(18, 52, 45, .03);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.bookCard:last-child { border-bottom: 1px solid rgba(23, 37, 32, .11); }
+.bookCard:hover {
+  border-color: rgba(36, 95, 82, .28);
+  box-shadow: 0 12px 28px rgba(18, 52, 45, .09);
+  transform: translateY(-2px);
+}
+.bookOpen {
+  min-height: 245px;
+  padding: 24px 20px 20px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 17px;
+}
+.cover,
+.coverImage { width: 68px; height: 92px; border-radius: 6px; }
+.cover {
+  background: linear-gradient(145deg, #497a6f, #153d35);
+  box-shadow: inset 6px 0 rgba(0, 0, 0, .09), 0 7px 15px rgba(21,61,53,.18);
+}
+.cover1 { background: linear-gradient(145deg, #7f728f, #4b405c); }
+.cover2 { background: linear-gradient(145deg, #60968d, #285e55); }
+.cover3 { background: linear-gradient(145deg, #dc8a6b, #9d5138); }
+.bookInfo { width: 100%; gap: 4px; }
+.bookInfo > strong { padding-right: 18px; font-size: 14px; }
+.bookInfo > span { font-size: 10px; }
+.bookOpen:hover .bookInfo > strong { color: var(--app-blue); }
+.bookProgress { width: 100%; height: 3px; margin-top: 8px; }
+.bookProgress i { background: var(--app-blue); }
+.moreButton {
+  top: 15px;
+  right: 13px;
+  width: 30px;
+  height: 30px;
+  padding: 0 0 7px;
+  color: var(--app-blue);
+  background: #e8eee9;
+  transform: none;
+}
+.moreButton:hover { background: #dae6de; }
+
+.folderGrid { gap: 12px; }
+.folderCard {
+  padding: 15px 16px;
+  background: rgba(255,255,255,.75);
+  border-color: rgba(23,37,32,.11);
+  border-radius: 11px;
+}
+.folderCard:hover { border-color: rgba(36,95,82,.38); box-shadow: 0 8px 20px rgba(18,52,45,.06); }
+.folderGlyph { background: #477f71; }
+.folderCard i { color: #8b9692; }
+
+.emptyLibrary {
+  position: relative;
+  min-height: 470px;
+  overflow: hidden;
+  padding: 118px 30px;
+  background: rgba(255,255,255,.68);
+  border: 1px solid rgba(23,37,32,.11);
+  border-radius: 14px;
+}
+.emptyLibrary::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: .5;
+  background-image: linear-gradient(rgba(21,61,53,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(21,61,53,.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black, transparent 65%);
+}
+.emptyLibrary > * { position: relative; }
+.emptyBooks { color: var(--app-blue); font-size: 45px; letter-spacing: -8px; }
+.emptyLibrary h2 { margin-top: 20px; font-size: 23px; letter-spacing: -.03em; }
+.emptyLibrary p { max-width: 470px; color: #74807b; line-height: 1.65; }
+
+.addMenu {
+  width: 300px;
+  padding: 7px;
+  border-color: rgba(23,37,32,.13);
+  border-radius: 12px;
+  box-shadow: 0 22px 55px rgba(18,52,45,.18);
+}
+.addMenu button { min-height: 54px; border-radius: 8px; }
+.addMenu button:hover { background: #edf1ec; }
+.addChoiceIcon,
+.libraryGlyph { background: var(--app-blue); border-radius: 8px; }
+.gutenbergChoiceIcon { background: var(--app-orange); }
+.webChoiceIcon { background: var(--app-teal); }
+.pasteChoiceIcon, .pasteSidebarIcon { background: #6f6685; }
+
+/* Reading view */
+.readerTop {
+  min-height: 64px;
+  padding: 8px max(18px, calc((100vw - 1320px) / 2));
+  background: rgba(250,249,244,.92);
+  border-block: 0;
+  border-bottom: 1px solid rgba(23,37,32,.11);
+  backdrop-filter: blur(20px) saturate(130%);
+}
+.textButton,
+.chapterPicker { display: inline-flex; align-items: center; gap: 7px; color: var(--app-blue); font-size: 12px; font-weight: 750; }
+.readerTitle strong { font-size: 13px; }
+.readerTitle span { color: #78837f; font-size: 10px; }
+.readerGrid {
+  grid-template-columns: 238px minmax(0, 800px);
+  gap: 30px;
+  width: min(1160px, calc(100% - 40px));
+  padding: 34px 0 210px;
+}
+.chapterRail {
+  max-height: calc(100vh - 130px);
+  padding: 12px;
+  background: #14372f;
+  border: 0;
+  border-radius: 13px;
+  box-shadow: 0 16px 38px rgba(18,52,45,.12);
+}
+.chapterRail .kicker { color: rgba(255,255,255,.4); }
+.chapterRail button { padding: 10px; color: rgba(255,255,255,.55); border-radius: 7px; line-height: 1.35; }
+.chapterRail button:hover { color: #fff; background: rgba(255,255,255,.07); }
+.chapterRail .activeChapter { color: #19372f; background: #d9f99d; font-weight: 750; }
+.readingPane {
+  min-height: 720px;
+  padding: 58px clamp(36px, 7vw, 86px) 80px;
+  background: #fffef9;
+  border-color: rgba(23,37,32,.1);
+  border-radius: 8px;
+  box-shadow: 0 15px 40px rgba(18,52,45,.07);
+}
+.readingText { max-width: 640px; }
+.readingText h2 { margin: 28px 0 20px; font-family: "Iowan Old Style", Georgia, serif; font-size: 32px; font-weight: 600; }
+.readingText p { color: #26352f; font-family: "Iowan Old Style", Georgia, serif; font-size: 20px; line-height: 1.72; }
+.readingText p:hover { background: rgba(55,108,95,.055); }
+.readingText .currentBlock { color: var(--app-blue); background: rgba(55,108,95,.065); }
+.pageMarker { right: 18px; bottom: 16px; color: #7b8682; background: #f0eee7; }
+
+.player {
+  right: 16px;
+  bottom: 14px;
+  left: 16px;
+  padding: 11px max(22px, calc((100vw - 860px) / 2)) 13px;
+  color: #fff;
+  background: rgba(13,43,37,.96);
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(8,31,26,.25);
+  backdrop-filter: blur(20px) saturate(120%);
+}
+.progressMeta { color: rgba(255,255,255,.48); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+.progressSlider { accent-color: #c8f75e; }
+.transport button { color: rgba(255,255,255,.88); }
+.transport button span { color: rgba(255,255,255,.42); }
+.transport .chapterSkip { color: #d9f99d; }
+.transport .playButton { min-width: 104px; color: #17372f; background: #c8f75e; border-radius: 9px; font-weight: 800; }
+.speed { color: rgba(255,255,255,.5); }
+.speed select { color: #17372f; background: #eff3eb; border: 0; }
+.statusLine { color: rgba(255,255,255,.5); }
+
+/* Dialogs and settings */
+.modalBackdrop { background: rgba(7,24,20,.58); backdrop-filter: blur(7px); }
+.modal {
+  padding: 29px;
+  background: #f3f1ea;
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(7,24,20,.3);
+}
+.modal h2 { font-size: 25px; letter-spacing: -.035em; }
+.modal p { color: #6c7773; line-height: 1.6; }
+.fieldLabel input,
+.catalogSearch input,
+.pasteArea {
+  background: #fff;
+  border-color: rgba(23,37,32,.15);
+  border-radius: 8px;
+}
+.accountSummary,
+.folderChoices,
+.catalogList { border-color: rgba(23,37,32,.11); border-radius: 10px; }
+.accountActions button { color: var(--app-blue); border-color: rgba(23,37,32,.14); border-radius: 8px; }
+.catalogHeader { background: linear-gradient(135deg, rgba(217,120,85,.15), rgba(55,108,95,.11)); }
+.categoryChips .categoryActive { background: var(--app-blue); }
+.voicePopover {
+  top: 78px;
+  right: 20px;
+  padding: 14px;
+  background: #efede6;
+  border-color: rgba(23,37,32,.13);
+  border-radius: 13px;
+  box-shadow: 0 22px 60px rgba(18,52,45,.2);
+}
+.settingsRow,
+.qualitySetting { border: 1px solid rgba(23,37,32,.08); border-radius: 9px; }
+.settingsRow select { color: var(--app-blue); }
+.waveIcon { background: var(--app-teal); }
+.qualitySetting .qualityActive { color: #fff; background: var(--app-blue); box-shadow: none; }
+.modelProgress { border-color: rgba(23,37,32,.14); box-shadow: 0 18px 45px rgba(18,52,45,.16); }
+
+@media (max-width: 1100px) {
+  .libraryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .libraryHero { position: sticky; padding-inline: 24px; }
+  .libraryLayout { grid-template-columns: 1fr; }
+  .librarySidebar { display: none; }
+  .readerGrid { grid-template-columns: 1fr; width: min(800px, calc(100% - 32px)); }
+  .chapterRail { display: none; }
+}
+
+@media (max-width: 640px) {
+  .appShell { padding-bottom: 112px; }
+  .libraryHero { align-items: center; min-height: 72px; padding: 12px 14px; }
+  .appMark { width: 37px; height: 37px; border-radius: 10px; }
+  .libraryHero h1 { font-size: 21px; }
+  .libraryHero .kicker { display: none; }
+  .actions .accountButton { max-width: 105px; padding: 7px 9px; font-size: 10px; }
+  .actions .mobileAddButton { width: 37px; height: 37px; color: #17372f; background: #c8f75e; border-color: #c8f75e; border-radius: 9px; }
+  .libraryLayout { width: calc(100% - 24px); padding-top: 22px; }
+  .shelfHeading { display: block; }
+  .shelfStatus { align-items: flex-start; margin-top: 10px; }
+  .localNote { text-align: left; }
+  .libraryGrid { grid-template-columns: 1fr; gap: 9px; }
+  .bookCard { min-height: 118px; }
+  .bookOpen { min-height: 118px; padding: 15px 50px 15px 14px; flex-direction: row; align-items: center; gap: 14px; }
+  .cover, .coverImage { width: 55px; height: 76px; }
+  .moreButton { top: 13px; right: 10px; }
+  .emptyLibrary { min-height: 400px; padding: 92px 22px; }
+  .readerTop { grid-template-columns: .8fr minmax(110px, 1.5fr) 1fr; padding-inline: 10px; }
+  .readerTools { gap: 6px; }
+  .readerGrid { width: 100%; padding: 0 0 220px; }
+  .readingPane { min-height: calc(100vh - 170px); padding: 34px 24px 70px; border-inline: 0; border-radius: 0; box-shadow: none; }
+  .readingText h2 { font-size: 27px; }
+  .readingText p { font-size: 19px; line-height: 1.68; }
+  .player { right: 8px; bottom: 8px; left: 8px; padding-inline: 12px; }
+  .playerRow { grid-template-columns: 1fr; }
+  .transport { grid-column: 1; gap: 8px; }
+  .transport .playButton { min-width: 88px; }
+  .speed { grid-column: 1; justify-self: center; }
+  .modelProgress { right: 10px; bottom: 178px; }
+  .voicePopover { top: 72px; right: 8px; width: calc(100% - 16px); }
+  .modal { padding: 23px; }
+}

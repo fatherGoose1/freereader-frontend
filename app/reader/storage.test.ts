@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { afterEach, before, beforeEach, type TestContext } from "node:test";
 import { indexedDB as fakeIndexedDB, IDBObjectStore as FakeIDBObjectStore } from "fake-indexeddb";
 import type { LibraryBook } from "./types";
+import type { NarrationProject } from "../narration/model";
 
 const DATABASE = "freereader-web";
 let listBooks: typeof import("./storage").listBooks;
@@ -10,11 +11,16 @@ let getLocalFile: typeof import("./storage").getLocalFile;
 let putLocalFile: typeof import("./storage").putLocalFile;
 let saveAudio: typeof import("./storage").saveAudio;
 let saveBook: typeof import("./storage").saveBook;
+let saveNarrationProject: typeof import("./storage").saveNarrationProject;
+let listNarrationProjects: typeof import("./storage").listNarrationProjects;
 let streamToLocalFile: typeof import("./storage").streamToLocalFile;
 
 before(async () => {
   Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
-  ({ getAudio, getLocalFile, putLocalFile, listBooks, saveAudio, saveBook, streamToLocalFile } = await import("./storage"));
+  ({
+    getAudio, getLocalFile, putLocalFile, listBooks, listNarrationProjects,
+    saveAudio, saveBook, saveNarrationProject, streamToLocalFile,
+  } = await import("./storage"));
 });
 
 const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
@@ -84,7 +90,7 @@ test("removes legacy source blobs without deleting reusable assets", async () =>
   await createVersionThreeDatabase();
   await listBooks();
 
-  const database = await requestResult(fakeIndexedDB.open(DATABASE, 5));
+  const database = await requestResult(fakeIndexedDB.open(DATABASE, 6));
   const transaction = database.transaction("assets", "readonly");
   const keys = await requestResult(transaction.objectStore("assets").getAllKeys());
   database.close();
@@ -135,6 +141,35 @@ test("stores cover artwork without passing Blob data to IndexedDB", async () => 
   assert.deepEqual({ ...stored, cover: undefined }, { ...book, cover: undefined });
   assert.equal(stored.cover?.type, "image/jpeg");
   assert.equal(await stored.cover?.text(), "cover bytes");
+});
+
+test("stores narration metadata and resets interrupted generation after reload", async () => {
+  const now = new Date().toISOString();
+  const project: NarrationProject = {
+    id: "narration-project",
+    title: "Video essay",
+    defaultVoice: "af_bella",
+    globalSpeed: 1.1,
+    createdAt: now,
+    updatedAt: now,
+    segments: [{
+      id: "intro",
+      text: "Welcome to the channel.",
+      voiceId: null,
+      modelId: null,
+      speedOverride: null,
+      pronunciations: [],
+      pauseAfterMs: 600,
+      status: "generating",
+      audio: null,
+    }],
+  };
+
+  await saveNarrationProject(project);
+  const stored = (await listNarrationProjects()).find((item) => item.id === project.id);
+  assert.equal(stored?.title, "Video essay");
+  assert.equal(stored?.segments[0].pauseAfterMs, 600);
+  assert.equal(stored?.segments[0].status, "idle");
 });
 
 test("stores small audio as bytes but leaves models uncached when OPFS is unavailable", async (t) => {
@@ -190,7 +225,7 @@ for (const available of [false, true]) {
 }
 
 test("skips legacy model IDB reads while preserving legacy audio Blobs", async (t) => {
-  const database = await requestResult(fakeIndexedDB.open(DATABASE, 5));
+  const database = await requestResult(fakeIndexedDB.open(DATABASE, 6));
   const transaction = database.transaction("assets", "readwrite");
   transaction.objectStore("assets").put({ bytes: new Uint8Array([1]), type: "application/octet-stream" }, "models/legacy/model.onnx");
   await new Promise<void>((resolve) => { transaction.oncomplete = () => resolve(); });

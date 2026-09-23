@@ -69,7 +69,7 @@ test("plays the first chunk before look-ahead and reports backend generation tim
   });
   const requests: Array<{ text?: string; texts?: string[]; speed: number }> = [];
   await mockSpeech(page, { delayMs: 150, onRequest: (body) => requests.push(body) });
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await importText(page, "Pipeline.txt", ENGLISH.repeat(30));
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentTime > 0 || !audio.paused), { timeout: 60_000 }).toBe(true);
@@ -91,7 +91,7 @@ test("English narration uses the backend and never downloads an on-device model"
   let speechRequests = 0;
   page.context().on("request", (request) => { if (request.url().endsWith(".onnx")) onnx.push(request.url()); });
   await mockSpeech(page, { onRequest: () => { speechRequests += 1; } });
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await importText(page, "English route.txt", ENGLISH.repeat(4));
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("en");
@@ -111,7 +111,7 @@ test("mobile blocks non-English narration with a warning instead of generating a
   const onnx: string[] = [];
   page.context().on("request", (request) => { if (request.url().endsWith(".onnx")) onnx.push(request.url()); });
   await mockSpeech(page, { onRequest: () => { speechRequests += 1; } });
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await importText(page, "Spanish route.txt", SPANISH);
   await expect(page.getByRole("alert").filter({ hasText: "English only on mobile" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Listen", exact: true })).toBeDisabled();
@@ -124,7 +124,7 @@ test("mobile blocks non-English narration with a warning instead of generating a
 
 test("mobile preserves default English and non-English voice selections", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith("desktop"));
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await importText(page, "English route.txt", ENGLISH);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("en");
@@ -149,7 +149,7 @@ test("desktop synthesizes non-English text with Supertonic 3 WASM", async ({ pag
     if (request.url().includes(".onnx")) onnx.push(request.url());
     if (request.url().includes("ort-wasm")) runtime.push(request.url());
   });
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await importText(page, "Desktop smoke.txt", SPANISH);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("es");

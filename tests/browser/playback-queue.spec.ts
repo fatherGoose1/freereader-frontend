@@ -76,7 +76,7 @@ async function setup(page: Page, held: number[] = [], delayFirstPlay = false) {
       }
     } as unknown as typeof Worker;
   }, { held, delayFirstPlay });
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await page.locator('input[type="file"]').first().setInputFiles({ name: "Queue.html", mimeType: "text/html",
     buffer: Buffer.from(`<html lang="en"><title>Queue</title><body>${Array.from({ length: 12 }, (_, index) => `<p>${section(index)}</p>`).join("")}</body></html>`) });
   await page.getByRole("button", { name: /^html Queue/ }).click();

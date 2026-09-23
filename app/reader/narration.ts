@@ -58,9 +58,7 @@ export class NarrationRouter {
         if (this.active === "supertonic") this.clients.supertonic.stop();
         this.active = "remote";
         result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status,
-          route.model.startsWith("supertonic")
-            ? { language, voice: String(route.voice), steps }
-            : undefined);
+          { language, voice: String(route.voice), steps });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
@@ -96,9 +94,7 @@ export class NarrationRouter {
         this.active = "remote";
         parts = await this.clients.remote.synthesizeBatch(
           texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status,
-          route.model.startsWith("supertonic")
-            ? { language, voice: String(route.voice), steps }
-            : undefined);
+          { language, voice: String(route.voice), steps });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();

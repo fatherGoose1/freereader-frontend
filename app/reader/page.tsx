@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import FreeReaderApp from "./FreeReaderApp";
+import ModeChooser from "./ModeChooser";
 
 export const metadata: Metadata = {
-  title: "Web App",
-  description: "A private, local-first document reader and audiobook player.",
+  title: "Choose a Workspace",
+  description: "Create an audiobook from reading material or polished narration from a YouTube script.",
 };
 
 export default function ReaderPage() {
-  return <FreeReaderApp />;
+  return <div className="reader-app-route"><ModeChooser /></div>;
 }

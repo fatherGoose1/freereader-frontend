@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     upstreamBody.detect_language = true;
     if (typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
-  } else if (typeof body.language === "string" && body.language !== "en") {
-    upstreamBody.language = body.language;
+  } else {
+    if (typeof body.language === "string" && body.language !== "en") upstreamBody.language = body.language;
     if (typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }

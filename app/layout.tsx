@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s — FreeReader",
   },
   description:
-    "FreeReader turns EPUBs, PDFs, and text files into audiobooks on your iPhone, for free.",
+    "Turn books, documents, and articles into natural speech. FreeReader supports six file formats and 31 languages, free.",
   icons: { icon: "/icon.svg" },
   manifest: "/manifest.webmanifest",
 };
@@ -21,30 +21,34 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <header className="wrap">
-          <nav aria-label="Main navigation">
+        <header className="site-header">
+          <nav className="wrap" aria-label="Main navigation">
             <Link className="brand" href="/">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/icon.svg" alt="" />
               <span>FreeReader</span>
             </Link>
             <div className="links">
+              <Link href="/#how">How it works</Link>
+              <Link href="/#trust">Privacy</Link>
               <Link href="/support">Support</Link>
-              <Link href="/terms">Terms</Link>
-              <Link href="/privacy">Privacy</Link>
+              <Link className="nav-cta" href="/reader">Open app <span>↗</span></Link>
             </div>
           </nav>
         </header>
         {children}
         <footer>
-          <div className="wrap footer-row">
-            <span>© 2026 FreeReader. Read freely.</span>
-            <div className="links">
-              <Link href="/support">Support</Link>
-              <Link href="/terms">Terms of Service</Link>
-              <Link href="/privacy">Privacy Policy</Link>
+          <div className="wrap footer-main">
+            <div className="footer-brand">
+              <Link className="brand" href="/"><img src="/icon.svg" alt="" /><span>FreeReader</span></Link>
+              <p>A focused place to read, listen, and keep going.</p>
+            </div>
+            <div className="footer-links">
+              <div><strong>Product</strong><Link href="/#how">How it works</Link><Link href="/reader">Web app</Link><Link href="/#languages-heading">Languages</Link></div>
+              <div><strong>Company</strong><Link href="/support">Support</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></div>
             </div>
           </div>
+          <div className="wrap footer-bottom"><span>© 2026 Prism Labs LLC</span><span>Designed for reading without limits.</span></div>
         </footer>
       </body>
     </html>

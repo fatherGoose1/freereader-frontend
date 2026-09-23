@@ -6,8 +6,7 @@ import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
-// Server-side Supertonic accepts the reader's chosen voice and quality; Kokoro ignores these.
-type SupertonicOptions = { language: string; voice: string; steps: number };
+type SpeechOptions = { language: string; voice: string; steps: number };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (typeof payload?.error === "string" && payload.error) return payload.error;
@@ -34,13 +33,13 @@ export class RemoteSpeechClient {
   }
 
   async synthesize(text: string, speechSpeed: number, isHeading = false, status?: TtsStatus,
-    options?: SupertonicOptions): Promise<SpeechResult> {
+    options?: SpeechOptions): Promise<SpeechResult> {
     const [result] = await this.synthesizeBatch([{ text, isHeading }], speechSpeed, status, options);
     return result;
   }
 
   async synthesizeBatch(items: BatchItem[], speechSpeed: number, status?: TtsStatus,
-    options?: SupertonicOptions): Promise<SpeechResult[]> {
+    options?: SpeechOptions): Promise<SpeechResult[]> {
     this.stop();
     const controller = new AbortController();
     this.controller = controller;
@@ -54,10 +53,10 @@ export class RemoteSpeechClient {
         : normalizeForSpeech(item.text, item.isHeading)),
       speed: speechSpeed,
     };
-    if (supertonic) {
+    if (options) {
       body.language = language;
-      body.voice = options?.voice;
-      body.steps = options?.steps;
+      body.voice = options.voice;
+      body.steps = options.steps;
     }
     try {
       const response = await fetch("/api/tts", {

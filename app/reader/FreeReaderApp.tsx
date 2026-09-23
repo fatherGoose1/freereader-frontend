@@ -1138,7 +1138,7 @@ export default function FreeReaderApp() {
           resetPlayback();
         }} />
         <div className={styles.readerTop}>
-          <button className={styles.textButton} onClick={() => { resetPlayback(); selectedRef.current = null; setSelected(null); }}>Library</button>
+          <button className={styles.textButton} onClick={() => { resetPlayback(); selectedRef.current = null; setSelected(null); }}><span aria-hidden="true">←</span> Library</button>
           <div className={styles.readerTitle}><strong>{selected.title}</strong><span>{chapter?.title ?? "Beginning"}</span></div>
           <div className={styles.readerTools}>
             {selected.chapters.length > 0 && (
@@ -1259,9 +1259,12 @@ export default function FreeReaderApp() {
     ?? "Google account";
 
   return (
-    <main className={styles.appShell}>
+      <main className={styles.appShell}>
       <header className={styles.libraryHero}>
-        <div><span className={styles.kicker}>{session ? "Synced library" : "On this device"}</span><h1>FreeReader</h1></div>
+        <div className={styles.libraryBrand}>
+          <span className={styles.appMark} aria-hidden="true"><i /><i /><i /><i /></span>
+          <div><span className={styles.kicker}>{session ? "Synced library" : "On this device"}</span><h1>FreeReader</h1></div>
+        </div>
         <div className={styles.actions}>
           <button
             className={styles.accountButton}

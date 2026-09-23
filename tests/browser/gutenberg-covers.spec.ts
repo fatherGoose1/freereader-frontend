@@ -13,7 +13,7 @@ test("Free Books covers load through the same-origin proxy under COEP", async ({
     if (/gutenberg\.org\/cache\/epub\/.*cover/i.test(request.url())) externalCovers.push(request.url());
   });
 
-  await page.goto("/reader");
+  await page.goto("/reader/audiobooks");
   await page.getByRole("button", { name: /Free Books/ }).first().click();
   const covers = page.locator("main article img");
   await expect.poll(() => covers.count(), { timeout: 30_000 }).toBeGreaterThan(0);
