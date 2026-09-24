@@ -37,6 +37,7 @@ export interface NarrationProject {
   title: string;
   defaultVoice: NarratorVoice;
   globalSpeed: number;
+  pronunciations: PronunciationOverride[];
   segments: NarrationSegment[];
   createdAt: string;
   updatedAt: string;
@@ -115,6 +116,7 @@ export function createNarrationProject(): NarrationProject {
     title: "Untitled narration",
     defaultVoice: "af_heart",
     globalSpeed: 1,
+    pronunciations: [],
     segments: [],
     createdAt: now,
     updatedAt: now,
@@ -125,7 +127,7 @@ function escapeExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function applyPronunciations(text: string, overrides: PronunciationOverride[]): string {
+export function pronunciationParts(text: string, overrides: PronunciationOverride[]): Array<{ written: string; pronunciation?: string }> {
   const replacements = new Map<string, string>();
   for (const override of overrides) {
     const phrase = override.phrase.trim();
@@ -133,9 +135,34 @@ export function applyPronunciations(text: string, overrides: PronunciationOverri
     if (phrase && pronunciation) replacements.set(phrase.toLocaleLowerCase(), pronunciation);
   }
   const phrases = [...replacements.keys()].sort((first, second) => second.length - first.length);
-  if (!phrases.length) return text;
+  if (!phrases.length) return [{ written: text }];
   const expression = new RegExp(phrases.map(escapeExpression).join("|"), "giu");
-  return text.replace(expression, (match) => replacements.get(match.toLocaleLowerCase()) ?? match);
+  const parts: Array<{ written: string; pronunciation?: string }> = [];
+  let cursor = 0;
+  for (const match of text.matchAll(expression)) {
+    if (match.index > cursor) parts.push({ written: text.slice(cursor, match.index) });
+    parts.push({ written: match[0], pronunciation: replacements.get(match[0].toLocaleLowerCase()) });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) parts.push({ written: text.slice(cursor) });
+  return parts.length ? parts : [{ written: text }];
+}
+
+export function applyPronunciations(text: string, overrides: PronunciationOverride[]): string {
+  return pronunciationParts(text, overrides).map(({ written, pronunciation }) => pronunciation ?? written).join("");
+}
+
+export function effectivePronunciations(segment: NarrationSegment, global: PronunciationOverride[] = []): PronunciationOverride[] {
+  return [...global, ...segment.pronunciations];
+}
+
+export function updateGlobalPronunciations(project: NarrationProject, pronunciations: PronunciationOverride[]): NarrationProject {
+  return {
+    ...project,
+    pronunciations,
+    segments: project.segments.map((segment) => spokenText(segment, project.pronunciations) === spokenText(segment, pronunciations)
+      ? segment : invalidateSegment(segment)),
+  };
 }
 
 export function invalidateSegment(segment: NarrationSegment): NarrationSegment {
@@ -180,6 +207,6 @@ export function mergePassages(segments: NarrationSegment[], firstId: string): Na
   return [...segments.slice(0, index), merged, ...segments.slice(index + 2)];
 }
 
-export function spokenText(segment: NarrationSegment): string {
-  return applyPronunciations(segment.text, segment.pronunciations);
+export function spokenText(segment: NarrationSegment, global: PronunciationOverride[] = []): string {
+  return applyPronunciations(segment.text, effectivePronunciations(segment, global));
 }

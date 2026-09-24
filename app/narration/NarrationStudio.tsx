@@ -8,15 +8,18 @@ import { isKokoroVoice, supertonicVoices, type NarratorVoice } from "../reader/v
 import { exportVoiceover } from "./exportAudio";
 import {
   createNarrationProject,
+  effectivePronunciations,
   invalidateSegment,
   mergePassages,
   movePassage,
+  pronunciationParts,
   segmentScript,
   splitPassage,
   spokenText,
   type NarrationProject,
   type NarrationSegment,
   type PronunciationOverride,
+  updateGlobalPronunciations,
 } from "./model";
 import styles from "./narration.module.css";
 
@@ -46,7 +49,7 @@ function voiceOptions() {
 function inputKey(segment: NarrationSegment, project: NarrationProject): string {
   return JSON.stringify({
     text: segment.text,
-    pronunciations: segment.pronunciations,
+    spoken: spokenText(segment, project.pronunciations),
     voice: segment.voiceId ?? project.defaultVoice,
     speed: segment.speedOverride ?? project.globalSpeed,
   });
@@ -64,17 +67,22 @@ function formatTime(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-function PassageEditor({ segment, index, active, onFocus, onChange, onSelection, editorRef }: {
+function PassageEditor({ segment, index, active, rules, onFocus, onChange, onSelection, editorRef }: {
   segment: NarrationSegment;
   index: number;
   active: boolean;
+  rules: PronunciationOverride[];
   onFocus: () => void;
   onChange: (text: string) => void;
   onSelection: (text: string) => void;
   editorRef: (node: HTMLTextAreaElement | null) => void;
 }) {
   const field = useRef<HTMLTextAreaElement | null>(null);
+  const [editing, setEditing] = useState(false);
+  const parts = pronunciationParts(segment.text, rules);
+  const showAnnotations = !editing && parts.some(({ pronunciation }) => pronunciation !== undefined);
   useEffect(() => {
+    if (showAnnotations) return;
     const resize = () => {
       if (!field.current) return;
       field.current.style.height = "auto";
@@ -84,7 +92,9 @@ function PassageEditor({ segment, index, active, onFocus, onChange, onSelection,
     const observer = new ResizeObserver(resize);
     if (field.current) observer.observe(field.current);
     return () => observer.disconnect();
-  }, [segment.text]);
+  }, [segment.text, showAnnotations]);
+
+  useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
 
   function captureSelection() {
     const input = field.current;
@@ -93,18 +103,27 @@ function PassageEditor({ segment, index, active, onFocus, onChange, onSelection,
     }
   }
 
-  return <textarea
+  return <>
+    {showAnnotations && <button type="button" className={styles.annotatedPassage} aria-label={`Edit passage ${index + 1}`} aria-current={active ? "true" : undefined} onClick={() => { onFocus(); setEditing(true); }}>
+      {parts.map((part, position) => part.pronunciation
+        ? <ruby key={position} className={styles.pronunciationMark}><s>{part.written}</s><rt>{part.pronunciation}</rt></ruby>
+        : <span key={position}>{part.written}</span>)}
+    </button>}
+    <textarea
     ref={(node) => { field.current = node; editorRef(node); }}
     aria-label={`Passage ${index + 1} text`}
     aria-current={active ? "true" : undefined}
+    hidden={showAnnotations}
     value={segment.text}
     rows={2}
-    onFocus={onFocus}
+    onFocus={() => { setEditing(true); onFocus(); }}
+    onBlur={() => setEditing(false)}
     onChange={(event) => onChange(event.target.value)}
     onSelect={captureSelection}
     onMouseUp={captureSelection}
     onKeyUp={captureSelection}
-  />;
+    />
+  </>;
 }
 
 export default function NarrationStudio() {
@@ -120,6 +139,8 @@ export default function NarrationStudio() {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [phrase, setPhrase] = useState("");
   const [pronunciation, setPronunciation] = useState("");
+  const [globalPhrase, setGlobalPhrase] = useState("");
+  const [globalPronunciation, setGlobalPronunciation] = useState("");
   const [pronunciationOpen, setPronunciationOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [playerTime, setPlayerTime] = useState(0);
@@ -200,6 +221,7 @@ export default function NarrationStudio() {
         const saved = projects[0] ?? createNarrationProject();
         const restored = {
           ...saved,
+          pronunciations: saved.pronunciations ?? [],
           defaultVoice: supportedStudioVoice(saved.defaultVoice),
           segments: saved.segments.map((segment) => ({
             ...segment,
@@ -327,7 +349,7 @@ export default function NarrationStudio() {
     setGenerationMessage(`Generating passage ${currentProject.segments.findIndex((item) => item.id === id) + 1}…`);
     try {
       const result = await synthesize(
-        spokenText(segment), voice, 12,
+        spokenText(segment, currentProject.pronunciations), voice, 12,
         (message) => setGenerationMessage(message), false, speed, "en",
       );
       const latestProject = projectRef.current;
@@ -437,6 +459,30 @@ export default function NarrationStudio() {
     setPhrase("");
     setPronunciation("");
     setPronunciationOpen(false);
+  }
+
+  function changeGlobalPronunciations(rules: PronunciationOverride[]) {
+    const current = projectRef.current;
+    if (playingIdRef.current) {
+      const passage = current.segments.find((item) => item.id === playingIdRef.current);
+      if (passage && spokenText(passage, current.pronunciations) !== spokenText(passage, rules)) stopPlayback();
+    }
+    commit((project) => updateGlobalPronunciations(project, rules));
+    setGenerationMessage("Pronunciation updated. Regenerate affected passages to hear the change.");
+  }
+
+  function addGlobalPronunciation(event: React.FormEvent) {
+    event.preventDefault();
+    const written = globalPhrase.trim();
+    const spoken = globalPronunciation.trim();
+    if (!written || !spoken) return;
+    const rules = projectRef.current.pronunciations;
+    const existing = rules.find((rule) => rule.phrase.toLocaleLowerCase() === written.toLocaleLowerCase());
+    changeGlobalPronunciations(existing
+      ? rules.map((rule) => rule.id === existing.id ? { ...rule, phrase: written, pronunciation: spoken } : rule)
+      : [...rules, { id: randomId(), phrase: written, pronunciation: spoken }]);
+    setGlobalPhrase("");
+    setGlobalPronunciation("");
   }
 
   function handleAudioEnded() {
@@ -578,6 +624,24 @@ export default function NarrationStudio() {
         </button>
       </section>
 
+      <section className={styles.globalPronunciations} aria-label="Global pronunciations">
+        <div className={styles.globalPronunciationsInner}>
+          <strong>Global pronunciation</strong>
+          <form onSubmit={addGlobalPronunciation}>
+            <label>Search text<input value={globalPhrase} onChange={(event) => setGlobalPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
+            <label>Say it like<input value={globalPronunciation} onChange={(event) => setGlobalPronunciation(event.target.value)} placeholder="e.g. sequel" /></label>
+            <button disabled={!globalPhrase.trim() || !globalPronunciation.trim()}>Save pronunciation</button>
+          </form>
+          {project.pronunciations.length > 0 && <ul aria-label="Global pronunciation rules">
+            {project.pronunciations.map((rule) => <li key={rule.id}>
+              <ruby className={styles.pronunciationMark}><s>{rule.phrase}</s><rt>{rule.pronunciation}</rt></ruby>
+              <button aria-label={`Remove global pronunciation for ${rule.phrase}`} onClick={() => changeGlobalPronunciations(projectRef.current.pronunciations.filter((item) => item.id !== rule.id))}>×</button>
+            </li>)}
+          </ul>}
+          <small>Used throughout the script. A pronunciation set on one passage takes priority there.</small>
+        </div>
+      </section>
+
       <section className={styles.workspace} aria-label="Script workspace">
         {!project.segments.length ? <div className={styles.emptyEditor}>
           <h1>Start with your script</h1>
@@ -612,6 +676,7 @@ export default function NarrationStudio() {
                   segment={segment}
                   index={index}
                   active={active}
+                  rules={effectivePronunciations(segment, project.pronunciations)}
                   editorRef={(node) => { if (node) editors.current.set(segment.id, node); else editors.current.delete(segment.id); }}
                   onFocus={() => { if (selectedId !== segment.id) { setSelectedId(segment.id); setPhrase(""); setPronunciationOpen(false); } }}
                   onSelection={(text) => { if (text) setPhrase(text); }}

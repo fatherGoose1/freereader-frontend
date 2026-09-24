@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyPronunciations, invalidateSegment, mergePassages, movePassage, segmentScript, splitPassage } from "../narration/model";
+import { applyPronunciations, createNarrationProject, invalidateSegment, mergePassages, movePassage, pronunciationParts, segmentScript, spokenText, splitPassage, updateGlobalPronunciations } from "../narration/model";
 
 test("scripts become editable paragraph segments with bounded long passages", () => {
   let id = 0;
@@ -22,6 +22,28 @@ test("pronunciation overrides replace every occurrence without changing visible 
 
   assert.equal(applyPronunciations(segment.text, overrides), "sequel works with sequel Server.");
   assert.equal(segment.text, "SQL works with SQL Server.");
+});
+
+test("global pronunciations annotate all matching text while passage rules take priority", () => {
+  const [local, shared, other] = segmentScript("SQL opens the story.\n\nSQL appears again.\n\nNothing to replace.");
+  local.pronunciations = [{ id: "local", phrase: "SQL", pronunciation: "structured query" }];
+  const project = createNarrationProject();
+  project.segments = [local, shared, other].map((segment) => ({ ...segment, status: "ready" as const,
+    audio: { path: segment.id, mimeType: "audio/mp4", duration: 2, generatedAt: "now", voice: "af_heart" as const, model: "kokoro", speed: 1 },
+  }));
+  const first = updateGlobalPronunciations(project, [{ id: "global", phrase: "SQL", pronunciation: "sequel" }]);
+  assert.equal(spokenText(first.segments[0], first.pronunciations), "structured query opens the story.");
+  assert.equal(spokenText(first.segments[1], first.pronunciations), "sequel appears again.");
+  assert.equal(first.segments[0].status, "ready");
+  assert.equal(first.segments[1].needsRegeneration, true);
+  assert.equal(first.segments[2].status, "ready");
+  assert.deepEqual(pronunciationParts("SQL appears again.", first.pronunciations)[0], { written: "SQL", pronunciation: "sequel" });
+
+  const second = updateGlobalPronunciations(first, [{ id: "global", phrase: "SQL", pronunciation: "ess queue ell" }]);
+  assert.equal(spokenText(second.segments[0], second.pronunciations), "structured query opens the story.");
+  assert.equal(spokenText(second.segments[1], second.pronunciations), "ess queue ell appears again.");
+  assert.equal(second.segments[0].audio?.path, local.id);
+  assert.equal(second.segments[2].audio?.path, other.id);
 });
 
 test("invalidating one edited segment preserves unrelated generated audio", () => {

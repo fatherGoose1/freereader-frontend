@@ -47,8 +47,8 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   });
   await page.getByRole("button", { name: /Pronunciation/ }).click();
   await expect(page.getByLabel("Written phrase")).toHaveValue("SQL");
-  await page.getByLabel("Say it like").fill("sequel");
-  await page.getByRole("button", { name: "Save pronunciation" }).click();
+  await page.getByRole("region", { name: "Script workspace" }).getByLabel("Say it like").fill("sequel");
+  await page.getByRole("region", { name: "Script workspace" }).getByRole("button", { name: "Save pronunciation" }).click();
   const projectVoice = page.getByRole("region", { name: "Voiceover settings" }).getByRole("combobox", { name: "Project voice" });
   await expect(projectVoice.locator("option")).toHaveText(["Heart", "Alex", "James", "Robert", "Sam", "Daniel", "Sarah", "Lily", "Jessica", "Olivia", "Emily"]);
   await projectVoice.selectOption("F1");
@@ -78,6 +78,7 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await expect(page.getByLabel("Passage 2 text")).toHaveAttribute("aria-current", "true");
   await page.getByRole("button", { name: "Pause voiceover" }).click();
 
+  await page.getByRole("button", { name: "Edit passage 1" }).click();
   await page.getByLabel("Passage 1 text").fill("SQL makes the edited introduction memorable.");
   await expect(page.getByText("Needs regeneration")).toHaveCount(1);
   await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
@@ -97,6 +98,57 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await expect(page.getByLabel("Passage 1 text")).toHaveValue("A fresh opening for the video.");
   await expect(page.getByLabel("Passage 2 text")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export WAV" })).toHaveCount(0);
+});
+
+test("global pronunciation annotates the script and regenerates only affected passages", async ({ page }) => {
+  const requests: Array<{ texts: string[] }> = [];
+  await page.route("**/api/tts", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" }, body: wavBody() });
+  });
+  await page.goto("/narration");
+  await page.getByLabel("YouTube script").fill("SQL opens the video.\n\nSQL returns later.\n\nNo special words here.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  const global = page.getByRole("region", { name: "Global pronunciations" });
+  await global.getByLabel("Search text").fill("SQL");
+  await global.getByLabel("Say it like").fill("sequel");
+  await global.getByRole("button", { name: "Save pronunciation" }).click();
+  await expect(global.getByRole("list", { name: "Global pronunciation rules" }).locator("rt")).toHaveText("sequel");
+  await expect(page.getByRole("button", { name: "Edit passage 2" }).locator("s")).toHaveText("SQL");
+  await expect(page.getByRole("button", { name: "Edit passage 2" }).locator("rt")).toHaveText("sequel");
+
+  await page.getByRole("button", { name: "Edit passage 1" }).click();
+  await page.getByLabel("Passage 1 text").evaluate((field: HTMLTextAreaElement) => {
+    field.focus(); field.setSelectionRange(0, 3);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  });
+  await page.getByRole("button", { name: "Pronunciation", exact: true }).click();
+  await expect(page.getByLabel("Written phrase")).toHaveValue("SQL");
+  await page.getByLabel("Say it like").last().fill("structured query");
+  await page.getByRole("button", { name: "Save pronunciation" }).last().click();
+  await expect(page.getByRole("button", { name: "Edit passage 1" }).locator("rt")).toHaveText("structured query");
+  await expect(page.getByRole("button", { name: "Edit passage 2" }).locator("rt")).toHaveText("sequel");
+
+  await page.getByRole("button", { name: "Generate voiceover" }).click();
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(3);
+  expect(requests.map((request) => request.texts[0])).toEqual([
+    "structured query opens the video.", "sequel returns later.", "No special words here.",
+  ]);
+  await global.getByLabel("Search text").fill("SQL");
+  await global.getByLabel("Say it like").fill("squeal");
+  await global.getByRole("button", { name: "Save pronunciation" }).click();
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("Needs regeneration")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Edit passage 1" }).locator("rt")).toHaveText("structured query");
+  await expect(page.getByRole("button", { name: "Edit passage 2" }).locator("rt")).toHaveText("squeal");
+  await expect(page.getByText("Saved locally")).toHaveCount(1);
+  await page.reload();
+  await expect(global.getByRole("list", { name: "Global pronunciation rules" }).locator("rt")).toHaveText("squeal");
+  await expect(page.getByRole("button", { name: "Edit passage 1" }).locator("rt")).toHaveText("structured query");
+  await global.getByRole("button", { name: "Remove global pronunciation for SQL" }).click();
+  await expect(global.getByRole("list", { name: "Global pronunciation rules" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit passage 2" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit passage 1" }).locator("rt")).toHaveText("structured query");
 });
 
 for (const { name, voices, sampleRate } of [
