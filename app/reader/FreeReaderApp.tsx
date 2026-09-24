@@ -367,7 +367,7 @@ export default function FreeReaderApp() {
     }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/reader` },
+      options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
     });
     if (error) setMessage("Google sign-in could not be started.");
   }

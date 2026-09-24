@@ -30,6 +30,7 @@ export default function RootLayout({
             </Link>
             <div className="links">
               <Link href="/#how">How it works</Link>
+              <Link href="/pricing">Pricing</Link>
               <Link href="/#trust">Privacy</Link>
               <Link href="/support">Support</Link>
               <Link className="nav-cta" href="/reader">Open app <span>↗</span></Link>
@@ -44,7 +45,7 @@ export default function RootLayout({
               <p>A focused place to read, listen, and keep going.</p>
             </div>
             <div className="footer-links">
-              <div><strong>Product</strong><Link href="/#how">How it works</Link><Link href="/reader">Web app</Link><Link href="/#languages-heading">Languages</Link></div>
+              <div><strong>Product</strong><Link href="/#how">How it works</Link><Link href="/pricing">Pricing</Link><Link href="/reader">Web app</Link><Link href="/#languages-heading">Languages</Link></div>
               <div><strong>Company</strong><Link href="/support">Support</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></div>
             </div>
           </div>
