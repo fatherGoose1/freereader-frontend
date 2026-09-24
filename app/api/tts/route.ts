@@ -39,6 +39,7 @@ export async function POST(request: Request) {
   const token = process.env.FREEREADER_TTS_API_TOKEN ?? process.env.PARRYT_API_TOKEN;
   if (!token) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
   const upstreamContext = (request.headers.get("x-freereader-context") ?? "").slice(0, 2048);
+  const upstreamUser = (request.headers.get("x-freereader-user-token") ?? "").slice(0, 4096);
 
   let response: Response;
   const controller = new AbortController();
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         ...(upstreamContext ? { "X-FreeReader-Context": upstreamContext } : {}),
+        ...(upstreamUser ? { "X-FreeReader-User-Token": upstreamUser } : {}),
       },
       body: JSON.stringify(upstreamBody),
       signal: controller.signal,

@@ -27,6 +27,8 @@ import {
   uploadCloudProgress,
 } from "./accountSync";
 import { supabaseClient } from "./supabase";
+import { initAuthToken } from "./authToken";
+import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "./usage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
@@ -180,6 +182,7 @@ export default function FreeReaderApp() {
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [syncing, setSyncing] = useState(false);
   const sessionRef = useRef<Session | null>(null);
   const syncedUser = useRef<string | undefined>(undefined);
@@ -277,6 +280,12 @@ export default function FreeReaderApp() {
   }, []);
 
   useEffect(() => {
+    initAuthToken();
+    const token = sessionRef.current?.access_token ?? null;
+    (token ? linkInstallation(token) : fetchUsage(null)).then(setUsage).catch(() => undefined);
+  }, [session?.user.id]);
+
+  useEffect(() => {
     const userId = session?.user.id;
     if (!libraryLoaded || !userId || syncedUser.current === userId) return;
     syncedUser.current = userId;
@@ -370,6 +379,11 @@ export default function FreeReaderApp() {
       options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
     });
     if (error) setMessage("Google sign-in could not be started.");
+  }
+
+  function refreshUsage() {
+    const token = sessionRef.current?.access_token ?? null;
+    fetchUsage(token).then(setUsage).catch(() => undefined);
   }
 
   async function signOut() {
@@ -1307,7 +1321,7 @@ export default function FreeReaderApp() {
           <button
             className={styles.accountButton}
             disabled={!authReady || syncing}
-            onClick={() => session ? setPanel("account") : void signIn()}
+            onClick={() => session ? (refreshUsage(), setPanel("account")) : void signIn()}
             aria-label={session ? `Account: ${accountName}` : "Sign in with Google"}
           ><ReaderIcon name="user" /><span>{session ? accountName : "Sign in"}</span></button>
           <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
@@ -1325,6 +1339,7 @@ export default function FreeReaderApp() {
               <h1>Your library</h1>
             </div>
             <span className={styles.storageBadge}><span className={styles.localDot} />{session ? "Account sync on" : "No account needed"}</span>
+            {usage && <span className={styles.storageBadge}><span className={styles.localDot} />{formatRemaining(usage.remaining_seconds)} left this month</span>}
           </div>
           {!activeFolderId && !search && continueBook && (
             <section className={styles.continueCard} aria-label="Continue reading">
@@ -1409,6 +1424,13 @@ export default function FreeReaderApp() {
             <span className={styles.kicker}>Google Account</span>
             <h2>{accountName}</h2>
             <p>{session.user.email}</p>
+            {usage && (
+              <div className={styles.accountSummary}>
+                <strong>{formatRemaining(usage.remaining_seconds)} of narration left</strong>
+                <span>{usage.plan === "pro" ? "Pro" : "Free"} plan · {formatRemaining(usage.used_seconds)} used of {formatRemaining(usage.budget_seconds)} this month</span>
+                <span className={styles.bookProgress}><i style={{ width: `${usage.budget_seconds ? Math.min(100, usage.used_seconds / usage.budget_seconds * 100) : 0}%` }} /></span>
+              </div>
+            )}
             <div className={styles.accountSummary}>
               <strong>{books.length} documents on this device; up to 100 sync</strong>
               <span>Documents are compressed before upload. Generated audio and voice models never sync.</span>

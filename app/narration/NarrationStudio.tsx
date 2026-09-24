@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
 import { englishVoices, type NarratorVoice } from "../reader/voices";
+import { initAuthToken } from "../reader/authToken";
+import { supabaseClient } from "../reader/supabase";
+import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
 import { exportVoiceover } from "./exportAudio";
 import {
   createNarrationProject,
@@ -138,6 +141,7 @@ export default function NarrationStudio() {
   const [playerTime, setPlayerTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(false);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrl = useRef<string | null>(null);
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,6 +241,21 @@ export default function NarrationStudio() {
     }, 400);
     return () => clearTimeout(timer);
   }, [loaded, project]);
+
+  useEffect(() => {
+    initAuthToken();
+    const apply = (token: string | null) => {
+      (token ? linkInstallation(token) : fetchUsage(null)).then(setUsage).catch(() => undefined);
+    };
+    const supabase = supabaseClient();
+    if (!supabase) {
+      apply(null);
+      return;
+    }
+    void supabase.auth.getSession().then(({ data }) => apply(data.session?.access_token ?? null));
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => apply(next?.access_token ?? null));
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => () => {
     generationEpoch.current += 1;
@@ -614,6 +633,7 @@ export default function NarrationStudio() {
           </select>
         </label>
         <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
+        {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
         <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
           {generatingAll && generationProgress ? <>
             <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />

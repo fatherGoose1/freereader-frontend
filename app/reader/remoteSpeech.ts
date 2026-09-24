@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import type { TtsStatus } from "./tts";
 import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
+import { currentAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
 
@@ -9,6 +10,9 @@ type BatchItem = { text: string; isHeading: boolean };
 type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic"; source?: TelemetrySource };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
+  if (payload?.error === "usage_limit_reached") {
+    return "You have used your monthly narration allowance. Upgrade to Pro for more hours.";
+  }
   if (typeof payload?.error === "string" && payload.error) return payload.error;
   if (response.status === 413) return "This passage is too long to narrate.";
   return "Speech service is unavailable. Tap Play to retry.";
@@ -60,11 +64,13 @@ export class RemoteSpeechClient {
       if (options.engine) body.engine = options.engine;
     }
     try {
+      const userToken = currentAccessToken();
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-FreeReader-Context": JSON.stringify(telemetryContext(options?.source)),
+          ...(userToken ? { "X-FreeReader-User-Token": userToken } : {}),
         },
         body: JSON.stringify(body),
         signal: controller.signal,
