@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 function wavBody(): Buffer {
-  const body = Buffer.alloc(44 + 4_800);
+  const body = Buffer.alloc(44 + 48_000);
   body.write("RIFF", 0);
   body.writeUInt32LE(body.length - 8, 4);
   body.write("WAVEfmt ", 8);
@@ -17,13 +17,13 @@ function wavBody(): Buffer {
   return body;
 }
 
-test("creator workflow segments scripts and regenerates passages independently", async ({ page }) => {
+test("creator edits a script, generates a voiceover, and refines one passage", async ({ page }) => {
   const requests: Array<Record<string, unknown>> = [];
   await page.route("**/api/tts", async (route) => {
     requests.push(route.request().postDataJSON());
     await route.fulfill({
       status: 200,
-      headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "0.1" },
+      headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" },
       body: wavBody(),
     });
   });
@@ -32,27 +32,64 @@ test("creator workflow segments scripts and regenerates passages independently",
   await expect(page.getByRole("link", { name: /Create an audiobook/ })).toBeVisible();
   await page.getByRole("link", { name: /Create YouTube narration/ }).click();
 
+  await expect(page.getByRole("heading", { name: "Start with your script" })).toBeVisible();
   await page.getByLabel("YouTube script").fill("SQL makes this introduction memorable.\n\nThe second passage keeps its own generated take.");
-  await page.getByRole("button", { name: "Create segments" }).click();
-  await expect(page.getByLabel("Segment 1 text")).toHaveValue("SQL makes this introduction memorable.");
-  await expect(page.getByLabel("Segment 2 text")).toHaveValue("The second passage keeps its own generated take.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  await expect(page.getByLabel("Passage 1 text")).toHaveValue("SQL makes this introduction memorable.");
+  await expect(page.getByLabel("Passage 2 text")).toHaveValue("The second passage keeps its own generated take.");
+  await expect(page.getByLabel("Passage options")).toHaveCount(0);
 
-  await page.getByLabel("Segment 1 text").evaluate((element: HTMLTextAreaElement) => {
+  await page.getByLabel("Passage 1 text").evaluate((element: HTMLTextAreaElement) => {
     element.focus();
     element.setSelectionRange(0, 3);
+    element.dispatchEvent(new Event("select", { bubbles: true }));
   });
-  await page.getByRole("button", { name: "Use selected text" }).click();
+  await page.getByRole("button", { name: /Pronunciation/ }).click();
+  await expect(page.getByLabel("Written phrase")).toHaveValue("SQL");
   await page.getByLabel("Say it like").fill("sequel");
-  await page.getByRole("button", { name: "Add override" }).click();
-  await page.getByRole("combobox").first().selectOption("af_bella");
-  await page.getByRole("button", { name: "Generate narration" }).click();
+  await page.getByRole("button", { name: "Save pronunciation" }).click();
+  await page.getByRole("region", { name: "Voiceover settings" }).getByRole("combobox", { name: "Project voice" }).selectOption("af_bella");
+  await page.getByRole("button", { name: "Generate voiceover" }).click();
 
-  await expect(page.getByText("Audio ready")).toHaveCount(2);
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
   expect(requests).toHaveLength(2);
   expect(requests[0]).toMatchObject({ texts: ["sequel makes this introduction memorable."], voice: "af_bella", speed: 1 });
   expect(requests[1]).toMatchObject({ texts: ["The second passage keeps its own generated take."], voice: "af_bella", speed: 1 });
+  await page.getByRole("button", { name: "Medium" }).click();
+  await expect(page.getByLabel("Project voiceover player")).toContainText("0:02");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export WAV" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("Untitled narration.wav");
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const exported = Buffer.concat(chunks);
+  expect(exported.toString("utf8", 0, 4)).toBe("RIFF");
+  expect(exported.length).toBeGreaterThan(120_000);
+  expect(exported.readUInt32LE(40)).toBe(exported.length - 44);
+  await page.getByRole("button", { name: "Play voiceover" }).click();
+  await expect(page.getByRole("button", { name: "Pause voiceover" })).toBeVisible();
+  await expect(page.getByLabel("Passage 2 text")).toHaveAttribute("aria-current", "true");
+  await page.getByRole("button", { name: "Pause voiceover" }).click();
 
-  await page.getByLabel("Segment 1 text").fill("SQL makes the edited introduction memorable.");
-  await expect(page.getByText("Not generated")).toHaveCount(1);
-  await expect(page.getByText("Audio ready")).toHaveCount(1);
+  await page.getByLabel("Passage 1 text").fill("SQL makes the edited introduction memorable.");
+  await expect(page.getByText("Needs regeneration")).toHaveCount(1);
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Export WAV" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Speed override" }).selectOption("1.2");
+  await page.getByRole("button", { name: "Regenerate", exact: true }).click();
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
+  expect(requests).toHaveLength(3);
+  expect(requests[2]).toMatchObject({ texts: ["sequel makes the edited introduction memorable."], speed: 1.2 });
+  await expect(page.getByLabel("Voiceover position")).toBeEnabled();
+  await page.getByRole("button", { name: "Replace / import script" }).click();
+  await expect(page.getByLabel("Paste a replacement script")).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles({ name: "Revised script.txt", mimeType: "text/plain", buffer: Buffer.from("A fresh opening for the video.") });
+  await expect(page.getByLabel("Paste a replacement script")).toHaveValue("A fresh opening for the video.");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Replace script", exact: true }).click();
+  await expect(page.getByLabel("Passage 1 text")).toHaveValue("A fresh opening for the video.");
+  await expect(page.getByLabel("Passage 2 text")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Export WAV" })).toHaveCount(0);
 });

@@ -6,6 +6,7 @@ import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
 import { voicesForLanguage } from "../reader/speech";
 import type { NarratorVoice } from "../reader/voices";
+import { exportVoiceover } from "./exportAudio";
 import {
   createNarrationProject,
   invalidateSegment,
@@ -37,10 +38,58 @@ function inputKey(segment: NarrationSegment, project: NarrationProject): string 
 }
 
 function statusLabel(segment: NarrationSegment): string {
-  if (segment.status === "generating") return "Generating";
-  if (segment.status === "ready") return "Audio ready";
+  if (segment.status === "generating") return "Generating…";
+  if (segment.status === "ready") return "Ready";
   if (segment.status === "error") return "Needs attention";
-  return "Not generated";
+  return segment.needsRegeneration ? "Needs regeneration" : "Not generated";
+}
+
+function formatTime(seconds: number): string {
+  const whole = Math.floor(Math.max(0, seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function PassageEditor({ segment, index, active, onFocus, onChange, onSelection, editorRef }: {
+  segment: NarrationSegment;
+  index: number;
+  active: boolean;
+  onFocus: () => void;
+  onChange: (text: string) => void;
+  onSelection: (text: string) => void;
+  editorRef: (node: HTMLTextAreaElement | null) => void;
+}) {
+  const field = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const resize = () => {
+      if (!field.current) return;
+      field.current.style.height = "auto";
+      field.current.style.height = `${field.current.scrollHeight}px`;
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    if (field.current) observer.observe(field.current);
+    return () => observer.disconnect();
+  }, [segment.text]);
+
+  function captureSelection() {
+    const input = field.current;
+    if (input && input.selectionStart !== input.selectionEnd) {
+      onSelection(input.value.slice(input.selectionStart, input.selectionEnd).trim());
+    }
+  }
+
+  return <textarea
+    ref={(node) => { field.current = node; editorRef(node); }}
+    aria-label={`Passage ${index + 1} text`}
+    aria-current={active ? "true" : undefined}
+    value={segment.text}
+    rows={2}
+    onFocus={onFocus}
+    onChange={(event) => onChange(event.target.value)}
+    onSelect={captureSelection}
+    onMouseUp={captureSelection}
+    onKeyUp={captureSelection}
+  />;
 }
 
 export default function NarrationStudio() {
@@ -52,18 +101,53 @@ export default function NarrationStudio() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState("");
   const [generatingAll, setGeneratingAll] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [phrase, setPhrase] = useState("");
   const [pronunciation, setPronunciation] = useState("");
-  const [importOpen, setImportOpen] = useState(true);
+  const [pronunciationOpen, setPronunciationOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [playerTime, setPlayerTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrl = useRef<string | null>(null);
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playbackEpoch = useRef(0);
+  const playingIdRef = useRef<string | null>(null);
+  const voicePreviewRef = useRef(false);
   const generationEpoch = useRef(0);
   const editors = useRef(new Map<string, HTMLTextAreaElement>());
 
   const selected = project.segments.find((segment) => segment.id === selectedId) ?? null;
   const readyCount = project.segments.filter((segment) => segment.status === "ready").length;
+  const hasGeneratedAudio = project.segments.some((segment) => !!segment.audio || !!segment.needsRegeneration);
+  const playable = project.segments.filter((segment) => segment.status === "ready" && segment.audio);
+  const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
+
+  useEffect(() => { setPlayerTime((time) => Math.min(time, totalDuration)); }, [totalDuration]);
+
+  function passageStart(id: string): number {
+    let elapsed = 0;
+    const ready = projectRef.current.segments.filter((segment) => segment.status === "ready" && segment.audio);
+    for (const [index, segment] of ready.entries()) {
+      if (segment.id === id) return elapsed;
+      elapsed += (segment.audio?.duration ?? 0) + (index < ready.length - 1 ? segment.pauseAfterMs / 1000 : 0);
+    }
+    return 0;
+  }
+
+  function stopPlayback() {
+    playbackEpoch.current += 1;
+    if (pauseTimer.current) clearTimeout(pauseTimer.current);
+    pauseTimer.current = null;
+    audioRef.current?.pause();
+    playingIdRef.current = null;
+    voicePreviewRef.current = false;
+    setPlayingId(null);
+    setVoicePreviewPlaying(false);
+    setIsPlaying(false);
+  }
 
   function commit(update: (current: NarrationProject) => NarrationProject) {
     setProject((current) => {
@@ -81,6 +165,7 @@ export default function NarrationStudio() {
   }
 
   function configureSegment(id: string, changes: Partial<NarrationSegment>, invalidatesAudio = true) {
+    if (invalidatesAudio && playingIdRef.current === id) stopPlayback();
     replaceSegment(id, (segment) => {
       const next = { ...segment, ...changes };
       return invalidatesAudio ? invalidateSegment(next) : next;
@@ -93,8 +178,7 @@ export default function NarrationStudio() {
         const restored = projects[0] ?? createNarrationProject();
         projectRef.current = restored;
         setProject(restored);
-        setSelectedId(restored.segments[0]?.id ?? null);
-        setImportOpen(restored.segments.length === 0);
+        setSelectedId(null);
         setSaveState("Saved locally");
       })
       .catch(() => setSaveState("Local project storage is unavailable"))
@@ -120,38 +204,70 @@ export default function NarrationStudio() {
 
   function importScript() {
     if (!scriptDraft.trim()) return;
-    if (project.segments.length && !window.confirm("Replace the current segments and their generated audio?")) return;
+    if (project.segments.length && !window.confirm("Replace this script and its generated voiceover?")) return;
+    stopPlayback();
+    generationEpoch.current += 1;
     const segments = segmentScript(scriptDraft);
     commit((current) => ({ ...current, segments }));
-    setSelectedId(segments[0]?.id ?? null);
+    setSelectedId(null);
+    setPlayerTime(0);
+    setScriptDraft("");
     setImportOpen(false);
-    setGenerationMessage(`${segments.length} editable segment${segments.length === 1 ? "" : "s"} created.`);
+    setGenerationMessage("Script ready. Edit it here, then generate your voiceover.");
+  }
+
+  async function importScriptFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 2_000_000) { setGenerationMessage("Choose a script under 2 MB."); return; }
+    try {
+      setScriptDraft(await file.text());
+      setGenerationMessage(`${file.name} is ready to add.`);
+    } catch {
+      setGenerationMessage("Could not read this script file. Try pasting its text instead.");
+    }
   }
 
   function newProject() {
     if (project.segments.length && !window.confirm("Start a new narration project? Your current project will remain saved locally.")) return;
+    stopPlayback();
+    generationEpoch.current += 1;
     const next = createNarrationProject();
     projectRef.current = next;
     setProject(next);
     setSelectedId(null);
     setScriptDraft("");
-    setImportOpen(true);
+    setImportOpen(false);
+    setPlayerTime(0);
     setGenerationMessage("");
   }
 
   function changeDefaults(changes: Partial<Pick<NarrationProject, "defaultVoice" | "globalSpeed">>) {
+    if (playingIdRef.current) {
+      const current = projectRef.current.segments.find((item) => item.id === playingIdRef.current);
+      if (current && ((changes.defaultVoice && !current.voiceId) || (changes.globalSpeed && !current.speedOverride))) stopPlayback();
+    }
     commit((current) => ({
       ...current,
       ...changes,
-      segments: current.segments.map(invalidateSegment),
+      segments: current.segments.map((segment) =>
+        (changes.defaultVoice && !segment.voiceId) || (changes.globalSpeed && !segment.speedOverride)
+          ? invalidateSegment(segment) : segment),
     }));
   }
 
-  async function playAudio(segment: NarrationSegment) {
+  async function playAudio(segment: NarrationSegment, offset = 0) {
     if (!segment.audio) return;
+    stopPlayback();
+    const epoch = playbackEpoch.current;
+    playingIdRef.current = segment.id;
+    setPlayingId(segment.id);
+    setSelectedId(segment.id);
+    setPlayerTime(passageStart(segment.id) + offset);
     const blob = await getAudio(segment.audio.path);
+    if (epoch !== playbackEpoch.current) return;
     if (!blob) {
-      configureSegment(segment.id, { status: "idle", audio: null, error: "Cached audio is missing. Generate this segment again." }, false);
+      configureSegment(segment.id, { status: "idle", audio: null, needsRegeneration: true, error: "Saved audio is missing. Regenerate this passage." }, false);
+      stopPlayback();
       return;
     }
     if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
@@ -159,20 +275,25 @@ export default function NarrationStudio() {
     const audio = audioRef.current;
     if (!audio) return;
     audio.src = audioUrl.current;
-    setPlayingId(segment.id);
-    setGenerationMessage(`Playing segment ${projectRef.current.segments.findIndex((item) => item.id === segment.id) + 1}.`);
-    await audio.play();
+    audio.currentTime = offset;
+    try {
+      await audio.play();
+      if (epoch === playbackEpoch.current) setIsPlaying(true);
+    } catch {
+      if (epoch === playbackEpoch.current) { stopPlayback(); setGenerationMessage("Playback could not start. Try again."); }
+    }
   }
 
   async function generateSegment(id: string, playWhenReady = false): Promise<boolean> {
     const currentProject = projectRef.current;
     const segment = currentProject.segments.find((item) => item.id === id);
     if (!segment?.text.trim()) return false;
+    if (playingIdRef.current === id) stopPlayback();
     const requestKey = inputKey(segment, currentProject);
     const voice = segment.voiceId ?? currentProject.defaultVoice;
     const speed = segment.speedOverride ?? currentProject.globalSpeed;
     replaceSegment(id, (item) => ({ ...item, status: "generating", error: undefined }));
-    setGenerationMessage(`Generating segment ${currentProject.segments.findIndex((item) => item.id === id) + 1}...`);
+    setGenerationMessage(`Generating passage ${currentProject.segments.findIndex((item) => item.id === id) + 1}…`);
     try {
       const result = await synthesize(
         spokenText(segment), voice, 12,
@@ -190,6 +311,7 @@ export default function NarrationStudio() {
         ...savedSegment,
         modelId: result.route.model,
         status: "ready",
+        needsRegeneration: false,
         error: undefined,
         audio: {
           path,
@@ -202,7 +324,7 @@ export default function NarrationStudio() {
         },
       };
       replaceSegment(id, () => ready);
-      setGenerationMessage(`Segment ${savedProject.segments.findIndex((item) => item.id === id) + 1} is ready.`);
+      setGenerationMessage(`Passage ${savedProject.segments.findIndex((item) => item.id === id) + 1} is ready.`);
       if (playWhenReady) {
         try {
           await playAudio(ready);
@@ -227,42 +349,49 @@ export default function NarrationStudio() {
     const epoch = ++generationEpoch.current;
     setGeneratingAll(true);
     const ids = projectRef.current.segments.map((segment) => segment.id);
+    let failed = false;
     for (const id of ids) {
       if (generationEpoch.current !== epoch) break;
       const segment = projectRef.current.segments.find((item) => item.id === id);
       if (segment?.status === "ready") continue;
-      await generateSegment(id);
+      if (!await generateSegment(id)) failed = true;
     }
-    if (generationEpoch.current === epoch) setGenerationMessage("Narration segments are ready.");
+    if (generationEpoch.current === epoch) setGenerationMessage(failed ? "Some passages need attention. Retry them here or generate again." : "Voiceover ready. Listen through and refine any passage.");
     setGeneratingAll(false);
   }
 
   async function previewVoice() {
+    stopPlayback();
+    const epoch = playbackEpoch.current;
     setGenerationMessage("Preparing voice preview...");
     try {
       const result = await synthesize(
         "This is how your FreeReader narration voice will sound.",
         project.defaultVoice, 12, (message) => setGenerationMessage(message), false, project.globalSpeed, "en",
       );
+      if (epoch !== playbackEpoch.current) return;
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
       audioUrl.current = URL.createObjectURL(result.blob);
       if (audioRef.current) {
         audioRef.current.src = audioUrl.current;
-        setPlayingId(null);
+        voicePreviewRef.current = true;
+        setVoicePreviewPlaying(true);
         await audioRef.current.play();
+        setIsPlaying(true);
       }
       setGenerationMessage("Voice preview ready.");
     } catch (error) {
+      if (epoch === playbackEpoch.current) stopPlayback();
       setGenerationMessage(error instanceof Error ? error.message : "Voice preview failed.");
     }
   }
 
-  function useSelection() {
+  function openPronunciation() {
     if (!selected) return;
     const editor = editors.current.get(selected.id);
     const selection = editor?.value.slice(editor.selectionStart, editor.selectionEnd).trim();
     if (selection) setPhrase(selection);
-    else setGenerationMessage("Select a word or phrase in the segment text first.");
+    setPronunciationOpen(true);
   }
 
   function addPronunciation(event: React.FormEvent) {
@@ -276,14 +405,67 @@ export default function NarrationStudio() {
     configureSegment(selected.id, { pronunciations: [...selected.pronunciations, override] });
     setPhrase("");
     setPronunciation("");
+    setPronunciationOpen(false);
   }
 
   function handleAudioEnded() {
-    const segment = projectRef.current.segments.find((item) => item.id === playingId);
-    setPlayingId(null);
-    if (!segment?.pauseAfterMs) return;
-    setGenerationMessage(`Pause after segment: ${segment.pauseAfterMs} ms`);
-    pauseTimer.current = setTimeout(() => setGenerationMessage("Preview complete."), segment.pauseAfterMs);
+    if (voicePreviewRef.current) { stopPlayback(); return; }
+    const id = playingIdRef.current;
+    const ready = projectRef.current.segments.filter((item) => item.status === "ready" && item.audio);
+    const index = ready.findIndex((item) => item.id === id);
+    const segment = ready[index];
+    if (!segment) { stopPlayback(); return; }
+    const next = ready[index + 1];
+    if (!next) { setPlayerTime(passageStart(segment.id) + (segment.audio?.duration ?? 0)); stopPlayback(); return; }
+    const epoch = playbackEpoch.current;
+    setPlayerTime(passageStart(segment.id) + (segment.audio?.duration ?? 0));
+    setIsPlaying(true);
+    pauseTimer.current = setTimeout(() => {
+      if (epoch === playbackEpoch.current) void playAudio(next);
+    }, segment.pauseAfterMs);
+  }
+
+  function seekProject(time: number) {
+    if (!playable.length) return;
+    const target = Math.max(0, Math.min(time, totalDuration));
+    let start = 0;
+    for (const [index, segment] of playable.entries()) {
+      const duration = segment.audio?.duration ?? 0;
+      if (target < start + duration || index === playable.length - 1) {
+        void playAudio(segment, Math.min(Math.max(target - start, 0), Math.max(0, duration - .01)));
+        return;
+      }
+      start += duration + segment.pauseAfterMs / 1000;
+      if (target < start) { void playAudio(playable[index + 1]); return; }
+    }
+  }
+
+  function toggleProjectPlayback() {
+    if (isPlaying) { stopPlayback(); return; }
+    const current = playable.find((item) => item.id === playingId);
+    if (current) void playAudio(current, Math.max(0, playerTime - passageStart(current.id)));
+    else if (playable.length) seekProject(playerTime < totalDuration ? playerTime : 0);
+  }
+
+  async function downloadVoiceover() {
+    setExporting(true);
+    setGenerationMessage("Preparing your voiceover download…");
+    try {
+      const blob = await exportVoiceover(projectRef.current.segments);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(projectRef.current.title.trim() || "voiceover").replace(/[^\w -]/g, "").trim() || "voiceover"}.wav`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setGenerationMessage("Voiceover downloaded.");
+    } catch (error) {
+      setGenerationMessage(error instanceof Error ? error.message : "Could not export this voiceover.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -305,186 +487,120 @@ export default function NarrationStudio() {
         </div>
       </header>
 
-      <section className={styles.controlbar}>
-        <div>
-          <label>Project voice
-            <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-              {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-            </select>
-          </label>
-          <button className={styles.secondaryButton} onClick={previewVoice}>Preview voice</button>
-        </div>
-        <label>Global speed
-          <select value={project.globalSpeed} onChange={(event) => changeDefaults({ globalSpeed: Number(event.target.value) })}>
-            {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
+      <section className={styles.controlbar} aria-label="Voiceover settings">
+        <label>Project voice
+          <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
+            {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
           </select>
         </label>
-        <div className={styles.projectProgress}>
-          <span>{readyCount} of {project.segments.length} segments ready</span>
-          <progress value={readyCount} max={Math.max(1, project.segments.length)} />
-        </div>
-        <button
-          className={styles.generateButton}
-          disabled={!project.segments.length || generatingAll}
-          onClick={generatingAll ? () => { generationEpoch.current += 1; setGeneratingAll(false); } : generateAll}
-        >
-          {generatingAll ? "Stop after segment" : "Generate narration"}
+        <label>Global speaking speed
+          <select value={project.globalSpeed} onChange={(event) => changeDefaults({ globalSpeed: Number(event.target.value) })}>
+            {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>) }
+          </select>
+        </label>
+        <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
+        <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? () => { generationEpoch.current += 1; setGeneratingAll(false); } : () => void generateAll()}>
+          {generatingAll ? "Stop after this passage" : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
         </button>
       </section>
 
-      <div className={styles.workspace}>
-        <aside className={styles.scriptPanel}>
-          <button className={styles.panelHeading} onClick={() => setImportOpen((open) => !open)} aria-expanded={importOpen}>
-            <span><small>Source</small>Script import</span><i>{importOpen ? "−" : "+"}</i>
-          </button>
-          {importOpen && <div className={styles.importBody}>
-            <p>Paste a long-form script. Paragraphs and long passages become editable segments.</p>
-            <textarea
-              aria-label="YouTube script"
-              placeholder="Paste your YouTube script here..."
-              value={scriptDraft}
-              onChange={(event) => setScriptDraft(event.target.value)}
-            />
-            <button className={styles.importButton} disabled={!scriptDraft.trim()} onClick={importScript}>
-              {project.segments.length ? "Replace and segment" : "Create segments"}
-            </button>
-          </div>}
-          <div className={styles.structureNote}>
-            <strong>Segment structure</strong>
-            <span>Audio and controls are saved separately for every passage, ready for future timeline and export tools.</span>
-          </div>
-        </aside>
-
-        <section className={styles.editorPanel} aria-label="Narration segments">
+      <section className={styles.workspace} aria-label="Script workspace">
+        {!project.segments.length ? <div className={styles.emptyEditor}>
+          <h1>Start with your script</h1>
+          <p>Paste your YouTube script here. You can edit it before generating and fine-tune individual passages afterward.</p>
+          <label className={styles.fileImport}>Import a text file<input type="file" accept=".txt,.md,text/plain,text/markdown" onChange={(event) => { void importScriptFile(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          <label htmlFor="script-import">YouTube script</label>
+          <textarea id="script-import" placeholder="Paste your script here…" value={scriptDraft} onChange={(event) => setScriptDraft(event.target.value)} />
+          <button className={styles.importButton} disabled={!scriptDraft.trim()} onClick={importScript}>Add script</button>
+        </div> : <div className={styles.editorPanel}>
           <div className={styles.editorHeading}>
-            <div><span>Script editor</span><strong>{project.segments.length} segments</strong></div>
-            <button onClick={() => {
-              const segment = segmentScript("New segment")[0];
-              commit((current) => ({ ...current, segments: [...current.segments, segment] }));
-              setSelectedId(segment.id);
-            }}>+ Add segment</button>
+            <div><h1>Script</h1><p>{hasGeneratedAudio ? `${readyCount} of ${project.segments.length} passages ready to listen` : "Edit your script, then generate your voiceover."}</p></div>
+            <button className={styles.secondaryButton} onClick={() => setImportOpen((open) => !open)} aria-expanded={importOpen}>Replace / import script</button>
           </div>
-          {!project.segments.length && <div className={styles.emptyEditor}>
-            <span>01</span>
-            <h1>Start with your script</h1>
-            <p>Paste it in the source panel. FreeReader will create manageable passages you can edit and generate one at a time.</p>
-            <button onClick={() => setImportOpen(true)}>Paste a script</button>
+          {importOpen && <div className={styles.replacePanel}>
+            <label htmlFor="script-replacement">Paste a replacement script</label>
+            <label className={styles.fileImport}>Import a text file<input type="file" accept=".txt,.md,text/plain,text/markdown" onChange={(event) => { void importScriptFile(event.target.files?.[0]); event.target.value = ""; }} /></label>
+            <textarea id="script-replacement" placeholder="Paste your new script here…" value={scriptDraft} onChange={(event) => setScriptDraft(event.target.value)} />
+            <div><button onClick={() => setImportOpen(false)}>Cancel</button><button className={styles.importButton} disabled={!scriptDraft.trim()} onClick={importScript}>Replace script</button></div>
+            <small>Replacing the script also replaces its generated audio.</small>
           </div>}
-          <div className={styles.segmentList}>
+          <div className={styles.document} aria-label="Editable script">
             {project.segments.map((segment, index) => {
-              const active = segment.id === selectedId;
-              const effectiveVoice = segment.voiceId ?? project.defaultVoice;
-              const voiceName = voices.find(([value]) => value === effectiveVoice)?.[1] ?? effectiveVoice;
-              return <article
-                key={segment.id}
-                className={`${styles.segmentCard} ${active ? styles.selectedCard : ""}`}
-                onClick={() => setSelectedId(segment.id)}
-              >
-                <div className={styles.segmentNumber}>{String(index + 1).padStart(2, "0")}</div>
-                <div className={styles.segmentContent}>
-                  <textarea
-                    ref={(node) => { if (node) editors.current.set(segment.id, node); else editors.current.delete(segment.id); }}
-                    aria-label={`Segment ${index + 1} text`}
-                    value={segment.text}
-                    onFocus={() => setSelectedId(segment.id)}
-                    onChange={(event) => configureSegment(segment.id, { text: event.target.value })}
-                  />
-                  <div className={styles.segmentMeta}>
-                    <span>{segment.text.trim().split(/\s+/).filter(Boolean).length} words</span>
-                    <span>{voiceName}</span>
-                    <span>{segment.speedOverride ?? project.globalSpeed}x</span>
-                    <span>{segment.pauseAfterMs} ms pause</span>
-                  </div>
-                  {segment.error && <p className={styles.segmentError} role="alert">{segment.error}</p>}
-                </div>
-                <div className={styles.segmentActions}>
-                  <span className={`${styles.status} ${styles[segment.status]}`}><i />{statusLabel(segment)}</span>
-                  <div>
-                    {segment.status === "ready" && <button onClick={(event) => { event.stopPropagation(); void playAudio(segment); }}>Play</button>}
-                    <button
-                      disabled={segment.status === "generating"}
-                      onClick={(event) => { event.stopPropagation(); setSelectedId(segment.id); void generateSegment(segment.id, true); }}
-                    >{segment.status === "ready" ? "Regenerate" : "Preview"}</button>
-                  </div>
-                </div>
-              </article>;
-            })}
-          </div>
-        </section>
-
-        <aside className={styles.inspector}>
-          <div className={styles.inspectorHeading}><span>Segment controls</span><strong>{selected ? `Segment ${project.segments.findIndex((item) => item.id === selected.id) + 1}` : "No selection"}</strong></div>
-          {!selected && <p className={styles.noSelection}>Select a segment to tune its delivery.</p>}
-          {selected && <>
-            <section className={styles.controlSection}>
-              <label>Voice
-                <select value={selected.voiceId ?? ""} onChange={(event) => configureSegment(selected.id, { voiceId: event.target.value ? event.target.value as NarratorVoice : null })}>
-                  <option value="">Project voice</option>
-                  {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-                </select>
-              </label>
-              <label>Speaking speed
-                <select value={selected.speedOverride ?? ""} onChange={(event) => configureSegment(selected.id, { speedOverride: event.target.value ? Number(event.target.value) : null })}>
-                  <option value="">Project speed ({project.globalSpeed}x)</option>
-                  {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
-                </select>
-              </label>
-              <div className={styles.modelRow}><span>Model</span><strong>{selected.modelId ?? "Automatic"}</strong></div>
-            </section>
-
-            <section className={styles.controlSection}>
-              <div className={styles.sectionTitle}><span>Pause after</span><strong>{selected.pauseAfterMs} ms</strong></div>
-              <div className={styles.pausePresets}>
-                {pauses.map(([label, milliseconds]) => <button
-                  key={label}
-                  className={selected.pauseAfterMs === milliseconds ? styles.activePreset : ""}
-                  onClick={() => configureSegment(selected.id, { pauseAfterMs: milliseconds }, false)}
-                >{label}</button>)}
-              </div>
-              <label className={styles.customPause}>Custom milliseconds
-                <input
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="50"
-                  value={selected.pauseAfterMs}
-                  onChange={(event) => configureSegment(selected.id, { pauseAfterMs: Math.max(0, Number(event.target.value)) }, false)}
+              const active = selectedId === segment.id;
+              return <div key={segment.id} className={`${styles.passage} ${active ? styles.activePassage : ""}`} onKeyDown={(event) => { if (event.key === "Escape") { setSelectedId(null); setPronunciationOpen(false); } }}>
+                <PassageEditor
+                  segment={segment}
+                  index={index}
+                  active={active}
+                  editorRef={(node) => { if (node) editors.current.set(segment.id, node); else editors.current.delete(segment.id); }}
+                  onFocus={() => { if (selectedId !== segment.id) { setSelectedId(segment.id); setPhrase(""); setPronunciationOpen(false); } }}
+                  onSelection={(text) => { if (text) setPhrase(text); }}
+                  onChange={(text) => { if (text !== segment.text) configureSegment(segment.id, { text }); }}
                 />
-              </label>
-            </section>
+                {(segment.status !== "idle" || segment.needsRegeneration) && <span className={`${styles.status} ${styles[segment.status]}`} role="status"><i />{statusLabel(segment)}</span>}
+                {segment.error && <p className={styles.passageError} role="alert">{segment.error}</p>}
+                {active && <div className={styles.passageTools} aria-label="Passage options">
+                  <div className={styles.passageToolbar}>
+                    <strong>Selected passage</strong>
+                    <button disabled={segment.status === "generating"} onClick={() => segment.status === "ready" ? void playAudio(segment) : void generateSegment(segment.id, true)}>Preview</button>
+                    <button disabled={segment.status === "generating"} onClick={() => void generateSegment(segment.id, true)}>Regenerate</button>
+                    <button onClick={openPronunciation}>Pronunciation</button>
+                    <button className={styles.closeTools} aria-label="Close passage options" onClick={() => setSelectedId(null)}>×</button>
+                  </div>
+                  <div className={styles.passageSettings}>
+                    <label>Voice override
+                      <select value={segment.voiceId ?? ""} onChange={(event) => configureSegment(segment.id, { voiceId: event.target.value ? event.target.value as NarratorVoice : null })}>
+                        <option value="">Project voice</option>
+                        {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                      </select>
+                    </label>
+                    <label>Speed override
+                      <select value={segment.speedOverride ?? ""} onChange={(event) => configureSegment(segment.id, { speedOverride: event.target.value ? Number(event.target.value) : null })}>
+                        <option value="">Project speed ({project.globalSpeed}x)</option>
+                        {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
+                      </select>
+                    </label>
+                    <fieldset className={styles.pauseControls}>
+                      <legend>Pause after</legend>
+                      <div className={styles.pausePresets}>
+                        {pauses.map(([label, ms]) => <button key={label} type="button" className={segment.pauseAfterMs === ms ? styles.activePreset : ""} aria-pressed={segment.pauseAfterMs === ms} onClick={() => configureSegment(segment.id, { pauseAfterMs: ms }, false)}>{label}</button>)}
+                        <label>Custom <input type="number" aria-label="Custom pause in milliseconds" min="0" max="10000" step="50" value={segment.pauseAfterMs} onChange={(event) => configureSegment(segment.id, { pauseAfterMs: Math.min(10000, Math.max(0, Number(event.target.value))) }, false)} /> ms</label>
+                      </div>
+                    </fieldset>
+                  </div>
+                  {pronunciationOpen && <form className={styles.pronunciationForm} onSubmit={addPronunciation}>
+                    <p>Highlight a word or phrase above to fill the written text.</p>
+                    <label>Written phrase<input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
+                    <label>Say it like<input value={pronunciation} onChange={(event) => setPronunciation(event.target.value)} placeholder="e.g. sequel" /></label>
+                    <button disabled={!phrase.trim() || !pronunciation.trim()}>Save pronunciation</button>
+                  </form>}
+                  {segment.pronunciations.length > 0 && <ul className={styles.pronunciationList} aria-label="Pronunciation overrides">
+                    {segment.pronunciations.map((override) => <li key={override.id}><span><strong>{override.phrase}</strong> → {override.pronunciation}</span><button aria-label={`Remove pronunciation for ${override.phrase}`} onClick={() => configureSegment(segment.id, { pronunciations: segment.pronunciations.filter((item) => item.id !== override.id) })}>×</button></li>)}
+                  </ul>}
+                  <button className={styles.deleteButton} onClick={() => {
+                    if (playingIdRef.current === segment.id) stopPlayback();
+                    commit((current) => ({ ...current, segments: current.segments.filter((item) => item.id !== segment.id) }));
+                    setSelectedId(null);
+                  }}>Delete passage</button>
+                </div>}
+              </div>;
+            })}
+            <button className={styles.addPassage} onClick={() => {
+              const passage = segmentScript("New passage")[0];
+              commit((current) => ({ ...current, segments: [...current.segments, passage] }));
+              setSelectedId(passage.id);
+              setTimeout(() => editors.current.get(passage.id)?.focus(), 0);
+            }}>+ Add passage</button>
+          </div>
+        </div>}
+      </section>
 
-            <section className={styles.controlSection}>
-              <div className={styles.sectionTitle}><span>Pronunciation</span><button onClick={useSelection}>Use selected text</button></div>
-              <form className={styles.pronunciationForm} onSubmit={addPronunciation}>
-                <label>Written phrase<input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
-                <label>Say it like<input value={pronunciation} onChange={(event) => setPronunciation(event.target.value)} placeholder="e.g. sequel" /></label>
-                <button disabled={!phrase.trim() || !pronunciation.trim()}>Add override</button>
-              </form>
-              {selected.pronunciations.length > 0 && <ul className={styles.pronunciationList}>
-                {selected.pronunciations.map((override) => <li key={override.id}>
-                  <span><strong>{override.phrase}</strong><i>→</i>{override.pronunciation}</span>
-                  <button aria-label={`Remove pronunciation for ${override.phrase}`} onClick={() => configureSegment(selected.id, { pronunciations: selected.pronunciations.filter((item) => item.id !== override.id) })}>×</button>
-                </li>)}
-              </ul>}
-              <small>Every matching occurrence is replaced only when speech is generated. Your visible script stays unchanged.</small>
-            </section>
-
-            <button className={styles.previewButton} disabled={selected.status === "generating"} onClick={() => void generateSegment(selected.id, true)}>
-              {selected.status === "ready" ? "Regenerate and preview" : "Generate selected preview"}
-            </button>
-            <button className={styles.deleteButton} onClick={() => {
-              const index = project.segments.findIndex((segment) => segment.id === selected.id);
-              commit((current) => ({ ...current, segments: current.segments.filter((segment) => segment.id !== selected.id) }));
-              setSelectedId(project.segments[index + 1]?.id ?? project.segments[index - 1]?.id ?? null);
-            }}>Delete segment</button>
-          </>}
-        </aside>
-      </div>
-
-      <footer className={styles.playbar}>
-        <div className={styles.nowPlaying}><i className={playingId ? styles.playingDot : ""} /><span>{generationMessage || "Select a segment to preview its narration."}</span></div>
-        <audio ref={audioRef} controls onEnded={handleAudioEnded} />
-        <span>{selected ? `${selected.pauseAfterMs} ms after selected segment` : "Segment audio is stored locally"}</span>
+      <footer className={styles.playbar} aria-label="Project voiceover player">
+        <div className={styles.nowPlaying}><strong>{project.title || "Untitled narration"}</strong><span role="status">{generationMessage || (readyCount ? "Listen through your voiceover" : "Your voiceover will play here")}</span></div>
+        <button className={styles.playerButton} disabled={!playable.length && !voicePreviewPlaying} aria-label={isPlaying ? "Pause voiceover" : "Play voiceover"} onClick={toggleProjectPlayback}>{isPlaying ? "Pause" : "Play"}</button>
+        <label className={styles.playerTimeline}><span>{formatTime(playerTime)}</span><input type="range" aria-label="Voiceover position" min="0" max={Math.max(0.01, totalDuration)} step="0.01" value={Math.min(playerTime, totalDuration)} disabled={!playable.length} onChange={(event) => seekProject(Number(event.target.value))} /><span>{formatTime(totalDuration)}</span></label>
+        {readyCount > 0 && <button className={styles.exportButton} disabled={readyCount !== project.segments.length || exporting || generatingAll} onClick={() => void downloadVoiceover()}>{exporting ? "Preparing…" : "Export WAV"}</button>}
+        <audio ref={audioRef} onTimeUpdate={(event) => { if (playingIdRef.current) setPlayerTime(passageStart(playingIdRef.current) + event.currentTarget.currentTime); }} onEnded={handleAudioEnded} onError={() => { stopPlayback(); setGenerationMessage("Audio playback failed. Try this passage again."); }} />
       </footer>
     </main>
   );

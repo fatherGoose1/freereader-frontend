@@ -48,4 +48,7 @@ test("invalidating one edited segment preserves unrelated generated audio", () =
   assert.equal(updated[0].status, "idle");
   assert.equal(updated[1].audio?.path, "narrations/project/2/audio");
   assert.equal(updated[1].status, "ready");
+  const editedReady = invalidateSegment({ ...ready, text: "Edited second passage." });
+  assert.equal(editedReady.needsRegeneration, true);
+  assert.equal(invalidateSegment(editedReady).needsRegeneration, true);
 });

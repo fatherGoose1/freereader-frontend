@@ -27,6 +27,7 @@ export interface NarrationSegment {
   pronunciations: PronunciationOverride[];
   pauseAfterMs: number;
   status: SegmentGenerationStatus;
+  needsRegeneration?: boolean;
   error?: string;
   audio: GeneratedAudioReference | null;
 }
@@ -138,7 +139,7 @@ export function applyPronunciations(text: string, overrides: PronunciationOverri
 }
 
 export function invalidateSegment(segment: NarrationSegment): NarrationSegment {
-  return { ...segment, status: "idle", error: undefined, audio: null };
+  return { ...segment, status: "idle", needsRegeneration: !!segment.audio || !!segment.needsRegeneration, error: undefined, audio: null };
 }
 
 export function spokenText(segment: NarrationSegment): string {
