@@ -38,10 +38,8 @@ function supportedStudioVoice(voice: NarratorVoice): NarratorVoice {
 
 function voiceOptions() {
   return <>
-    <optgroup label="Kokoro"><option value="af_heart">Default voice</option></optgroup>
-    <optgroup label="Supertonic">
-      {voices.map(([value, name]) => <option key={value} value={value}>{name} ({value})</option>)}
-    </optgroup>
+    <option value="af_heart">Heart</option>
+    {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
   </>;
 }
 
@@ -167,11 +165,9 @@ export default function NarrationStudio() {
   }
 
   function commit(update: (current: NarrationProject) => NarrationProject) {
-    setProject((current) => {
-      const next = { ...update(current), updatedAt: new Date().toISOString() };
-      projectRef.current = next;
-      return next;
-    });
+    const next = { ...update(projectRef.current), updatedAt: new Date().toISOString() };
+    projectRef.current = next;
+    setProject(next);
   }
 
   function replaceSegment(id: string, update: (segment: NarrationSegment) => NarrationSegment) {
@@ -187,6 +183,15 @@ export default function NarrationStudio() {
       const next = { ...segment, ...changes };
       return invalidatesAudio ? invalidateSegment(next) : next;
     });
+  }
+
+  function changePassageVoice(id: string, voiceId: NarratorVoice | null) {
+    stopPlayback();
+    generationEpoch.current += 1;
+    setGeneratingAll(false);
+    configureSegment(id, { voiceId });
+    setGenerationMessage("Generating this passage with the selected voice…");
+    void generateSegment(id, true);
   }
 
   useEffect(() => {
@@ -627,7 +632,7 @@ export default function NarrationStudio() {
                   </div>
                   <div className={styles.passageSettings}>
                     <label>Voice override
-                      <select value={segment.voiceId ?? ""} onChange={(event) => configureSegment(segment.id, { voiceId: event.target.value ? event.target.value as NarratorVoice : null })}>
+                      <select value={segment.voiceId ?? ""} onChange={(event) => changePassageVoice(segment.id, event.target.value ? event.target.value as NarratorVoice : null)}>
                         <option value="">Project voice</option>
                         {voiceOptions()}
                       </select>

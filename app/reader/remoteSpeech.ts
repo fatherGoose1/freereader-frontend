@@ -73,6 +73,10 @@ export class RemoteSpeechClient {
         const payload = await response.json().catch(() => null) as { error?: unknown } | null;
         throw new Error(unavailableMessage(response, payload));
       }
+      const reportedModel = response.headers.get("X-TTS-Model");
+      if (options?.engine === "supertonic" && reportedModel && !reportedModel.toLowerCase().includes("supertonic")) {
+        throw new Error("This speech server does not support the selected voice yet. Update the speech service and try again.");
+      }
       const generationSeconds = Number(response.headers.get("X-Generation-Seconds"));
       const generationStartedAt = performance.timeOrigin + started;
       const contentType = response.headers.get("Content-Type") ?? "";
