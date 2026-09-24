@@ -25,6 +25,10 @@ export function speechEngine(language: SpeechLanguage): SpeechEngine {
   return language === "en" ? "kokoro" : "supertonic";
 }
 
+export function speechEngineForVoice(voice: NarratorVoice, language: SpeechLanguage): SpeechEngine {
+  return language === "en" && isSupertonicVoice(voice) ? "supertonic" : speechEngine(language);
+}
+
 export function voicesForLanguage(language: SpeechLanguage): readonly (readonly [NarratorVoice, string])[] {
   return speechEngine(language) === "kokoro" ? KOKORO_VOICES : supertonicVoices();
 }

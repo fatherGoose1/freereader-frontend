@@ -1,6 +1,6 @@
 import { MobileSpeechClient, usesMobileSpeech, type SpeechResult } from "./mobileSpeech";
 import { RemoteSpeechClient } from "./remoteSpeech";
-import { speechEngine, voiceForLanguage, type SpeechLanguage } from "./speech";
+import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
 import { isSupertonicVoice } from "./voices";
@@ -31,11 +31,13 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
-    const selected = voiceForLanguage(voice, language);
+    // The reader uses voiceForLanguage to retain its existing English default.
+    // Studio can explicitly request an English Supertonic preset by voice ID.
+    const selected = language === "en" && isSupertonicVoice(voice) ? voice : voiceForLanguage(voice, language);
     // Every language is synthesized by the backend: English with Kokoro, every other
     // supported language with server-side Supertonic. The on-device WASM path is
     // retired, so `provider` is always "Server" and mobile narrates every language.
-    const model = speechEngine(language) === "kokoro"
+    const model = speechEngineForVoice(selected, language) === "kokoro"
       ? "kokoro-7m-fp32-server-v1"
       : "supertonic-3-fp32-server-v1";
     return { model, voice: selected, provider: "Server", mobile: this.mobile };
@@ -58,7 +60,8 @@ export class NarrationRouter {
         if (this.active === "supertonic") this.clients.supertonic.stop();
         this.active = "remote";
         result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status,
-          { language, voice: String(route.voice), steps });
+          { language, voice: String(route.voice), steps,
+            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}) });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
@@ -94,7 +97,8 @@ export class NarrationRouter {
         this.active = "remote";
         parts = await this.clients.remote.synthesizeBatch(
           texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status,
-          { language, voice: String(route.voice), steps });
+          { language, voice: String(route.voice), steps,
+            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}) });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();

@@ -48,13 +48,16 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await expect(page.getByLabel("Written phrase")).toHaveValue("SQL");
   await page.getByLabel("Say it like").fill("sequel");
   await page.getByRole("button", { name: "Save pronunciation" }).click();
-  await page.getByRole("region", { name: "Voiceover settings" }).getByRole("combobox", { name: "Project voice" }).selectOption("af_bella");
+  const projectVoice = page.getByRole("region", { name: "Voiceover settings" }).getByRole("combobox", { name: "Project voice" });
+  await expect(projectVoice.locator('optgroup[label="Kokoro"] option')).toHaveCount(1);
+  await expect(projectVoice.locator('optgroup[label="Supertonic"] option')).toHaveCount(10);
+  await projectVoice.selectOption("F1");
   await page.getByRole("button", { name: "Generate voiceover" }).click();
 
   await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
   expect(requests).toHaveLength(2);
-  expect(requests[0]).toMatchObject({ texts: ["sequel makes this introduction memorable."], voice: "af_bella", speed: 1 });
-  expect(requests[1]).toMatchObject({ texts: ["The second passage keeps its own generated take."], voice: "af_bella", speed: 1 });
+  expect(requests[0]).toMatchObject({ texts: ["sequel makes this introduction memorable."], voice: "F1", engine: "supertonic", speed: 1 });
+  expect(requests[1]).toMatchObject({ texts: ["The second passage keeps its own generated take."], voice: "F1", engine: "supertonic", speed: 1 });
   await page.getByRole("button", { name: "Medium" }).click();
   await expect(page.getByLabel("Project voiceover player")).toContainText("0:02");
   const downloadPromise = page.waitForEvent("download");
@@ -78,10 +81,11 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Export WAV" })).toBeDisabled();
   await page.getByRole("combobox", { name: "Speed override" }).selectOption("1.2");
+  await page.getByRole("combobox", { name: "Voice override" }).selectOption("M2");
   await page.getByRole("button", { name: "Regenerate", exact: true }).click();
   await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
   expect(requests).toHaveLength(3);
-  expect(requests[2]).toMatchObject({ texts: ["sequel makes the edited introduction memorable."], speed: 1.2 });
+  expect(requests[2]).toMatchObject({ texts: ["sequel makes the edited introduction memorable."], voice: "M2", engine: "supertonic", speed: 1.2 });
   await expect(page.getByLabel("Voiceover position")).toBeEnabled();
   await page.getByRole("button", { name: "Replace / import script" }).click();
   await expect(page.getByLabel("Paste a replacement script")).toBeVisible();
@@ -92,4 +96,39 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await expect(page.getByLabel("Passage 1 text")).toHaveValue("A fresh opening for the video.");
   await expect(page.getByLabel("Passage 2 text")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export WAV" })).toHaveCount(0);
+});
+
+test("creator can reorder, split, and merge passages without losing unrelated audio", async ({ page }) => {
+  const requests: unknown[] = [];
+  await page.route("**/api/tts", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" }, body: wavBody() });
+  });
+  await page.goto("/narration");
+  await page.getByLabel("YouTube script").fill("First sentence. Another sentence.\n\nSecond passage.\n\nThird passage.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  await page.getByRole("button", { name: "Generate voiceover" }).click();
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(3);
+
+  await page.getByRole("combobox", { name: "Move passage 1 to position" }).selectOption("3");
+  await expect(page.getByLabel("Passage 1 text")).toHaveValue("Second passage.");
+  await expect(page.getByLabel("Passage 3 text")).toHaveValue("First sentence. Another sentence.");
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(3);
+  expect(requests).toHaveLength(3);
+
+  await page.getByLabel("Passage 3 text").evaluate((field: HTMLTextAreaElement) => {
+    field.focus();
+    field.setSelectionRange("First sentence.".length, "First sentence.".length);
+  });
+  await page.getByRole("button", { name: "Split at cursor" }).click();
+  await expect(page.getByLabel("Passage 3 text")).toHaveValue("First sentence.");
+  await expect(page.getByLabel("Passage 4 text")).toHaveValue("Another sentence.");
+  await expect(page.getByText("Needs regeneration")).toHaveCount(2);
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Merge with previous" }).click();
+  await expect(page.getByLabel("Passage 3 text")).toHaveValue("First sentence. Another sentence.");
+  await expect(page.getByLabel("Passage 4 text")).toHaveCount(0);
+  await expect(page.getByText("Needs regeneration")).toHaveCount(1);
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
 });

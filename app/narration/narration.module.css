@@ -51,19 +51,23 @@
 .emptyEditor textarea { min-height: 260px; }
 .emptyEditor .importButton { justify-self: end; }
 .document { padding: 34px clamp(22px, 7vw, 85px) 45px; background: #fff; border: 1px solid var(--line); border-radius: 11px; box-shadow: 0 3px 16px rgba(15,43,37,.04); }
-.passage { position: relative; padding: 5px 0; border-bottom: 1px solid #edf0ea; }
+.passage { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: start; padding: 5px 0; border-bottom: 1px solid #edf0ea; }
 .passage:last-of-type { border-bottom: 0; }
 .passage:hover { background: #fbfcf8; }
 .passage.activePassage { background: #fafcf8; }
+.passageIndex { padding-top: 13px; }
+.passageIndex select { width: 42px; min-height: 32px; padding: 0 0 0 5px; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 5px; font-size: 12px; cursor: pointer; }
+.passageIndex select:hover, .passageIndex select:focus { color: var(--green); background: #eef3eb; border-color: var(--line); }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .passage > textarea { display: block; width: 100%; min-height: 1.6em; padding: 8px 10px; overflow: hidden; resize: none; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 5px; font-family: Georgia, "Times New Roman", serif; font-size: 18px; line-height: 1.65; }
 .passage > textarea:focus { border-color: #b4cabc; outline: none; }
-.status { display: inline-flex; align-items: center; gap: 6px; margin: 0 10px 6px; color: var(--muted); font-size: 10px; }
+.status { grid-column: 2; display: inline-flex; align-items: center; gap: 6px; margin: 0 10px 6px; color: var(--muted); font-size: 10px; }
 .status i { width: 6px; height: 6px; background: #a9b0ad; border-radius: 50%; }
 .status.ready i { background: #45a04f; }
 .status.generating i { background: #dc9c2f; }
 .status.error i { background: #c55345; }
-.passageError { margin: 2px 10px 8px; color: #a43f32; font-size: 11px; }
-.passageTools { margin: 4px 10px 13px; padding: 14px; background: #f4f7f2; border: 1px solid var(--line); border-radius: 9px; }
+.passageError { grid-column: 2; margin: 2px 10px 8px; color: #a43f32; font-size: 11px; }
+.passageTools { grid-column: 2; min-width: 0; margin: 4px 10px 13px; padding: 14px; background: #f4f7f2; border: 1px solid var(--line); border-radius: 9px; }
 .passageToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .passageToolbar strong { margin-right: auto; color: var(--green); font-size: 11px; }
 .passageToolbar button, .pronunciationForm button { min-height: 32px; padding: 6px 10px; color: var(--green); background: #fff; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; font-weight: 700; }

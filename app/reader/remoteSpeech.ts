@@ -6,7 +6,7 @@ import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
-type SpeechOptions = { language: string; voice: string; steps: number };
+type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic" };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (typeof payload?.error === "string" && payload.error) return payload.error;
@@ -46,7 +46,7 @@ export class RemoteSpeechClient {
     const started = performance.now();
     status?.(items.length > 1 ? `Generating ${items.length} passages` : "Generating speech");
     const language = options?.language;
-    const supertonic = language !== undefined && language !== "en";
+    const supertonic = options?.engine === "supertonic" || (language !== undefined && language !== "en");
     const body: Record<string, unknown> = {
       texts: items.map((item) => supertonic
         ? normalizeForSupertonic(item.text, item.isHeading, language)
@@ -57,6 +57,7 @@ export class RemoteSpeechClient {
       body.language = language;
       body.voice = options.voice;
       body.steps = options.steps;
+      if (options.engine) body.engine = options.engine;
     }
     try {
       const response = await fetch("/api/tts", {

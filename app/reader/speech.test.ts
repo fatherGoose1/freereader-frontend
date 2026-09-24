@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectSpeechLanguage, normalizeLanguage, speechEngine, voiceForLanguage } from "./speech";
+import { detectSpeechLanguage, normalizeLanguage, speechEngine, speechEngineForVoice, voiceForLanguage } from "./speech";
 
 test("routes English to Kokoro Web and other languages to Supertonic", () => {
   assert.equal(speechEngine("en"), "kokoro");
   assert.equal(speechEngine("fr"), "supertonic");
   assert.equal(speechEngine("ja"), "supertonic");
+  assert.equal(speechEngineForVoice("F1", "en"), "supertonic");
+  assert.equal(speechEngineForVoice("af_heart", "en"), "kokoro");
   assert.equal(voiceForLanguage("M3", "en"), "af_heart");
   assert.equal(voiceForLanguage("af_bella", "fr"), "M3");
 });

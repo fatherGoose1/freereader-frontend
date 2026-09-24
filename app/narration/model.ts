@@ -142,6 +142,44 @@ export function invalidateSegment(segment: NarrationSegment): NarrationSegment {
   return { ...segment, status: "idle", needsRegeneration: !!segment.audio || !!segment.needsRegeneration, error: undefined, audio: null };
 }
 
+export function movePassage(segments: NarrationSegment[], id: string, destination: number): NarrationSegment[] {
+  const source = segments.findIndex((segment) => segment.id === id);
+  if (source < 0 || !Number.isInteger(destination) || destination < 0 || destination >= segments.length) return segments;
+  const reordered = [...segments];
+  reordered.splice(destination, 0, ...reordered.splice(source, 1));
+  return reordered;
+}
+
+export function splitPassage(segments: NarrationSegment[], id: string, offset: number, idFactory = makeId): NarrationSegment[] {
+  const index = segments.findIndex((segment) => segment.id === id);
+  const segment = segments[index];
+  if (!segment || !Number.isInteger(offset)) throw new Error("Place the cursor where you want to split this passage.");
+  const before = segment.text.slice(0, offset).trim();
+  const after = segment.text.slice(offset).trim();
+  if (!before || !after) throw new Error("Place the cursor between two parts of the passage to split it.");
+  const relevantTo = (text: string) => segment.pronunciations.filter(({ phrase }) => text.toLocaleLowerCase().includes(phrase.toLocaleLowerCase()));
+  const first = invalidateSegment({ ...segment, text: before, modelId: null, pauseAfterMs: 0, pronunciations: relevantTo(before) });
+  const second = invalidateSegment({ ...segment, id: idFactory(), text: after, modelId: null, pronunciations: relevantTo(after) });
+  return [...segments.slice(0, index), first, second, ...segments.slice(index + 1)];
+}
+
+export function mergePassages(segments: NarrationSegment[], firstId: string): NarrationSegment[] {
+  const index = segments.findIndex((segment) => segment.id === firstId);
+  const first = segments[index];
+  const second = segments[index + 1];
+  if (!first || !second) return segments;
+  const firstPhrases = new Set(first.pronunciations.map(({ phrase }) => phrase.toLocaleLowerCase()));
+  const merged = invalidateSegment({
+    ...first,
+    text: `${first.text.trim()} ${second.text.trim()}`.trim(),
+    modelId: null,
+    pauseAfterMs: second.pauseAfterMs,
+    pronunciations: [...first.pronunciations, ...second.pronunciations.filter(({ phrase }) => !firstPhrases.has(phrase.toLocaleLowerCase()))],
+    needsRegeneration: !!first.audio || !!second.audio || !!first.needsRegeneration || !!second.needsRegeneration,
+  });
+  return [...segments.slice(0, index), merged, ...segments.slice(index + 2)];
+}
+
 export function spokenText(segment: NarrationSegment): string {
   return applyPronunciations(segment.text, segment.pronunciations);
 }

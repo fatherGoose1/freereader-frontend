@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import { voicesForLanguage } from "../reader/speech";
-import type { NarratorVoice } from "../reader/voices";
+import { isKokoroVoice, supertonicVoices, type NarratorVoice } from "../reader/voices";
 import { exportVoiceover } from "./exportAudio";
 import {
   createNarrationProject,
   invalidateSegment,
+  mergePassages,
+  movePassage,
   segmentScript,
+  splitPassage,
   spokenText,
   type NarrationProject,
   type NarrationSegment,
@@ -18,7 +20,7 @@ import {
 } from "./model";
 import styles from "./narration.module.css";
 
-const voices = voicesForLanguage("en");
+const voices = supertonicVoices();
 const speeds = [0.75, 0.85, 0.9, 1, 1.1, 1.2, 1.35];
 const pauses = [["Short", 250], ["Medium", 600], ["Long", 1000]] as const;
 
@@ -26,6 +28,21 @@ function randomId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function supportedStudioVoice(voice: NarratorVoice): NarratorVoice {
+  // The deployed Kokoro-7M model only has af_msa.pt. Older projects may have
+  // selected another Kokoro name, but those requests produced the same voice.
+  return isKokoroVoice(voice) ? "af_heart" : voice;
+}
+
+function voiceOptions() {
+  return <>
+    <optgroup label="Kokoro"><option value="af_heart">Default voice</option></optgroup>
+    <optgroup label="Supertonic">
+      {voices.map(([value, name]) => <option key={value} value={value}>{name} ({value})</option>)}
+    </optgroup>
+  </>;
 }
 
 function inputKey(segment: NarrationSegment, project: NarrationProject): string {
@@ -175,7 +192,16 @@ export default function NarrationStudio() {
   useEffect(() => {
     listNarrationProjects()
       .then((projects) => {
-        const restored = projects[0] ?? createNarrationProject();
+        const saved = projects[0] ?? createNarrationProject();
+        const restored = {
+          ...saved,
+          defaultVoice: supportedStudioVoice(saved.defaultVoice),
+          segments: saved.segments.map((segment) => ({
+            ...segment,
+            voiceId: segment.voiceId ? supportedStudioVoice(segment.voiceId) : null,
+            audio: segment.audio ? { ...segment.audio, voice: supportedStudioVoice(segment.audio.voice) } : null,
+          })),
+        };
         projectRef.current = restored;
         setProject(restored);
         setSelectedId(null);
@@ -468,6 +494,49 @@ export default function NarrationStudio() {
     }
   }
 
+  function reorderPassage(id: string, destination: number) {
+    stopPlayback();
+    setPlayerTime(0);
+    commit((current) => ({ ...current, segments: movePassage(current.segments, id, destination) }));
+    setGenerationMessage("Passage moved. The voiceover will play in the new order.");
+  }
+
+  function splitSelectedPassage(id: string) {
+    const editor = editors.current.get(id);
+    if (!editor || editor.selectionStart !== editor.selectionEnd) {
+      setGenerationMessage("Place the cursor between words, then split the passage.");
+      return;
+    }
+    try {
+      const next = splitPassage(projectRef.current.segments, id, editor.selectionStart);
+      stopPlayback();
+      generationEpoch.current += 1;
+      setGeneratingAll(false);
+      setPlayerTime(0);
+      commit((current) => ({ ...current, segments: next }));
+      setSelectedId(next[next.findIndex((segment) => segment.id === id) + 1].id);
+      setPhrase("");
+      setPronunciationOpen(false);
+      setGenerationMessage("Passage split. Only the changed passages need new audio.");
+    } catch (error) {
+      setGenerationMessage(error instanceof Error ? error.message : "Could not split this passage.");
+    }
+  }
+
+  function mergeAdjacentPassages(firstId: string) {
+    const next = mergePassages(projectRef.current.segments, firstId);
+    if (next === projectRef.current.segments) return;
+    stopPlayback();
+    generationEpoch.current += 1;
+    setGeneratingAll(false);
+    setPlayerTime(0);
+    commit((current) => ({ ...current, segments: mergePassages(current.segments, firstId) }));
+    setSelectedId(firstId);
+    setPhrase("");
+    setPronunciationOpen(false);
+    setGenerationMessage("Passages combined. The earlier voice and speed apply; regenerate this passage to hear it.");
+  }
+
   return (
     <main className={styles.studio}>
       <header className={styles.topbar}>
@@ -490,7 +559,7 @@ export default function NarrationStudio() {
       <section className={styles.controlbar} aria-label="Voiceover settings">
         <label>Project voice
           <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-            {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            {voiceOptions()}
           </select>
         </label>
         <label>Global speaking speed
@@ -528,6 +597,12 @@ export default function NarrationStudio() {
             {project.segments.map((segment, index) => {
               const active = selectedId === segment.id;
               return <div key={segment.id} className={`${styles.passage} ${active ? styles.activePassage : ""}`} onKeyDown={(event) => { if (event.key === "Escape") { setSelectedId(null); setPronunciationOpen(false); } }}>
+                <label className={styles.passageIndex}>
+                  <span className={styles.visuallyHidden}>Move passage {index + 1} to position</span>
+                  <select aria-label={`Move passage ${index + 1} to position`} title="Move passage to position" value={index + 1} onChange={(event) => reorderPassage(segment.id, Number(event.target.value) - 1)}>
+                    {project.segments.map((_, position) => <option key={position} value={position + 1}>{position + 1}</option>)}
+                  </select>
+                </label>
                 <PassageEditor
                   segment={segment}
                   index={index}
@@ -545,13 +620,16 @@ export default function NarrationStudio() {
                     <button disabled={segment.status === "generating"} onClick={() => segment.status === "ready" ? void playAudio(segment) : void generateSegment(segment.id, true)}>Preview</button>
                     <button disabled={segment.status === "generating"} onClick={() => void generateSegment(segment.id, true)}>Regenerate</button>
                     <button onClick={openPronunciation}>Pronunciation</button>
+                    <button onClick={() => splitSelectedPassage(segment.id)}>Split at cursor</button>
+                    <button disabled={index === 0} onClick={() => mergeAdjacentPassages(project.segments[index - 1].id)}>Merge with previous</button>
+                    <button disabled={index === project.segments.length - 1} onClick={() => mergeAdjacentPassages(segment.id)}>Merge with next</button>
                     <button className={styles.closeTools} aria-label="Close passage options" onClick={() => setSelectedId(null)}>×</button>
                   </div>
                   <div className={styles.passageSettings}>
                     <label>Voice override
                       <select value={segment.voiceId ?? ""} onChange={(event) => configureSegment(segment.id, { voiceId: event.target.value ? event.target.value as NarratorVoice : null })}>
                         <option value="">Project voice</option>
-                        {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                        {voiceOptions()}
                       </select>
                     </label>
                     <label>Speed override

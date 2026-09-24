@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyPronunciations, invalidateSegment, segmentScript } from "../narration/model";
+import { applyPronunciations, invalidateSegment, mergePassages, movePassage, segmentScript, splitPassage } from "../narration/model";
 
 test("scripts become editable paragraph segments with bounded long passages", () => {
   let id = 0;
@@ -51,4 +51,57 @@ test("invalidating one edited segment preserves unrelated generated audio", () =
   const editedReady = invalidateSegment({ ...ready, text: "Edited second passage." });
   assert.equal(editedReady.needsRegeneration, true);
   assert.equal(invalidateSegment(editedReady).needsRegeneration, true);
+});
+
+test("moving a passage changes its position without discarding generated takes", () => {
+  let index = 0;
+  const original = segmentScript("First.\n\nSecond.\n\nThird.", () => String(++index));
+  const ready = original.map((segment) => ({ ...segment, status: "ready" as const,
+    audio: { path: segment.id, mimeType: "audio/mp4", duration: 1, generatedAt: "now", voice: "af_heart" as const, model: "kokoro", speed: 1 },
+  }));
+  const moved = movePassage(ready, "1", 2);
+  assert.deepEqual(moved.map((segment) => segment.id), ["2", "3", "1"]);
+  assert.deepEqual(moved.map((segment) => segment.audio?.path), ["2", "3", "1"]);
+  assert.deepEqual(ready.map((segment) => segment.id), ["1", "2", "3"]);
+});
+
+test("splitting preserves delivery and pause placement while invalidating only that passage", () => {
+  const [first, second] = segmentScript("Read SQL clearly and then continue.\n\nAn untouched take.", (() => {
+    let index = 0;
+    return () => String(++index);
+  })());
+  const ready = { ...first, status: "ready" as const, pauseAfterMs: 1000, voiceId: "F1" as const, speedOverride: 1.2,
+    pronunciations: [{ id: "sql", phrase: "SQL", pronunciation: "sequel" }],
+    audio: { path: "first", mimeType: "audio/mp4", duration: 2, generatedAt: "now", voice: "F1" as const, model: "supertonic", speed: 1.2 },
+  };
+  const [left, right, unchanged] = splitPassage([ready, second], first.id, "Read SQL clearly".length, () => "new");
+  assert.equal(left.text, "Read SQL clearly");
+  assert.equal(right.text, "and then continue.");
+  assert.equal(left.pauseAfterMs, 0);
+  assert.equal(right.pauseAfterMs, 1000);
+  assert.equal(left.voiceId, "F1");
+  assert.equal(right.speedOverride, 1.2);
+  assert.deepEqual(left.pronunciations.map((rule) => rule.phrase), ["SQL"]);
+  assert.deepEqual(right.pronunciations, []);
+  assert.equal(left.needsRegeneration, true);
+  assert.equal(right.needsRegeneration, true);
+  assert.equal(left.audio, null);
+  assert.equal(right.audio, null);
+  assert.equal(unchanged, second);
+  assert.throws(() => splitPassage([ready], first.id, 0), /between two parts/);
+});
+
+test("merging keeps the earlier delivery and later pause, only invalidating the combined take", () => {
+  let index = 0;
+  const [first, second, third] = segmentScript("Hello there.\n\nWelcome back.\n\nKeep listening.", () => String(++index));
+  const ready = { ...second, status: "ready" as const, pauseAfterMs: 600,
+    audio: { path: "second", mimeType: "audio/mp4", duration: 2, generatedAt: "now", voice: "af_heart" as const, model: "kokoro", speed: 1 },
+  };
+  const [merged, untouched] = mergePassages([first, ready, third], first.id);
+  assert.equal(merged.id, first.id);
+  assert.equal(merged.text, "Hello there. Welcome back.");
+  assert.equal(merged.pauseAfterMs, 600);
+  assert.equal(merged.needsRegeneration, true);
+  assert.equal(merged.audio, null);
+  assert.equal(untouched, third);
 });

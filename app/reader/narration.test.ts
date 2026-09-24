@@ -57,6 +57,16 @@ test("batches English passages into a single remote call", async () => {
   assert.deepEqual(calls, ["remote-batch:One|Two|Three:en:af_heart:4"]);
 });
 
+test("English Supertonic selections use their chosen voice and server model", async () => {
+  const { router, calls } = setup(false);
+  for (const voice of ["F1", "M2"] as const) {
+    const result = await router.synthesize("Hello", voice, 12, undefined, false, 1, "en");
+    assert.equal(result.route.model, "supertonic-3-fp32-server-v1");
+    assert.equal(result.route.voice, voice);
+  }
+  assert.deepEqual(calls, ["remote:Hello:en:F1:12", "remote:Hello:en:M2:12"]);
+});
+
 for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: non-English uses the server Supertonic voice and steps`, async () => {
     const { calls, speakFrench } = setup(mobile);
