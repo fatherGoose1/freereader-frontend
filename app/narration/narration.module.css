@@ -29,8 +29,13 @@
 .controlbar label, .passageSettings label, .pronunciationForm label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .controlbar select, .passageSettings select, .pronunciationForm input, .pauseControls input { min-height: 36px; padding: 7px 10px; color: var(--ink); background: #f7f8f4; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; font-weight: 400; }
 .secondaryButton { min-height: 36px; padding: 7px 11px; color: var(--green); background: transparent; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; font-weight: 700; }
-.generateButton, .importButton { min-height: 38px; padding: 9px 15px; color: var(--green-dark); background: var(--lime); border: 0; border-radius: 8px; font-size: 12px; font-weight: 800; }
+.generateButton, .importButton, .readyExport { min-height: 38px; padding: 9px 15px; color: var(--green-dark); background: var(--lime); border: 0; border-radius: 8px; font-size: 12px; font-weight: 800; }
 .controlbar .generateButton { margin-left: auto; white-space: nowrap; }
+.generateButton { position: relative; overflow: hidden; }
+.generateFill { position: absolute; inset: 0 auto 0 0; background: rgba(13,43,37,.16); transition: width .2s ease; }
+.generateLabel, .generateButton small { position: relative; display: block; }
+.generateButton small { margin-top: 3px; font-size: 10px; font-weight: 500; }
+.readyExport { white-space: nowrap; }
 .globalPronunciations { padding: 12px max(24px, calc((100vw - 1060px) / 2)); background: #fff; border-bottom: 1px solid var(--line); }
 .globalPronunciationsInner { display: flex; align-items: end; flex-wrap: wrap; gap: 10px 18px; }
 .globalPronunciationsInner > strong { align-self: center; color: var(--green); font-size: 12px; white-space: nowrap; }
@@ -112,7 +117,7 @@
 .playerButton { min-width: 64px; min-height: 36px; padding: 6px 12px; color: var(--green-dark); background: var(--lime); border: 0; border-radius: 7px; font-size: 12px; font-weight: 750; }
 .playerTimeline { display: flex; align-items: center; gap: 10px; width: 100%; color: rgba(255,255,255,.75); font-size: 11px; font-variant-numeric: tabular-nums; }
 .playerTimeline input { width: 100%; accent-color: var(--lime); }
-.exportButton { min-height: 36px; padding: 7px 11px; flex: none; color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.4); border-radius: 7px; font-size: 11px; font-weight: 700; }
+.exportButton { min-height: 38px; padding: 8px 13px; flex: none; color: var(--green-dark); background: var(--lime); border: 0; border-radius: 7px; font-size: 12px; font-weight: 800; }
 .playbar audio { display: none; }
 @media (max-width: 760px) {
   .topbar { grid-template-columns: 1fr auto; gap: 8px; padding: 10px 14px; }

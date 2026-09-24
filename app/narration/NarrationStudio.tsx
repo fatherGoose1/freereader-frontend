@@ -135,6 +135,7 @@ export default function NarrationStudio() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState("");
   const [generatingAll, setGeneratingAll] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ current: number; completed: number; total: number } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [phrase, setPhrase] = useState("");
@@ -160,6 +161,7 @@ export default function NarrationStudio() {
   const hasGeneratedAudio = project.segments.some((segment) => !!segment.audio || !!segment.needsRegeneration);
   const playable = project.segments.filter((segment) => segment.status === "ready" && segment.audio);
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
+  const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
 
   useEffect(() => { setPlayerTime((time) => Math.min(time, totalDuration)); }, [totalDuration]);
 
@@ -185,6 +187,12 @@ export default function NarrationStudio() {
     setIsPlaying(false);
   }
 
+  function stopGeneration() {
+    generationEpoch.current += 1;
+    setGeneratingAll(false);
+    setGenerationProgress(null);
+  }
+
   function commit(update: (current: NarrationProject) => NarrationProject) {
     const next = { ...update(projectRef.current), updatedAt: new Date().toISOString() };
     projectRef.current = next;
@@ -208,8 +216,7 @@ export default function NarrationStudio() {
 
   function changePassageVoice(id: string, voiceId: NarratorVoice | null) {
     stopPlayback();
-    generationEpoch.current += 1;
-    setGeneratingAll(false);
+    stopGeneration();
     configureSegment(id, { voiceId });
     setGenerationMessage("Generating this passage with the selected voice…");
     void generateSegment(id, true);
@@ -259,7 +266,7 @@ export default function NarrationStudio() {
     if (!scriptDraft.trim()) return;
     if (project.segments.length && !window.confirm("Replace this script and its generated voiceover?")) return;
     stopPlayback();
-    generationEpoch.current += 1;
+    stopGeneration();
     const segments = segmentScript(scriptDraft);
     commit((current) => ({ ...current, segments }));
     setSelectedId(null);
@@ -283,7 +290,7 @@ export default function NarrationStudio() {
   function newProject() {
     if (project.segments.length && !window.confirm("Start a new narration project? Your current project will remain saved locally.")) return;
     stopPlayback();
-    generationEpoch.current += 1;
+    stopGeneration();
     const next = createNarrationProject();
     projectRef.current = next;
     setProject(next);
@@ -402,15 +409,23 @@ export default function NarrationStudio() {
     const epoch = ++generationEpoch.current;
     setGeneratingAll(true);
     const ids = projectRef.current.segments.map((segment) => segment.id);
+    const total = ids.length;
+    let completed = projectRef.current.segments.filter((segment) => segment.status === "ready").length;
+    setGenerationProgress({ current: 1, completed, total });
     let failed = false;
-    for (const id of ids) {
+    for (const [index, id] of ids.entries()) {
       if (generationEpoch.current !== epoch) break;
       const segment = projectRef.current.segments.find((item) => item.id === id);
       if (segment?.status === "ready") continue;
+      setGenerationProgress({ current: index + 1, completed, total });
       if (!await generateSegment(id)) failed = true;
+      if (generationEpoch.current === epoch) setGenerationProgress({ current: index + 1, completed: ++completed, total });
     }
-    if (generationEpoch.current === epoch) setGenerationMessage(failed ? "Some passages need attention. Retry them here or generate again." : "Voiceover ready. Listen through and refine any passage.");
-    setGeneratingAll(false);
+    if (generationEpoch.current === epoch) {
+      setGenerationMessage(failed ? "Some passages need attention. Retry them here or generate again." : "Voiceover ready. Listen through and refine any passage.");
+      setGeneratingAll(false);
+      setGenerationProgress(null);
+    }
   }
 
   async function previewVoice() {
@@ -561,8 +576,7 @@ export default function NarrationStudio() {
     try {
       const next = splitPassage(projectRef.current.segments, id, editor.selectionStart);
       stopPlayback();
-      generationEpoch.current += 1;
-      setGeneratingAll(false);
+      stopGeneration();
       setPlayerTime(0);
       commit((current) => ({ ...current, segments: next }));
       setSelectedId(next[next.findIndex((segment) => segment.id === id) + 1].id);
@@ -578,8 +592,7 @@ export default function NarrationStudio() {
     const next = mergePassages(projectRef.current.segments, firstId);
     if (next === projectRef.current.segments) return;
     stopPlayback();
-    generationEpoch.current += 1;
-    setGeneratingAll(false);
+    stopGeneration();
     setPlayerTime(0);
     commit((current) => ({ ...current, segments: mergePassages(current.segments, firstId) }));
     setSelectedId(firstId);
@@ -619,9 +632,14 @@ export default function NarrationStudio() {
           </select>
         </label>
         <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
-        <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? () => { generationEpoch.current += 1; setGeneratingAll(false); } : () => void generateAll()}>
-          {generatingAll ? "Stop after this passage" : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
+        <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
+          {generatingAll && generationProgress ? <>
+            <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
+            <span className={styles.generateLabel}>Generating {generationProgress.current} of {generationProgress.total} · {generationPercent}%</span>
+            <small>Click to stop after this passage</small>
+          </> : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
         </button>
+        {readyCount === project.segments.length && readyCount > 0 && !generatingAll && <button className={styles.readyExport} disabled={exporting} onClick={() => void downloadVoiceover()}>{exporting ? "Preparing WAV…" : "Download WAV voiceover"}</button>}
       </section>
 
       <section className={styles.globalPronunciations} aria-label="Global pronunciations">

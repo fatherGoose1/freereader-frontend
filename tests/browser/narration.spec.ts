@@ -151,6 +151,26 @@ test("global pronunciation annotates the script and regenerates only affected pa
   await expect(page.getByRole("button", { name: "Edit passage 1" }).locator("rt")).toHaveText("structured query");
 });
 
+test("generate button shows passage count and percent before revealing WAV download", async ({ page }) => {
+  const release: Array<() => void> = [];
+  await page.route("**/api/tts", async (route) => {
+    await new Promise<void>((resolve) => { release.push(resolve); });
+    await route.fulfill({ status: 200, headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" }, body: wavBody() });
+  });
+  await page.goto("/narration");
+  await page.getByLabel("YouTube script").fill("First passage.\n\nSecond passage.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  await page.getByRole("button", { name: "Generate voiceover" }).click();
+  await expect(page.getByRole("button", { name: /Generating 1 of 2 · 0%/ })).toBeVisible();
+  await expect.poll(() => release.length).toBe(1);
+  release[0]();
+  await expect(page.getByRole("button", { name: /Generating 2 of 2 · 50%/ })).toBeVisible();
+  await expect.poll(() => release.length).toBe(2);
+  release[1]();
+  await expect(page.getByRole("button", { name: "Download WAV voiceover" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export WAV" })).toBeVisible();
+});
+
 for (const { name, voices, sampleRate } of [
   { name: "Kokoro", voices: ["af_heart", "af_heart"], sampleRate: 24_000 },
   { name: "Supertonic", voices: ["F1", "F1"], sampleRate: 44_100 },
