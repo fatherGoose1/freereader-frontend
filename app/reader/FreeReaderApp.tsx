@@ -32,7 +32,7 @@ import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
-import { isKokoroVoice, type NarratorVoice } from "./voices";
+import { isKokoroVoice, isSupertonicVoice, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
 import posthog from "posthog-js";
@@ -216,8 +216,8 @@ export default function FreeReaderApp() {
   useEffect(() => { setImportErrorMessage(""); }, [panel]);
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
-  // English is rendered by the backend, which exposes a single voice.
-  const serverNarration = narrationLanguage === "en";
+  // English spans both engines; other languages use Supertonic only.
+  const usesSupertonic = narrationLanguage !== "en" || isSupertonicVoice(narrationVoice);
   const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
 
   useEffect(() => {
@@ -1243,10 +1243,8 @@ export default function FreeReaderApp() {
               </select>
             </label>
             <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
-              <select value={narrationVoice} disabled={serverNarration} title={serverNarration ? "English uses a single server voice" : undefined} onChange={(event) => { resetPlayback(); audioPrimed.current = false; setVoice(event.target.value as NarratorVoice); posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
-                {serverNarration
-                  ? <option value="af_heart">Default</option>
-                  : voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+              <select value={narrationVoice} onChange={(event) => { resetPlayback(); audioPrimed.current = false; setVoice(event.target.value as NarratorVoice); posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
+                {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
             <div className={styles.qualitySetting}><span>Speaking Rate</span><div>
@@ -1254,15 +1252,15 @@ export default function FreeReaderApp() {
                 <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); audioPrimed.current = false; setSpeechRate(Number(value)); posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
               ))}
             </div></div>
-            {!serverNarration && (
+            {usesSupertonic && (
               <div className={styles.qualitySetting}><span>Quality</span><div>
                 {[[5, "Low"], [8, "Medium"], [12, "High"]].map(([value, label]) => (
                   <button key={value} className={steps === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); setSteps(Number(value)); posthog.capture("voice_settings_changed", { setting: "quality_steps", value: Number(value) }); }}>{label}</button>
                 ))}
               </div></div>
             )}
-            <small>{serverNarration
-              ? "English narration uses one server voice. Speaking Rate changes how the server generates the audio."
+            <small>{narrationLanguage === "en"
+              ? "English narration offers Kokoro and Supertonic voices. Speaking Rate changes how the server generates the audio."
               : "Higher quality takes longer to generate. Changes apply to new passages."}</small>
           </div>
           </div>
@@ -1324,9 +1322,7 @@ export default function FreeReaderApp() {
         <section className={styles.shelf}>
           <div className={styles.workspaceHeading}>
             <div>
-              <span className={styles.kicker}>READ. LISTEN. PICK UP WHERE YOU LEFT OFF.</span>
               <h1>Your library</h1>
-              <p>{books.length ? "A little more time for the things you want to read." : "Good reading starts here. What would you like to listen to?"}</p>
             </div>
             <span className={styles.storageBadge}><span className={styles.localDot} />{session ? "Account sync on" : "No account needed"}</span>
           </div>

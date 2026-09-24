@@ -52,7 +52,11 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await page.getByRole("region", { name: "Script workspace" }).getByLabel("Say it like").fill("sequel");
   await page.getByRole("region", { name: "Script workspace" }).getByRole("button", { name: "Save pronunciation" }).click();
   const projectVoice = page.getByRole("region", { name: "Voiceover settings" }).getByRole("combobox", { name: "Project voice" });
-  await expect(projectVoice.locator("option")).toHaveText(["Heart", "Alex", "James", "Robert", "Sam", "Daniel", "Sarah", "Lily", "Jessica", "Olivia", "Emily"]);
+  await expect(projectVoice.locator("option")).toHaveText([
+    "Heart", "Olivia", "Alloy", "Aoede", "Bella", "Jessica", "Kore", "Nicole", "Nova", "River", "Sarah", "Sky",
+    "Adam", "Echo", "Eric", "Fenrir", "Liam", "Michael", "Onyx", "Puck", "Santa", "Alice", "Emma", "Isabella", "Lily",
+    "Daniel", "Fable", "George", "Lewis", "Alex", "James", "Robert", "Sam", "Daniel", "Sarah", "Lily", "Jessica", "Emily",
+  ]);
   await projectVoice.selectOption("F1");
   await page.getByRole("button", { name: "Generate voiceover" }).click();
 

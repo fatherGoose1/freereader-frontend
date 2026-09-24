@@ -17,9 +17,7 @@ export default function ModeChooser() {
         <span>Free text to speech, two ways</span>
       </header>
       <section className={styles.intro}>
-        <span className={styles.kicker}>Choose your workspace</span>
-        <h1>What do you want to bring to life?</h1>
-        <p>Listen to something you are reading, or shape a script into narration you can use in a video.</p>
+        <h1>Are you listening or creating??</h1>
       </section>
       <section className={styles.choices} aria-label="FreeReader workspaces">
         <Link href="/reader/audiobooks" className={styles.choice}>

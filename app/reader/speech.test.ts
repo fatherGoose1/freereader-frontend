@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectSpeechLanguage, normalizeLanguage, speechEngine, speechEngineForVoice, voiceForLanguage } from "./speech";
+import { detectSpeechLanguage, normalizeLanguage, speechEngine, speechEngineForVoice, voiceForLanguage, voicesForLanguage } from "./speech";
+import { englishVoices } from "./voices";
 
 test("routes English to Kokoro Web and other languages to Supertonic", () => {
   assert.equal(speechEngine("en"), "kokoro");
   assert.equal(speechEngine("fr"), "supertonic");
   assert.equal(speechEngine("ja"), "supertonic");
   assert.equal(speechEngineForVoice("F1", "en"), "supertonic");
-  assert.equal(speechEngineForVoice("af_heart", "en"), "kokoro");
-  assert.equal(voiceForLanguage("M3", "en"), "af_heart");
+  assert.equal(speechEngineForVoice("bf_emma", "en"), "kokoro");
+  assert.equal(voiceForLanguage("F1", "en"), "F1");
+  assert.equal(voiceForLanguage("bf_emma", "en"), "bf_emma");
+  assert.equal(voiceForLanguage("unknown" as never, "en"), "af_heart");
   assert.equal(voiceForLanguage("af_bella", "fr"), "M3");
+});
+
+test("English combines Kokoro and Supertonic voices with the favorites first", () => {
+  const english = voicesForLanguage("en");
+  assert.deepEqual(english.slice(0, 2), [["af_heart", "Heart"], ["F4", "Olivia"]]);
+  assert.ok(english.some(([voice]) => voice === "bf_emma"));
+  assert.ok(english.some(([voice]) => voice === "M1"));
+  assert.equal(english.length, englishVoices().length);
+  assert.ok(voicesForLanguage("fr").every(([voice]) => /^[MF][1-5]$/.test(voice)));
 });
 
 test("normalizes metadata language tags and detects imported prose", () => {

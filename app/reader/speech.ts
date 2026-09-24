@@ -1,5 +1,5 @@
 import {
-  KOKORO_VOICES,
+  englishVoices,
   isKokoroVoice,
   isSupertonicVoice,
   supertonicVoices,
@@ -30,10 +30,10 @@ export function speechEngineForVoice(voice: NarratorVoice, language: SpeechLangu
 }
 
 export function voicesForLanguage(language: SpeechLanguage): readonly (readonly [NarratorVoice, string])[] {
-  return speechEngine(language) === "kokoro" ? KOKORO_VOICES : supertonicVoices();
+  return speechEngine(language) === "kokoro" ? englishVoices() : supertonicVoices();
 }
 
 export function voiceForLanguage(voice: NarratorVoice, language: SpeechLanguage): NarratorVoice {
-  if (speechEngine(language) === "kokoro") return isKokoroVoice(voice) ? voice : "af_heart";
+  if (language === "en") return isKokoroVoice(voice) || isSupertonicVoice(voice) ? voice : "af_heart";
   return isSupertonicVoice(voice) ? voice : "M3";
 }

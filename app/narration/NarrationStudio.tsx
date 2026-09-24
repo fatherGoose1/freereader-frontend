@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import { isKokoroVoice, supertonicVoices, type NarratorVoice } from "../reader/voices";
+import { englishVoices, type NarratorVoice } from "../reader/voices";
 import { exportVoiceover } from "./exportAudio";
 import {
   createNarrationProject,
@@ -23,7 +23,7 @@ import {
 } from "./model";
 import styles from "./narration.module.css";
 
-const voices = supertonicVoices();
+const voices = englishVoices();
 const speeds = [0.75, 0.85, 0.9, 1, 1.1, 1.2, 1.35];
 const pauses = [["Short", 250], ["Medium", 600], ["Long", 1000]] as const;
 
@@ -33,17 +33,8 @@ function randomId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function supportedStudioVoice(voice: NarratorVoice): NarratorVoice {
-  // The deployed Kokoro-7M model only has af_msa.pt. Older projects may have
-  // selected another Kokoro name, but those requests produced the same voice.
-  return isKokoroVoice(voice) ? "af_heart" : voice;
-}
-
 function voiceOptions() {
-  return <>
-    <option value="af_heart">Heart</option>
-    {voices.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-  </>;
+  return voices.map(([value, name]) => <option key={value} value={value}>{name}</option>);
 }
 
 function inputKey(segment: NarrationSegment, project: NarrationProject): string {
@@ -226,16 +217,7 @@ export default function NarrationStudio() {
     listNarrationProjects()
       .then((projects) => {
         const saved = projects[0] ?? createNarrationProject();
-        const restored = {
-          ...saved,
-          pronunciations: saved.pronunciations ?? [],
-          defaultVoice: supportedStudioVoice(saved.defaultVoice),
-          segments: saved.segments.map((segment) => ({
-            ...segment,
-            voiceId: segment.voiceId ? supportedStudioVoice(segment.voiceId) : null,
-            audio: segment.audio ? { ...segment.audio, voice: supportedStudioVoice(segment.audio.voice) } : null,
-          })),
-        };
+        const restored = { ...saved, pronunciations: saved.pronunciations ?? [] };
         projectRef.current = restored;
         setProject(restored);
         setSelectedId(null);
