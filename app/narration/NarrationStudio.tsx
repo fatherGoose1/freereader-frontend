@@ -357,7 +357,7 @@ export default function NarrationStudio() {
     try {
       const result = await synthesize(
         spokenText(segment, currentProject.pronunciations), voice, 12,
-        (message) => setGenerationMessage(message), false, speed, "en",
+        (message) => setGenerationMessage(message), false, speed, "en", undefined, "youtube_narration",
       );
       const latestProject = projectRef.current;
       const latest = latestProject.segments.find((item) => item.id === id);
@@ -435,7 +435,7 @@ export default function NarrationStudio() {
     try {
       const result = await synthesize(
         "This is how your FreeReader narration voice will sound.",
-        project.defaultVoice, 12, (message) => setGenerationMessage(message), false, project.globalSpeed, "en",
+        project.defaultVoice, 12, (message) => setGenerationMessage(message), false, project.globalSpeed, "en", undefined, "youtube_narration",
       );
       if (epoch !== playbackEpoch.current) return;
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);

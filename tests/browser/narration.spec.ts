@@ -20,8 +20,10 @@ function wavBody(sampleRate = 24_000, toneHz = 0): Buffer {
 
 test("creator edits a script, generates a voiceover, and refines one passage", async ({ page }) => {
   const requests: Array<Record<string, unknown>> = [];
+  const sources: string[] = [];
   await page.route("**/api/tts", async (route) => {
     requests.push(route.request().postDataJSON());
+    sources.push(JSON.parse(route.request().headers()["x-freereader-context"]).source);
     await route.fulfill({
       status: 200,
       headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" },
@@ -56,6 +58,7 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
 
   await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
   expect(requests).toHaveLength(2);
+  expect(sources).toEqual(["youtube_narration", "youtube_narration"]);
   expect(requests[0]).toMatchObject({ texts: ["sequel makes this introduction memorable."], voice: "F1", engine: "supertonic", speed: 1 });
   expect(requests[1]).toMatchObject({ texts: ["The second passage keeps its own generated take."], voice: "F1", engine: "supertonic", speed: 1 });
   await page.getByRole("button", { name: "Medium" }).click();

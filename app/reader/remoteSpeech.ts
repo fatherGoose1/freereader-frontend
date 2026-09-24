@@ -1,12 +1,12 @@
 import JSZip from "jszip";
 import type { TtsStatus } from "./tts";
 import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
-import { telemetryContext } from "./telemetry";
+import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
-type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic" };
+type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic"; source?: TelemetrySource };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (typeof payload?.error === "string" && payload.error) return payload.error;
@@ -64,7 +64,7 @@ export class RemoteSpeechClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-FreeReader-Context": JSON.stringify(telemetryContext()),
+          "X-FreeReader-Context": JSON.stringify(telemetryContext(options?.source)),
         },
         body: JSON.stringify(body),
         signal: controller.signal,

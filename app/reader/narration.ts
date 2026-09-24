@@ -4,6 +4,7 @@ import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./s
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
 import { isSupertonicVoice } from "./voices";
+import type { TelemetrySource } from "./telemetry";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
 type Clients = {
@@ -45,7 +46,7 @@ export class NarrationRouter {
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
     isHeading: boolean, speechSpeed: number, language: SpeechLanguage,
-    isNeeded: () => boolean = () => true): Promise<SpeechResult & { route: NarrationRoute }> {
+    isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook"): Promise<SpeechResult & { route: NarrationRoute }> {
     const epoch = this.epoch;
     const checkRequest = () => {
       if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
@@ -61,7 +62,7 @@ export class NarrationRouter {
         this.active = "remote";
         result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status,
           { language, voice: String(route.voice), steps,
-            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}) });
+            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}), source });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
@@ -81,7 +82,7 @@ export class NarrationRouter {
 
   synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
     speechSpeed: number, language: SpeechLanguage,
-    isNeeded: () => boolean = () => true): Promise<{ parts: SpeechResult[]; route: NarrationRoute }> {
+    isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook"): Promise<{ parts: SpeechResult[]; route: NarrationRoute }> {
     const epoch = this.epoch;
     const checkRequest = () => {
       if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
@@ -98,7 +99,7 @@ export class NarrationRouter {
         parts = await this.clients.remote.synthesizeBatch(
           texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status,
           { language, voice: String(route.voice), steps,
-            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}) });
+            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}), source });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
@@ -137,11 +138,11 @@ export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage) {
 }
 
 export function synthesize(text: string, voice: NarratorVoice = "af_heart", steps = 8, status?: TtsStatus,
-  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean) {
-  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded);
+  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook") {
+  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded, source);
 }
 
 export function synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice = "af_heart", steps = 8,
-  status?: TtsStatus, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean) {
-  return getRouter().synthesizeBatch(texts, headings, voice, steps, status, speechSpeed, language, isNeeded);
+  status?: TtsStatus, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook") {
+  return getRouter().synthesizeBatch(texts, headings, voice, steps, status, speechSpeed, language, isNeeded, source);
 }

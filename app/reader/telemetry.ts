@@ -1,4 +1,5 @@
 export type TelemetryProperties = Record<string, string | number>;
+export type TelemetrySource = "audiobook" | "youtube_narration";
 
 const ENDPOINT = "/api/telemetry";
 const APP_VERSION = "1.0.0";
@@ -32,6 +33,7 @@ interface QueuedEvent {
   installation_id: string;
   session_id: string;
   event_name: string;
+  source: TelemetrySource;
   schema_version: 1;
   occurred_at: string;
   platform_class: string;
@@ -97,6 +99,7 @@ export function recordTelemetry(eventName: string, properties: TelemetryProperti
     installation_id: persistentId(),
     session_id: sessionIdentifier(eventName === "app_launch"),
     event_name: eventName,
+    source: "audiobook",
     schema_version: 1,
     occurred_at: new Date().toISOString(),
     platform_class: context.platformClass,
@@ -146,7 +149,7 @@ export function flushTelemetry() {
 
 // The backend records server-side audio events in the same table, so it needs the
 // same anonymous installation/session identity the client already uses.
-export function telemetryContext() {
+export function telemetryContext(source: TelemetrySource = "audiobook") {
   const context = deviceContext();
   return {
     installation_id: persistentId(),
@@ -157,6 +160,7 @@ export function telemetryContext() {
     app_build: APP_BUILD,
     device_model: "Web Browser",
     hardware_model: context.hardware,
+    source,
   };
 }
 

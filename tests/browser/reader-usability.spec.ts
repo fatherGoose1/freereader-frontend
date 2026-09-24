@@ -71,7 +71,9 @@ test("page navigation, text sizing, settings and resume preserve the reading pos
 
 test("speech errors are visible and listening can be retried", async ({ page }) => {
   let fail = true;
+  const sources: string[] = [];
   await page.route("**/api/tts", async (route) => {
+    sources.push(JSON.parse(route.request().headers()["x-freereader-context"]).source);
     if (fail) return route.fulfill({ status: 503, json: { error: "Speech temporarily unavailable. Please retry." } });
     const audio = Buffer.alloc(44 + 24000 * 20 * 2);
     audio.write("RIFF", 0); audio.writeUInt32LE(audio.length - 8, 4); audio.write("WAVEfmt ", 8);
@@ -89,6 +91,8 @@ test("speech errors are visible and listening can be retried", async ({ page }) 
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("button", { name: "Listen", exact: true })).toBeVisible();
+  expect(sources.length).toBeGreaterThan(0);
+  expect(sources.every((source) => source === "audiobook")).toBe(true);
 });
 
 test("add-content dialog supports keyboard navigation and the file picker", async ({ page }) => {
