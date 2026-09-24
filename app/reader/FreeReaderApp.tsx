@@ -37,6 +37,8 @@ import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./ty
 import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
 import posthog from "posthog-js";
 import styles from "./reader.module.css";
+import Link from "next/link";
+import ReaderIcon from "./ReaderIcon";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | "account" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
@@ -164,6 +166,9 @@ export default function FreeReaderApp() {
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [folderName, setFolderName] = useState("");
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [librarySort, setLibrarySort] = useState("recent");
+  const [textSize, setTextSize] = useState(20);
   const [organizingBook, setOrganizingBook] = useState<LibraryBook | null>(null);
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
   const [selected, setSelected] = useState<LibraryBook | null>(null);
@@ -183,8 +188,6 @@ export default function FreeReaderApp() {
   const [url, setUrl] = useState("");
   const [pastedTitle, setPastedTitle] = useState("");
   const [pastedText, setPastedText] = useState("");
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const addMenuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<number | undefined>();
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
@@ -195,6 +198,7 @@ export default function FreeReaderApp() {
   const [audioProgress, setAudioProgress] = useState(0);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dialogTrigger = useRef<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const activeAudio = useRef<ActiveAudio | null>(null);
   const audioUrl = useRef<string | null>(null);
@@ -293,20 +297,28 @@ export default function FreeReaderApp() {
   }, []);
 
   useEffect(() => {
-    if (!addMenuOpen) return;
-    const close = (event: MouseEvent) => {
-      if (!addMenuRef.current?.contains(event.target as Node)) setAddMenuOpen(false);
+    if (!panel && !organizingBook) return;
+    const previous = dialogTrigger.current ?? document.activeElement as HTMLElement | null;
+    const dialog = document.querySelector<HTMLElement>(`.${styles.modal}, .${styles.voicePopover}`);
+    if (!dialog) return;
+    const controls = () => Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'));
+    if (!dialog.contains(document.activeElement)) controls()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy && !syncing) {
+        setPanel(null);
+        setOrganizingBook(null);
+      }
+      if (event.key === "Tab") {
+        const items = controls();
+        const first = items[0];
+        const last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAddMenuOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [addMenuOpen]);
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); if (previous?.isConnected) previous.focus(); };
+  }, [panel, organizingBook, busy, syncing]);
 
   function syncFailureMessage(error: unknown): string {
     if (error instanceof AccountSyncError) {
@@ -437,6 +449,7 @@ export default function FreeReaderApp() {
       stage = "storage";
       await saveBook(book);
       setBooks((current) => [book, ...current]);
+      setLibrarySearch("");
       setPanel(null);
       setMessage(sessionRef.current ? `${book.title} was added and will sync shortly.` : `${book.title} was added to your private library.`);
       void syncDocument(book);
@@ -501,6 +514,7 @@ export default function FreeReaderApp() {
       stage = "storage";
       await saveBook(book);
       setBooks((current) => [book, ...current]);
+      setLibrarySearch("");
       setPanel(null);
       setUrl("");
       setMessage(sessionRef.current ? `${book.title} was saved and will sync shortly.` : `${book.title} was saved for offline reading.`);
@@ -560,6 +574,7 @@ export default function FreeReaderApp() {
       stage = "storage";
       await saveBook(book);
       setBooks((current) => [book, ...current]);
+      setLibrarySearch("");
       setPanel(null);
       setPastedText("");
       setPastedTitle("");
@@ -1046,6 +1061,8 @@ export default function FreeReaderApp() {
 
   function openBook(book: LibraryBook) {
     resetPlayback();
+    setPanel(null);
+    setMessage("Press Listen to hear this passage. Your place is saved automatically.");
     audioPrimed.current = false;
     const language = languageForBook(book);
     const ready = book.language ? book : { ...book, language, updatedAt: new Date().toISOString() };
@@ -1130,15 +1147,16 @@ export default function FreeReaderApp() {
     const bookProgress = readingProgress(selected, audioProgress);
     const isModelDownload = message.startsWith("Downloading voice model");
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
+    const pageIndex = Math.max(0, pageStarts.indexOf(page.start));
     return (
-      <main className={styles.appShell}>
+      <main className={`${styles.appShell} ${styles.readingShell}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
           resetPlayback();
         }} />
-        <div className={styles.readerTop}>
-          <button className={styles.textButton} onClick={() => { resetPlayback(); selectedRef.current = null; setSelected(null); }}><span aria-hidden="true">←</span> Library</button>
+        <div className={styles.readerTop} inert={panel === "voice"}>
+          <button className={styles.textButton} onClick={() => { resetPlayback(); selectedRef.current = null; setSelected(null); setPanel(null); setMessage("Your reading position has been saved."); }}><ReaderIcon name="back" /> Library</button>
           <div className={styles.readerTitle}><strong>{selected.title}</strong><span>{chapter?.title ?? "Beginning"}</span></div>
           <div className={styles.readerTools}>
             {selected.chapters.length > 0 && (
@@ -1152,29 +1170,36 @@ export default function FreeReaderApp() {
                 </select>
               </label>
             )}
-            <button className={styles.textButton} onClick={() => setPanel(panel ? null : "voice")}>Voice</button>
+            <button className={styles.textButton} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
         </div>
-        <div className={styles.readerGrid}>
+        <div className={styles.readerGrid} inert={panel === "voice"}>
           <aside className={styles.chapterRail}>
+            <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
             <span className={styles.kicker}>Contents</span>
             {selected.chapters.map((item, index) => (
               <button
                 key={`${item.startBlockIndex}-${item.title}`}
                 className={index === block?.chapterIndex ? styles.activeChapter : ""}
+                aria-current={index === block?.chapterIndex ? "location" : undefined}
                 onClick={() => goToBlock(item.startBlockIndex)}
               >{item.title}</button>
             ))}
           </aside>
           <article className={styles.readingPane}>
-            <div className={styles.readingText}>
+            <div className={styles.readingToolbar}><span>Tap a passage to listen from there</span><div className={styles.textSizing} role="group" aria-label="Text size"><button aria-label="Decrease text size" disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label="Increase text size" disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div></div>
+            <div className={styles.readingText} style={{ fontSize: textSize }}>
               {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
                 item.isHeading
                   ? <h2 key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</h2>
                   : <p key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
               ))}
             </div>
-            <div className={styles.pageMarker}>{selected.position.blockIndex + 1} / {selected.blocks.length}</div>
+            <nav className={styles.pageNavigation} aria-label="Reading pages">
+              <button disabled={pageIndex === 0} onClick={() => goToBlock(pageStarts[pageIndex - 1])}><ReaderIcon name="back" /> Previous</button>
+              <span>Page {pageIndex + 1} of {pageStarts.length}</span>
+              <button disabled={pageIndex >= pageStarts.length - 1} onClick={() => goToBlock(pageStarts[pageIndex + 1])}>Next <ReaderIcon name="arrow" /></button>
+            </nav>
           </article>
         </div>
         {ttsProgress !== undefined && (
@@ -1188,16 +1213,17 @@ export default function FreeReaderApp() {
             {isModelDownload && <small>The model and voice are cached in browser storage when available and reused after refresh.</small>}
           </section>
         )}
-        <div className={styles.player}>
-          <div className={styles.progressMeta}><span>Book progress</span><strong>{Math.round(bookProgress * 100)}%</strong></div>
+        <div className={styles.player} inert={panel === "voice"}>
+          <div className={styles.progressMeta}><span>{chapter?.title ?? selected.title}</span><strong>{Math.round(bookProgress * 100)}% of book</strong></div>
           <input className={styles.progressSlider} type="range" min="0" max="1" step="0.001" value={bookProgress} onChange={(event) => seekOverall(Number(event.target.value))} aria-label="Book playback progress" />
           <div className={styles.playerRow}>
+            <div className={styles.playerLabel}><ReaderIcon name="headphones" /><span>Listen along<small>{SPEECH_LANGUAGES.find(([code]) => code === narrationLanguage)?.[1]}</small></span></div>
             <div className={styles.transport}>
-              <button className={styles.chapterSkip} onClick={() => moveChapter(-1)} disabled={!selected.chapters.some((item) => item.startBlockIndex < selected.position.blockIndex)} title="Previous chapter">|&lt;</button>
+              <button className={styles.chapterSkip} onClick={() => moveChapter(-1)} disabled={!selected.chapters.some((item) => item.startBlockIndex < selected.position.blockIndex)} title="Previous chapter" aria-label="Previous chapter"><ReaderIcon name="previous" /></button>
               <button onClick={() => seek(-10)} title="Back 10 seconds"><strong>-10</strong><span>seconds</span></button>
-              <button className={styles.playButton} onClick={togglePlayback}>{playing ? "Pause" : "Listen"}</button>
+              <button className={styles.playButton} onClick={togglePlayback}><ReaderIcon name={playing ? "pause" : "play"} />{playing ? "Pause" : "Listen"}</button>
               <button onClick={() => seek(10)} title="Forward 10 seconds"><strong>+10</strong><span>seconds</span></button>
-              <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter">&gt;|</button>
+              <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter" aria-label="Next chapter"><ReaderIcon name="next" /></button>
             </div>
             <label className={styles.speed}>Speed
               <select value={selected.position.speed} onChange={(event) => changeSpeed(Number(event.target.value))}>
@@ -1205,9 +1231,11 @@ export default function FreeReaderApp() {
               </select>
             </label>
           </div>
+          <p className={styles.statusLine} role="status">{message}</p>
         </div>
         {panel === "voice" && (
-          <div className={styles.voicePopover}>
+          <div className={styles.settingsBackdrop} onMouseDown={() => setPanel(null)}>
+          <div className={styles.voicePopover} role="dialog" aria-modal="true" aria-label="Voice settings" onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.settingsTitle}><strong>Voice Settings</strong><button onClick={() => setPanel(null)}>Done</button></div>
             <label className={styles.settingsRow}><span>Language</span>
               <select value={narrationLanguage} onChange={(event) => changeNarrationLanguage(event.target.value as SpeechLanguage)}>
@@ -1237,6 +1265,7 @@ export default function FreeReaderApp() {
               ? "English narration uses one server voice. Speaking Rate changes how the server generates the audio."
               : "Higher quality takes longer to generate. Changes apply to new passages."}</small>
           </div>
+          </div>
         )}
       </main>
     );
@@ -1245,9 +1274,20 @@ export default function FreeReaderApp() {
   const activeFolder = activeFolderId
     ? folders.find((folder) => folder.id === activeFolderId)
     : undefined;
-  const visibleBooks = activeFolderId
+  const folderBooks = activeFolderId
     ? books.filter((book) => book.parentId === activeFolderId)
     : books.filter((book) => !book.parentId);
+  const search = librarySearch.trim().toLocaleLowerCase();
+  const visibleBooks = (search && !activeFolderId ? books : folderBooks)
+    .filter((book) => `${book.title} ${book.author ?? ""}`.toLocaleLowerCase().includes(search))
+    .sort((a, b) => librarySort === "title"
+      ? a.title.localeCompare(b.title)
+      : librarySort === "added"
+        ? b.createdAt.localeCompare(a.createdAt)
+        : (b.position.updatedAt ?? b.updatedAt).localeCompare(a.position.updatedAt ?? a.updatedAt));
+  const continueBook = [...books]
+    .filter((book) => book.position.blockIndex > 0 || book.position.offsetSeconds > 0)
+    .sort((a, b) => (b.position.updatedAt ?? b.updatedAt).localeCompare(a.position.updatedAt ?? a.updatedAt))[0];
   const childFolders = folders.filter((folder) => folder.parentId === (activeFolderId ?? undefined));
   const folderList = orderedFolders(folders);
   const parentFolder = activeFolder?.parentId
@@ -1259,48 +1299,20 @@ export default function FreeReaderApp() {
     ?? "Google account";
 
   return (
-      <main className={styles.appShell}>
-      <header className={styles.libraryHero}>
-        <div className={styles.libraryBrand}>
+    <main className={styles.appShell} onClickCapture={(event) => { if (!panel && !organizingBook) dialogTrigger.current = (event.target as Element).closest("button"); }}>
+      <header className={styles.libraryHero} inert={!!panel || !!organizingBook}>
+        <Link href="/reader" className={styles.libraryBrand} aria-label="FreeReader workspaces">
           <span className={styles.appMark} aria-hidden="true"><i /><i /><i /><i /></span>
-          <div><span className={styles.kicker}>{session ? "Synced library" : "On this device"}</span><h1>FreeReader</h1></div>
-        </div>
+          <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
+        </Link>
         <div className={styles.actions}>
           <button
             className={styles.accountButton}
             disabled={!authReady || syncing}
             onClick={() => session ? setPanel("account") : void signIn()}
-          >{session ? accountName : "Sign in with Google"}</button>
-          <div className={styles.addMenuWrap} ref={addMenuRef}>
-            <button
-              className={styles.primaryAction}
-              aria-haspopup="menu"
-              aria-expanded={addMenuOpen}
-              title="Add reading to your library"
-              onClick={() => setAddMenuOpen((open) => !open)}
-            >+ Add</button>
-            {addMenuOpen && (
-              <div className={styles.addMenu} role="menu" aria-label="Add reading">
-                <button role="menuitem" onClick={() => { setAddMenuOpen(false); fileInputRef.current?.click(); }}>
-                  <span className={styles.addChoiceIcon}>+</span>
-                  <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or MD</small></span>
-                </button>
-                <button role="menuitem" onClick={() => { setAddMenuOpen(false); openGutenbergBrowser(); }}>
-                  <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}>G</span>
-                  <span><strong>Free Books</strong><small>Browse Project Gutenberg</small></span>
-                </button>
-                <button role="menuitem" onClick={() => { setAddMenuOpen(false); setPanel("url"); }}>
-                  <span className={`${styles.addChoiceIcon} ${styles.webChoiceIcon}`}>W</span>
-                  <span><strong>Web Link</strong><small>Import an article from the web</small></span>
-                </button>
-                <button role="menuitem" onClick={() => { setAddMenuOpen(false); setPanel("paste"); }}>
-                  <span className={`${styles.addChoiceIcon} ${styles.pasteChoiceIcon}`}>T</span>
-                  <span><strong>Insert Text</strong><small>Paste or type content directly</small></span>
-                </button>
-              </div>
-            )}
-          </div>
-          <button className={styles.mobileAddButton} aria-label="Add reading" onClick={() => setPanel("add")}>+</button>
+            aria-label={session ? `Account: ${accountName}` : "Sign in with Google"}
+          ><ReaderIcon name="user" /><span>{session ? accountName : "Sign in"}</span></button>
+          <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
           <input ref={fileInputRef} hidden type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
@@ -1308,56 +1320,59 @@ export default function FreeReaderApp() {
           }} />
         </div>
       </header>
-      <div className={styles.libraryLayout}>
-        <aside className={styles.librarySidebar}>
-          <span className={styles.sidebarLabel}>Library</span>
-          <button className={!activeFolderId ? styles.sidebarActive : ""} onClick={() => setActiveFolderId(null)}><span className={styles.sidebarIcon}>B</span> Library <strong>{books.filter((book) => !book.parentId).length}</strong></button>
-          <div className={styles.sidebarSectionHeader}><span className={styles.sidebarLabel}>Folders</span><button aria-label="Create folder" onClick={() => { setFolderName(""); setPanel("folder"); }}>+</button></div>
-          {folderList.map((folder) => {
-            const depth = folderPath(folder, folders).split(" / ").length - 1;
-            return (
-              <button
-                key={folder.id}
-                className={activeFolderId === folder.id ? styles.sidebarActive : ""}
-                style={{ paddingLeft: `${10 + depth * 13}px` }}
-                onClick={() => setActiveFolderId(folder.id)}
-              ><span className={`${styles.sidebarIcon} ${styles.folderSidebarIcon}`} /> <span className={styles.sidebarName}>{folder.name}</span><strong>{books.filter((book) => book.parentId === folder.id).length}</strong></button>
-            );
-          })}
-          <span className={styles.sidebarLabel}>Add reading</span>
-          <button onClick={() => openGutenbergBrowser()}><span className={styles.sidebarIcon}>G</span> Free Books</button>
-          <button onClick={() => setPanel("url")}><span className={styles.sidebarIcon}>W</span> Web Link</button>
-          <button onClick={() => setPanel("paste")}><span className={`${styles.sidebarIcon} ${styles.pasteSidebarIcon}`}>T</span> Insert Text</button>
-          <label title="Import EPUB, PDF, TXT, DOCX, HTML, or Markdown files (.epub, .pdf, .txt, .docx, .html, .md)"><span className={styles.sidebarIcon}>+</span> Upload File<input type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void importDocument(file);
-          }} /></label>
-        </aside>
+      <div className={styles.libraryLayout} inert={!!panel || !!organizingBook}>
         <section className={styles.shelf}>
-          <div className={styles.shelfHeading}>
+          <div className={styles.workspaceHeading}>
             <div>
-              {activeFolder && <button className={styles.backFolder} onClick={() => setActiveFolderId(parentFolder?.id ?? null)}>&lt; {parentFolder?.name ?? "Library"}</button>}
-              <h2>{activeFolder?.name ?? "Library"}</h2>
-              <span>{visibleBooks.length} {visibleBooks.length === 1 ? "book" : "books"}</span>
+              <span className={styles.kicker}>READ. LISTEN. PICK UP WHERE YOU LEFT OFF.</span>
+              <h1>Your library</h1>
+              <p>{books.length ? "A little more time for the things you want to read." : "Good reading starts here. What would you like to listen to?"}</p>
             </div>
-            <div className={styles.shelfStatus}>
-              <button className={styles.newFolderButton} onClick={() => { setFolderName(""); setPanel("folder"); }}>+ New Folder</button>
-              <div className={styles.localNote}><span className={`${styles.localDot} ${session ? styles.cloudDot : ""}`} /> {message}</div>
+            <span className={styles.storageBadge}><span className={styles.localDot} />{session ? "Account sync on" : "No account needed"}</span>
+          </div>
+          {!activeFolderId && !search && continueBook && (
+            <section className={styles.continueCard} aria-label="Continue reading">
+              <BookCover book={continueBook} index={0} />
+              <div className={styles.continueInfo}>
+                <span className={styles.kicker}>Continue reading</span>
+                <h2>{continueBook.title}</h2>
+                <p>{continueBook.chapters[continueBook.blocks[continueBook.position.blockIndex]?.chapterIndex]?.title ?? "Your last position"} · {Math.round(readingProgress(continueBook) * 100)}% complete</p>
+                <span className={styles.bookProgress}><i style={{ width: `${readingProgress(continueBook) * 100}%` }} /></span>
+              </div>
+              <button className={styles.primaryAction} onClick={() => openBook(continueBook)}>Continue reading <ReaderIcon name="arrow" /></button>
+            </section>
+          )}
+          <div className={styles.importGrid} aria-label="Add to your library">
+            <button disabled={busy} onClick={() => fileInputRef.current?.click()}><span className={styles.importIcon}><ReaderIcon name="upload" /></span><span><strong>Upload File</strong><small>EPUB, PDF, DOCX & more</small></span><ReaderIcon name="plus" /></button>
+            <button onClick={() => setPanel("url")}><span className={styles.importIcon}><ReaderIcon name="link" /></span><span><strong>Web Link</strong><small>Turn an article into audio</small></span><ReaderIcon name="plus" /></button>
+            <button onClick={() => setPanel("paste")}><span className={styles.importIcon}><ReaderIcon name="text" /></span><span><strong>Insert Text</strong><small>Notes, scripts, or a passage</small></span><ReaderIcon name="plus" /></button>
+            <button onClick={openGutenbergBrowser}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>Explore Project Gutenberg</small></span><ReaderIcon name="arrow" /></button>
+          </div>
+          <div className={styles.libraryToolbar}>
+            <div className={styles.shelfHeading}>
+              <div>
+                {activeFolder && <button className={styles.backFolder} onClick={() => { setActiveFolderId(parentFolder?.id ?? null); setLibrarySearch(""); }}><ReaderIcon name="back" />{parentFolder?.name ?? "Library"}</button>}
+                <h2>{search ? "Search results" : activeFolder?.name ?? "Saved reading"} <span>{visibleBooks.length}</span></h2>
+              </div>
+              <button className={styles.newFolderButton} onClick={() => { setFolderName(""); setPanel("folder"); }}><ReaderIcon name="folder" /> New folder</button>
+            </div>
+            <div className={styles.filterRow}>
+              <label className={styles.librarySearch}><ReaderIcon name="search" /><input type="search" aria-label="Search library" placeholder={activeFolder ? "Search this folder…" : "Search titles or authors…"} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} /></label>
+              <label className={styles.sortLabel}>Sort by<select aria-label="Sort library" value={librarySort} onChange={(event) => setLibrarySort(event.target.value)}><option value="recent">Recently read</option><option value="added">Recently added</option><option value="title">Title A–Z</option></select></label>
             </div>
           </div>
-          {childFolders.length > 0 && (
+          {!search && childFolders.length > 0 && (
             <div className={styles.folderGrid} aria-label="Folders">
               {childFolders.map((folder) => (
-                <button key={folder.id} className={styles.folderCard} onClick={() => setActiveFolderId(folder.id)}>
-                  <span className={styles.folderGlyph} />
+                <button key={folder.id} className={styles.folderCard} onClick={() => { setActiveFolderId(folder.id); setLibrarySearch(""); }}>
+                  <ReaderIcon name="folder" />
                   <span><strong>{folder.name}</strong><small>{books.filter((book) => book.parentId === folder.id).length + folders.filter((child) => child.parentId === folder.id).length} items</small></span>
-                  <i>&gt;</i>
+                  <ReaderIcon name="arrow" />
                 </button>
               ))}
             </div>
           )}
-          {visibleBooks.length ? (
+          {!libraryLoaded ? <p role="status" className={styles.emptyLibrary}>Loading your library…</p> : visibleBooks.length ? (
             <div className={styles.libraryGrid} aria-label="Local library">
               {visibleBooks.map((book, index) => {
                 const progress = readingProgress(book);
@@ -1369,24 +1384,32 @@ export default function FreeReaderApp() {
                         <strong>{book.title}</strong>
                         {book.author && <span>{book.author}</span>}
                         <span>{wordCount(book).toLocaleString()} words · {formatBytes(book.size)}</span>
-                        {progress > 0 && <span className={styles.bookProgress}><i style={{ width: `${progress * 100}%` }} /></span>}
+                        <span className={styles.bookReadingState}>{progress > 0 ? `${Math.round(progress * 100)}% read · Continue reading` : "Ready to read"}</span>
+                        <span className={styles.bookProgress}><i style={{ width: `${progress * 100}%` }} /></span>
                       </span>
                     </button>
-                    <button className={styles.moreButton} onClick={() => setOrganizingBook(book)} aria-label={`Organize ${book.title}`}>...</button>
+                    <button className={styles.moreButton} onClick={() => setOrganizingBook(book)} aria-label={`Organize ${book.title}`}><ReaderIcon name="more" /></button>
                   </article>
                 );
               })}
             </div>
+          ) : search ? (
+            <div className={styles.emptyLibrary}><ReaderIcon name="search" /><h2>No matching reading</h2><p>Try another title or author.</p><button onClick={() => setLibrarySearch("")}>Clear search</button></div>
           ) : childFolders.length === 0 ? (
             <div className={styles.emptyLibrary}>
-              <span className={styles.emptyBooks}>|||</span><h2>{activeFolder ? "This folder is empty" : "Your shelf is empty"}</h2><p>Browse free books, import a web link, paste some text, or add an EPUB, PDF, or TXT file. {session ? "Your library will sync to your signed-in devices." : "Everything stays on this device."}</p>
+              <div className={styles.emptyIllustration} aria-hidden="true"><ReaderIcon name="book" /><span><ReaderIcon name="headphones" /></span></div>
+              <h2>{activeFolder ? "Make room for a new chapter" : "Your next great read belongs here"}</h2>
+              <p>Add a book, article, or your own text.<br />Read along on screen or press play and listen.</p>
+              <button className={styles.primaryAction} disabled={busy} onClick={() => fileInputRef.current?.click()}><ReaderIcon name="upload" /> Add your first file</button>
+              <small>EPUB · PDF · TXT · DOCX · HTML · Markdown</small>
             </div>
           ) : null}
+          <div className={styles.libraryFootnote} role="status">{busy && <span className={styles.addSpinner} />} {message}</div>
         </section>
       </div>
       {panel === "account" && session && (
         <div className={styles.modalBackdrop} onMouseDown={() => !syncing && setPanel(null)}>
-          <div className={`${styles.modal} ${styles.accountModal}`} onMouseDown={(event) => event.stopPropagation()}>
+          <div className={`${styles.modal} ${styles.accountModal}`} role="dialog" aria-modal="true" aria-label="Account" onMouseDown={(event) => event.stopPropagation()}>
             <span className={styles.kicker}>Google Account</span>
             <h2>{accountName}</h2>
             <p>{session.user.email}</p>
@@ -1400,32 +1423,33 @@ export default function FreeReaderApp() {
               <button className={styles.destructiveButton} disabled={syncing} onClick={() => void deleteAccountAndCloudData()}>Delete account and cloud copies</button>
             </div>
             <small>Signing out keeps downloaded books on this device. Deleting your account also removes cloud copies and signs you out.</small>
+            <div className={styles.modalActions}><button onClick={() => setPanel(null)}>Done</button></div>
           </div>
         </div>
       )}
       {panel === "add" && (
         <div className={styles.modalBackdrop} onMouseDown={() => setPanel(null)}>
-          <div className={`${styles.modal} ${styles.addModal}`} onMouseDown={(event) => event.stopPropagation()}>
+          <div className={`${styles.modal} ${styles.addModal}`} role="dialog" aria-modal="true" aria-label="Add reading" onMouseDown={(event) => event.stopPropagation()}>
             <span className={styles.kicker}>Add Reading</span>
             <h2>What would you like to add?</h2>
             <div className={`${styles.folderChoices} ${styles.addChoices}`}>
               <button onClick={() => { setPanel(null); fileInputRef.current?.click(); }}>
-                <span className={styles.addChoiceIcon}>+</span>
+                <span className={styles.addChoiceIcon}><ReaderIcon name="upload" /></span>
                 <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or Markdown</small></span>
                 <i>&gt;</i>
               </button>
               <button onClick={() => openGutenbergBrowser()}>
-                <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}>G</span>
+                <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}><ReaderIcon name="book" /></span>
                 <span><strong>Free Books</strong><small>Browse Project Gutenberg</small></span>
                 <i>&gt;</i>
               </button>
               <button onClick={() => setPanel("url")}>
-                <span className={`${styles.addChoiceIcon} ${styles.webChoiceIcon}`}>W</span>
+                <span className={`${styles.addChoiceIcon} ${styles.webChoiceIcon}`}><ReaderIcon name="link" /></span>
                 <span><strong>Web Link</strong><small>Import an article from the web</small></span>
                 <i>&gt;</i>
               </button>
               <button onClick={() => setPanel("paste")}>
-                <span className={`${styles.addChoiceIcon} ${styles.pasteChoiceIcon}`}>T</span>
+                <span className={`${styles.addChoiceIcon} ${styles.pasteChoiceIcon}`}><ReaderIcon name="text" /></span>
                 <span><strong>Insert Text</strong><small>Paste or type content directly</small></span>
                 <i>&gt;</i>
               </button>
@@ -1436,7 +1460,7 @@ export default function FreeReaderApp() {
       )}
       {panel === "paste" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
-          <form className={styles.modal} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importPastedText(); }}>
+          <form className={styles.modal} role="dialog" aria-modal="true" aria-label="Paste your reading" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importPastedText(); }}>
             <span className={styles.kicker}>Insert Text</span><h2>Paste your reading</h2>
             <p>Copy anything into the box below — an article, notes, or a chapter. FreeReader turns it into a readable, narratable document.</p>
             <label className={styles.fieldLabel}>Title (optional)<input maxLength={120} placeholder="Defaults to the first line" value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} /></label>
@@ -1465,7 +1489,7 @@ export default function FreeReaderApp() {
       )}
       {panel === "folder" && (
         <div className={styles.modalBackdrop} onMouseDown={() => setPanel(null)}>
-          <form className={`${styles.modal} ${styles.folderModal}`} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void createFolder(); }}>
+          <form className={`${styles.modal} ${styles.folderModal}`} role="dialog" aria-modal="true" aria-label="New folder" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void createFolder(); }}>
             <span className={styles.kicker}>{activeFolder ? `Inside ${activeFolder.name}` : "On this device"}</span>
             <h2>New Folder</h2>
             <label className={styles.fieldLabel}>Folder name<input autoFocus maxLength={80} value={folderName} onChange={(event) => setFolderName(event.target.value)} /></label>
@@ -1475,7 +1499,7 @@ export default function FreeReaderApp() {
       )}
       {organizingBook && (
         <div className={styles.modalBackdrop} onMouseDown={() => setOrganizingBook(null)}>
-          <div className={`${styles.modal} ${styles.organizeModal}`} onMouseDown={(event) => event.stopPropagation()}>
+          <div className={`${styles.modal} ${styles.organizeModal}`} role="dialog" aria-modal="true" aria-label="Organize book" onMouseDown={(event) => event.stopPropagation()}>
             <span className={styles.kicker}>Organize Book</span>
             <h2>{organizingBook.title}</h2>
             <p>Move this book to a folder, or return it to the main library.</p>
@@ -1502,7 +1526,7 @@ export default function FreeReaderApp() {
       )}
       {panel === "url" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
-          <form className={styles.modal} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importUrl(); }}>
+          <form className={styles.modal} role="dialog" aria-modal="true" aria-label="Import reading from the web" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importUrl(); }}>
             <span className={styles.kicker}>Import from Web</span><h2>Import reading from the web</h2>
             <p>Paste an article or document URL. FreeReader downloads supported documents directly and uses the article service when a web page cannot be read in your browser.</p>
             <label className={styles.fieldLabel}>Article or document URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
@@ -1514,11 +1538,11 @@ export default function FreeReaderApp() {
       )}
       {panel === "gutenberg" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
-          <div className={`${styles.modal} ${styles.catalog}`} onMouseDown={(event) => event.stopPropagation()}>
+          <div className={`${styles.modal} ${styles.catalog}`} role="dialog" aria-modal="true" aria-label="Free Books" onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.catalogHeader}><span>PG</span><div><strong>PROJECT GUTENBERG</strong><p>Choose a public-domain EPUB and FreeReader will keep it on this device{session ? " and sync it to your account" : ""} for reading and narration.</p></div></div>
             <h2>Free Books</h2>
             <form className={styles.catalogSearch} onSubmit={(event) => { event.preventDefault(); void searchGutenberg(); }}>
-              <input placeholder="Title or author" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input aria-label="Search free books" placeholder="Title or author" value={query} onChange={(event) => setQuery(event.target.value)} />
               <button disabled={busy}>Search</button>
             </form>
             <div className={styles.categoryChips}>
