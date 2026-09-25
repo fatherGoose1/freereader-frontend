@@ -17,15 +17,19 @@ export default function ProCheckoutButton() {
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       if (!data.session) {
+        let redirectTo = `${window.location.origin}/reader/audiobooks`;
+        try { sessionStorage.setItem("freereaderUpgradeToPro", "1"); }
+        catch { redirectTo += "?upgrade=pro"; }
         const { error: signInError } = await supabase.auth.signInWithOAuth({
           provider: "google",
-          options: { redirectTo: `${window.location.origin}/reader/audiobooks?upgrade=pro` },
+          options: { redirectTo },
         });
         if (signInError) throw signInError;
         return;
       }
       window.location.assign(await startCheckout(data.session.access_token));
     } catch {
+      try { sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
       setError("Couldn't start checkout. Please try again.");
       setBusy(false);
     }

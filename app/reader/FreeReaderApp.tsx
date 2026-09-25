@@ -315,7 +315,12 @@ export default function FreeReaderApp() {
   }, []);
 
   useEffect(() => {
-    if (!session?.access_token || new URLSearchParams(window.location.search).get("upgrade") !== "pro") return;
+    if (!session?.access_token) return;
+    const requested = new URLSearchParams(window.location.search).get("upgrade") === "pro";
+    let queued = false;
+    try { queued = sessionStorage.getItem("freereaderUpgradeToPro") === "1"; } catch { /* unavailable */ }
+    if (!requested && !queued) return;
+    try { sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
     window.history.replaceState({}, "", window.location.pathname);
     void startCheckout(session.access_token)
       .then((url) => window.location.assign(url))
