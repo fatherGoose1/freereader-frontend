@@ -308,7 +308,7 @@ export default function FreeReaderApp() {
         setUsage(summary);
         if (summary.plan === "pro") {
           clearInterval(timer);
-          setMessage("Pro is ready. You now have 20 hours of narration per month.");
+          setMessage("Pro is ready. You now have 10 hours of narration per month.");
         }
       }).catch(() => undefined);
       if (++attempts >= 12) {

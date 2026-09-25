@@ -8,7 +8,7 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "FreeReader pricing: start free with 1 hour of audio generation each month, or go Pro for $6/month for up to 20 hours across the audiobook reader and YouTube Narration Studio.",
+    "FreeReader pricing: start free with 1 hour of audio generation each month, go Pro for $6/month for up to 10 hours, or get Premium for $10/month with voice cloning and 20 hours (coming soon).",
   alternates: { canonical: "/pricing" },
 };
 
@@ -20,7 +20,19 @@ function CheckIcon() {
   );
 }
 
-const tiers = [
+type Tier = {
+  name: string;
+  price: string;
+  cadence: string;
+  summary: string;
+  features: string[];
+  cta: { label: string; href: string };
+  featured: boolean;
+  inactive?: boolean;
+  badge?: string;
+};
+
+const tiers: Tier[] = [
   {
     name: "Free",
     price: "$0",
@@ -43,12 +55,29 @@ const tiers = [
     cadence: "per month",
     summary: "Room for creators and long reads that go well past an hour.",
     features: [
-      "Up to 20 hours of audio generation each month",
+      "Up to 10 hours of audio generation each month",
       "Everything in the Free tier",
       "A single monthly allowance shared across both tools",
     ],
     cta: { label: "Get Pro", href: "/reader" },
     featured: true,
+    badge: "Most popular",
+  },
+  {
+    name: "Premium",
+    price: "$10",
+    cadence: "per month",
+    summary: "Cloned voices and the most hours for power users and teams.",
+    features: [
+      "Up to 20 hours of audio generation each month",
+      "Voice cloning — narrate in your own or a custom voice",
+      "Premium voices beyond the standard library",
+      "Everything in the Pro tier",
+    ],
+    cta: { label: "Coming soon", href: "/reader" },
+    featured: false,
+    inactive: true,
+    badge: "Coming soon",
   },
 ];
 
@@ -70,12 +99,12 @@ export default async function Pricing() {
         {tiers.map((tier) => (
           <section
             key={tier.name}
-            className={`price-card${tier.featured ? " featured" : ""}`}
+            className={`price-card${tier.featured ? " featured" : ""}${tier.inactive ? " inactive" : ""}`}
             aria-labelledby={`plan-${tier.name.toLowerCase()}`}
           >
             <div className="price-card-head">
               <h2 id={`plan-${tier.name.toLowerCase()}`}>{tier.name}</h2>
-              {tier.featured && <span className="price-badge">Most room</span>}
+              {tier.badge && <span className="price-badge">{tier.badge}</span>}
             </div>
             <p className="price-amount">
               <strong>{tier.featured ? proPrice : tier.price}</strong>
@@ -87,7 +116,13 @@ export default async function Pricing() {
                 <li key={feature}><CheckIcon />{feature}</li>
               ))}
             </ul>
-            {tier.featured ? <ProCheckoutButton /> : <Link className="button" href={tier.cta.href}>{tier.cta.label}</Link>}
+            {tier.inactive ? (
+              <button className="button" type="button" disabled>{tier.cta.label}</button>
+            ) : tier.featured ? (
+              <ProCheckoutButton />
+            ) : (
+              <Link className="button" href={tier.cta.href}>{tier.cta.label}</Link>
+            )}
           </section>
         ))}
       </div>
