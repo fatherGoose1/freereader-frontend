@@ -326,6 +326,7 @@ export default function NarrationStudio() {
   }
 
   function changeDefaults(changes: Partial<Pick<NarrationProject, "defaultVoice" | "globalSpeed">>) {
+    if (voicePreviewRef.current && changes.defaultVoice) stopPlayback();
     if (playingIdRef.current) {
       const current = projectRef.current.segments.find((item) => item.id === playingIdRef.current);
       if (current && ((changes.defaultVoice && !current.voiceId) || (changes.globalSpeed && !current.speedOverride))) stopPlayback();
@@ -483,33 +484,26 @@ export default function NarrationStudio() {
   }
 
   async function previewVoice() {
-    const passage = project.segments.find((segment) => passageLanguage(segment, project) === project.language);
-    if (!passage && project.language !== "en") {
-      setGenerationMessage(`Add a ${languageName(project.language)} passage to preview this voice.`);
-      return;
-    }
     stopPlayback();
     const epoch = playbackEpoch.current;
-    setGenerationMessage("Preparing voice preview...");
+    const voice = voiceForLanguage(project.defaultVoice, project.language);
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audioUrl.current) {
+      URL.revokeObjectURL(audioUrl.current);
+      audioUrl.current = null;
+    }
+    audio.src = `/voice-previews/${voice}.m4a`;
+    voicePreviewRef.current = true;
+    setVoicePreviewPlaying(true);
+    setGenerationMessage("Playing voice sample (English)…");
     try {
-      const result = await synthesize(
-        passage ? spokenText(passage, project.pronunciations).slice(0, 200) : "This is how your FreeReader narration voice will sound.",
-        voiceForLanguage(project.defaultVoice, project.language), 12, (message) => setGenerationMessage(message), false, project.globalSpeed, project.language, undefined, "youtube_narration",
-      );
+      await audio.play();
+      if (epoch === playbackEpoch.current) setIsPlaying(true);
+    } catch {
       if (epoch !== playbackEpoch.current) return;
-      if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
-      audioUrl.current = URL.createObjectURL(result.blob);
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl.current;
-        voicePreviewRef.current = true;
-        setVoicePreviewPlaying(true);
-        await audioRef.current.play();
-        setIsPlaying(true);
-      }
-      setGenerationMessage("Voice preview ready.");
-    } catch (error) {
-      if (epoch === playbackEpoch.current) stopPlayback();
-      setGenerationMessage(error instanceof Error ? error.message : "Voice preview failed.");
+      stopPlayback();
+      setGenerationMessage("Voice sample could not play. Try again.");
     }
   }
 
@@ -697,6 +691,7 @@ export default function NarrationStudio() {
           </select>
         </label>
         <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
+        <span className={styles.previewNote}>Instant English sample · No generation time used</span>
         {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
         <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
           {generatingAll && generationProgress ? <>

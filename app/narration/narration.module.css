@@ -30,6 +30,7 @@
 .controlbar select, .passageSettings select, .pronunciationForm input, .pauseControls input { min-height: 40px; padding: 8px 10px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; font-weight: 400; }
 .secondaryButton { min-height: 36px; padding: 7px 11px; color: var(--green); background: transparent; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; font-weight: 700; }
 .secondaryButton:hover { background: #f3f6fc; }
+.previewNote { color: var(--muted); font-size: 11px; }
 .generateButton, .importButton, .readyExport { min-height: 42px; padding: 9px 16px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 9px; font-size: 12px; font-weight: 700; }
 .generateButton:hover:not(:disabled), .importButton:hover:not(:disabled), .readyExport:hover:not(:disabled) { background: var(--green-dark); }
 .controlbar .generateButton { margin-left: auto; white-space: nowrap; }
