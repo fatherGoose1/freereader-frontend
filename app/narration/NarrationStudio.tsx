@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import BrandMark from "../components/BrandMark";
 import { useEffect, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
@@ -663,8 +664,8 @@ export default function NarrationStudio() {
     <main className={styles.studio}>
       <header className={styles.topbar}>
         <div className={styles.brandBlock}>
-          <Link href="/reader" className={styles.brand}><img src="/icon.svg" alt="" />FreeReader</Link>
-          <span className={styles.mode}>Narration Studio</span>
+          <Link href="/" className={styles.brand}><BrandMark />FreeReader</Link>
+          <span className={styles.mode}>Video narration</span>
         </div>
         <input
           className={styles.projectTitle}
@@ -674,6 +675,7 @@ export default function NarrationStudio() {
         />
         <div className={styles.topActions}>
           <span>{saveState}</span>
+          <Link href="/reader/audiobooks" className={styles.readerLink}>Audiobook reader ↗</Link>
           <button onClick={newProject}>New project</button>
         </div>
       </header>
@@ -726,8 +728,8 @@ export default function NarrationStudio() {
 
       <section className={styles.workspace} aria-label="Script workspace">
         {!project.segments.length ? <div className={styles.emptyEditor}>
-          <h1>Start with your script</h1>
-          <p>Paste your YouTube script here. You can edit it before generating and fine-tune individual passages afterward.</p>
+          <h1>Turn your script into a voiceover</h1>
+          <p>Paste a video script or import a text file. Edit passages, choose a voice, and export the finished narration as a WAV file.</p>
           <label className={styles.fileImport}>Import a text file<input type="file" accept=".txt,.md,text/plain,text/markdown" onChange={(event) => { void importScriptFile(event.target.files?.[0]); event.target.value = ""; }} /></label>
           <label htmlFor="script-import">YouTube script</label>
           <textarea id="script-import" placeholder="Paste your script here…" value={scriptDraft} onChange={(event) => setScriptDraft(event.target.value)} />
