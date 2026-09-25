@@ -38,7 +38,7 @@ async function mockSpeech(page: Page, options: { delayMs?: number; seconds?: num
     };
     if (texts.length > 1) {
       const zip = new JSZip();
-      texts.forEach((_, index) => zip.file(`${index}.wav`, wavBuffer(seconds)));
+      texts.forEach((_, index) => zip.file(`${index}.m4a`, wavBuffer(seconds)));
       const archive = await zip.generateAsync({ type: "nodebuffer" });
       await route.fulfill({ status: 200, headers: {
         ...headers,
@@ -70,14 +70,16 @@ test("plays the first chunk before look-ahead and reports backend generation tim
   const requests: Array<{ text?: string; texts?: string[]; speed: number }> = [];
   await mockSpeech(page, { delayMs: 150, onRequest: (body) => requests.push(body) });
   await page.goto("/reader/audiobooks");
-  await importText(page, "Pipeline.txt", ENGLISH.repeat(30));
+  await importText(page, "Pipeline.txt", Array.from({ length: 8 }, (_, index) => `${ENGLISH}Part ${index + 1}.`).join("\n\n"));
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentTime > 0 || !audio.paused), { timeout: 60_000 }).toBe(true);
   await expect.poll(() => requests.length, { timeout: 60_000 }).toBeGreaterThanOrEqual(1);
   // The cold start asks for one passage so audio begins sooner...
   expect(requests[0].texts?.length ?? 1).toBe(1);
-  // ...then look-ahead batches the following passages into one round trip.
-  await expect.poll(() => requests.some((request) => (request.texts?.length ?? 1) > 1), { timeout: 60_000 }).toBe(true);
+  // ...then look-ahead requests the next two passages in one round trip.
+  await expect.poll(() => requests.length, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+  expect(requests[1].texts).toHaveLength(2);
+  expect(requests.every((request) => (request.texts?.length ?? 1) <= 2)).toBe(true);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect.poll(() => events.filter((event) => event.event_name === "first_playable_audio").length).toBe(1);
   const reported = events.find((event) => event.event_name === "first_playable_audio")!.properties;

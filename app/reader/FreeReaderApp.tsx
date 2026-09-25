@@ -45,7 +45,7 @@ import ReaderIcon from "./ReaderIcon";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | "account" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
-const BATCH_MAX_BLOCKS = 4;
+const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
