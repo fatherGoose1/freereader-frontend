@@ -1,5 +1,5 @@
-const CACHE = "freereader-shell-v2";
-const SHELL = ["/reader", "/icon.svg", "/manifest.webmanifest"];
+const CACHE = "freereader-shell-v3";
+const SHELL = ["/reader", "/icon.svg?v=3", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));

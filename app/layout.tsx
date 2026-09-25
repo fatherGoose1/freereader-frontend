@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
   description:
     "Turn books, documents, and articles into audiobooks, or create and export video voiceovers from scripts. Start free with FreeReader's text-to-speech tools in 31 languages.",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg?v=3" },
   manifest: "/manifest.webmanifest",
 };
 
