@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { callQwen3Tts, qwen3TtsConfig } from "../../qwen3Tts";
+import { callBackend, freereaderBackendConfig } from "../../freereaderBackend";
 
 export const runtime = "nodejs";
 
-// Maximum base64 payload for a 25 second mono clip, with headroom for 48 kHz WAV.
-const MAX_AUDIO_BASE64_LENGTH = 8_000_000;
-
+// Conditions a reference clip into a reusable clone through the Koko backend,
+// which stores the Qwen3-TTS conditioning on the Modal volume.
 export async function POST(request: Request) {
-  const config = qwen3TtsConfig();
-  if (!config) return NextResponse.json({ error: "voice_clone_not_configured" }, { status: 503 });
+  const config = freereaderBackendConfig();
+  if (!config) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
 
   const body = await request.json().catch(() => null) as {
     userId?: unknown; voiceId?: unknown; name?: unknown; language?: unknown;
@@ -17,20 +16,16 @@ export async function POST(request: Request) {
   const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
   const audio = typeof body?.audio === "string" ? body.audio : "";
   if (!userId || !audio) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-  if (audio.length > MAX_AUDIO_BASE64_LENGTH) return NextResponse.json({ error: "reference_audio_too_large" }, { status: 413 });
 
-  const upstreamBody: Record<string, unknown> = {
-    user_id: userId,
-    audio,
-    voice_id: typeof body?.voiceId === "string" && body.voiceId.trim() ? body.voiceId.trim() : undefined,
-    name: typeof body?.name === "string" ? body.name.trim().slice(0, 80) : undefined,
-    language: typeof body?.language === "string" ? body.language.trim() : undefined,
-    ref_text: typeof body?.refText === "string" ? body.refText.trim() : undefined,
-  };
+  const upstreamBody: Record<string, unknown> = { user_id: userId, audio };
+  if (typeof body?.voiceId === "string" && body.voiceId.trim()) upstreamBody.voice_id = body.voiceId.trim();
+  if (typeof body?.name === "string") upstreamBody.name = body.name.trim().slice(0, 80);
+  if (typeof body?.language === "string") upstreamBody.language = body.language.trim();
+  if (typeof body?.refText === "string") upstreamBody.ref_text = body.refText.trim();
 
   let response: Response;
   try {
-    response = await callQwen3Tts(config, "/voices/clone", upstreamBody, 300_000);
+    response = await callBackend(config, "/api/v1/freereader/voices/clone", upstreamBody);
   } catch {
     return NextResponse.json({ error: "voice_clone_unavailable" }, { status: 502 });
   }
@@ -42,7 +37,7 @@ export async function POST(request: Request) {
     });
   }
   return new Response(payload, {
-    status: response.status,
+    status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store" },
   });
 }

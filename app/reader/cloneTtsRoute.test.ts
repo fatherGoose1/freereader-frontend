@@ -3,7 +3,7 @@ import test, { type TestContext } from "node:test";
 import { POST as cloneSpeech } from "../api/clone-tts/route";
 import { POST as createClone } from "../api/voices/clone/route";
 
-const ENV_KEYS = ["MODAL_QWEN3_TTS_URL", "MODAL_QWEN3_TTS_PROXY_TOKEN", "MODAL_QWEN3_TTS_PROXY_SECRET"] as const;
+const ENV_KEYS = ["KOKO_BACKEND_URL", "FREEREADER_TTS_API_TOKEN", "PARRYT_API_TOKEN"] as const;
 type EnvValues = Partial<Record<(typeof ENV_KEYS)[number], string>>;
 
 function setEnv(t: TestContext, values: EnvValues) {
@@ -22,22 +22,24 @@ function setEnv(t: TestContext, values: EnvValues) {
   });
 }
 
-test("clone speech proxies to the Qwen3-TTS Modal generate endpoint", async (t) => {
-  setEnv(t, { MODAL_QWEN3_TTS_URL: "https://qwen.example/", MODAL_QWEN3_TTS_PROXY_TOKEN: "wk-test", MODAL_QWEN3_TTS_PROXY_SECRET: "ws-test" });
+test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
+  setEnv(t, { KOKO_BACKEND_URL: "https://backend.example/", FREEREADER_TTS_API_TOKEN: "tts-key" });
   const fetch = t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    assert.equal(String(input), "https://qwen.example/generate");
+    assert.equal(String(input), "https://backend.example/api/v1/freereader/speech/clone");
     assert.equal(init?.method, "POST");
     const headers = init?.headers as Record<string, string>;
-    assert.equal(headers["Modal-Key"], "wk-test");
-    assert.equal(headers["Modal-Secret"], "ws-test");
+    assert.equal(headers.Authorization, "Bearer tts-key");
     assert.deepEqual(JSON.parse(String(init?.body)), {
-      text: "Hello there.", voice_type: "clone", voice_id: "voice-1", user_id: "user-1",
-      format: "m4a", language: "en", speed: 0.9,
+      text: "Hello there.", voice_id: "voice-1", user_id: "user-1", language: "en", speed: 0.9,
     });
-    return new Response(JSON.stringify({
-      audio: Buffer.from([1, 2, 3]).toString("base64"), content_type: "audio/mp4",
-      duration_seconds: 1.5, generation_seconds: 0.8, model: "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    }), { headers: { "Content-Type": "application/json" } });
+    return new Response(new Uint8Array([1, 2, 3]), {
+      headers: {
+        "Content-Type": "audio/mp4",
+        "X-Audio-Duration": "1.5",
+        "X-Generation-Seconds": "0.8",
+        "X-TTS-Model": "qwen3-tts-12hz-0.6b-base",
+      },
+    });
   });
   const response = await cloneSpeech(new Request("http://localhost/api/clone-tts", {
     method: "POST",
@@ -47,13 +49,13 @@ test("clone speech proxies to the Qwen3-TTS Modal generate endpoint", async (t) 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "audio/mp4");
   assert.equal(response.headers.get("X-Audio-Duration"), "1.5");
-  assert.equal(response.headers.get("X-TTS-Model"), "Qwen/Qwen3-TTS-12Hz-0.6B-Base");
+  assert.equal(response.headers.get("X-TTS-Model"), "qwen3-tts-12hz-0.6b-base");
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2, 3]);
   assert.equal(fetch.mock.callCount(), 1);
 });
 
-test("clone speech is unavailable without Modal configuration", async (t) => {
-  setEnv(t, {});
+test("clone speech is unavailable without a backend token", async (t) => {
+  setEnv(t, { KOKO_BACKEND_URL: "https://backend.example", FREEREADER_TTS_API_TOKEN: undefined, PARRYT_API_TOKEN: undefined });
   const response = await cloneSpeech(new Request("http://localhost/api/clone-tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -62,10 +64,10 @@ test("clone speech is unavailable without Modal configuration", async (t) => {
   assert.equal(response.status, 503);
 });
 
-test("voice cloning forwards the reference clip to the Modal clone endpoint", async (t) => {
-  setEnv(t, { MODAL_QWEN3_TTS_URL: "https://qwen.example", MODAL_QWEN3_TTS_PROXY_TOKEN: "wk-test", MODAL_QWEN3_TTS_PROXY_SECRET: "ws-test" });
+test("voice cloning forwards the reference clip to the backend voices/clone endpoint", async (t) => {
+  setEnv(t, { KOKO_BACKEND_URL: "https://backend.example", FREEREADER_TTS_API_TOKEN: "tts-key" });
   const fetch = t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    assert.equal(String(input), "https://qwen.example/voices/clone");
+    assert.equal(String(input), "https://backend.example/api/v1/freereader/voices/clone");
     assert.deepEqual(JSON.parse(String(init?.body)), {
       user_id: "user-1", audio: "AAAA", voice_id: "voice-1", name: "Narrator", language: "en", ref_text: "Hello.",
     });
