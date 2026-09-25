@@ -5,12 +5,14 @@ import BrandMark from "../components/BrandMark";
 import { useEffect, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import type { NarratorVoice } from "../reader/voices";
+import { isClonedVoice, type NarratorVoice } from "../reader/voices";
 import { detectSpeechLanguage, voiceForLanguage, voicesForLanguage } from "../reader/speech";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { initAuthToken } from "../reader/authToken";
 import { supabaseClient } from "../reader/supabase";
-import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
+import { fetchUsage, formatRemaining, installationId, linkInstallation, type UsageSummary } from "../reader/usage";
+import { listClonedVoices, removeClonedVoice, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
+import { MAX_CLONE_SECONDS, MIN_CLONE_SECONDS, VoiceRecorder, prepareCloneAudio } from "../reader/voiceCloneAudio";
 import { exportVoiceover } from "./exportAudio";
 import {
   createNarrationProject,
@@ -32,14 +34,23 @@ import styles from "./narration.module.css";
 const speeds = [0.75, 0.85, 0.9, 1, 1.1, 1.2, 1.35];
 const pauses = [["Short", 250], ["Medium", 600], ["Long", 1000]] as const;
 
+type CloneDraft = { blob: Blob; durationSeconds: number; base64: string; url: string };
+
 function randomId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function voiceOptions(language: SpeechLanguage) {
-  return voicesForLanguage(language).map(([value, name]) => <option key={value} value={value}>{name}</option>);
+function voiceOptions(language: SpeechLanguage, clonedVoices: ClonedVoiceRecord[]) {
+  const builtIn = voicesForLanguage(language).map(([value, name]) => <option key={value} value={value}>{name}</option>);
+  if (!clonedVoices.length) return builtIn;
+  return [
+    <optgroup key="cloned" label="Your cloned voices">
+      {clonedVoices.map((record) => <option key={record.id} value={voiceRefFor(record)}>{record.name}</option>)}
+    </optgroup>,
+    ...builtIn,
+  ];
 }
 
 function passageLanguage(segment: NarrationSegment, project: NarrationProject): SpeechLanguage {
@@ -162,6 +173,19 @@ export default function NarrationStudio() {
   const voicePreviewRef = useRef(false);
   const generationEpoch = useRef(0);
   const editors = useRef(new Map<string, HTMLTextAreaElement>());
+  const [clonedVoices, setClonedVoices] = useState<ClonedVoiceRecord[]>([]);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneMode, setCloneMode] = useState<"upload" | "record">("upload");
+  const [cloneName, setCloneName] = useState("");
+  const [cloneDraft, setCloneDraft] = useState<CloneDraft | null>(null);
+  const [cloneBusy, setCloneBusy] = useState(false);
+  const [cloneError, setCloneError] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recorderSupported, setRecorderSupported] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const recorderRef = useRef<VoiceRecorder | null>(null);
+  const recordingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selected = project.segments.find((segment) => segment.id === selectedId) ?? null;
   const readyCount = project.segments.filter((segment) => segment.status === "ready").length;
@@ -279,10 +303,18 @@ export default function NarrationStudio() {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    setClonedVoices(listClonedVoices());
+    setRecorderSupported(VoiceRecorder.supported());
+  }, []);
+
   useEffect(() => () => {
     generationEpoch.current += 1;
     if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
     if (pauseTimer.current) clearTimeout(pauseTimer.current);
+    if (recordingTimer.current) clearInterval(recordingTimer.current);
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
   }, []);
 
   function importScript() {
@@ -357,7 +389,7 @@ export default function NarrationStudio() {
     const segment = current.segments.find((item) => item.id === id);
     if (!segment) return;
     const language = languageOverride ?? current.language;
-    const voiceId = segment.voiceId && voicesForLanguage(language).some(([value]) => value === segment.voiceId)
+    const voiceId = segment.voiceId && (isClonedVoice(segment.voiceId) || voicesForLanguage(language).some(([value]) => value === segment.voiceId))
       ? segment.voiceId : null;
     const updated = { ...segment, languageOverride, voiceId };
     const changed = inputKey(segment, current) !== inputKey(updated, current);
@@ -483,10 +515,128 @@ export default function NarrationStudio() {
     }
   }
 
+  function revokeDraftUrl() {
+    setCloneDraft((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  }
+
+  async function loadCloneSource(source: Blob) {
+    setCloneError("");
+    setCloneBusy(true);
+    try {
+      const prepared = await prepareCloneAudio(source);
+      setCloneDraft((current) => {
+        if (current) URL.revokeObjectURL(current.url);
+        return { ...prepared, url: URL.createObjectURL(prepared.blob) };
+      });
+      setCloneName((name) => name.trim() || "My voice");
+    } catch (error) {
+      setCloneError(error instanceof Error ? error.message : "Could not prepare that audio.");
+    } finally {
+      setCloneBusy(false);
+    }
+  }
+
+  async function toggleRecording() {
+    if (recording) {
+      const recorder = recorderRef.current;
+      setRecording(false);
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+        recordingTimer.current = null;
+      }
+      recorderRef.current = null;
+      if (!recorder) return;
+      try {
+        await loadCloneSource(await recorder.stop());
+      } catch (error) {
+        setCloneError(error instanceof Error ? error.message : "Recording failed.");
+      }
+      return;
+    }
+    setCloneError("");
+    try {
+      const recorder = new VoiceRecorder();
+      await recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+      setRecordingSeconds(0);
+      recordingTimer.current = setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+    } catch (error) {
+      setCloneError(error instanceof Error ? error.message : "Microphone access was blocked.");
+    }
+  }
+
+  async function cloneOwnerId(): Promise<string> {
+    const supabase = supabaseClient();
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user.id) return data.session.user.id;
+    }
+    return installationId();
+  }
+
+  async function createVoiceClone() {
+    if (!cloneDraft || !cloneName.trim() || cloneBusy) return;
+    setCloneBusy(true);
+    setCloneError("");
+    try {
+      const userId = await cloneOwnerId();
+      const response = await fetch("/api/voices/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          voiceId: randomId(),
+          name: cloneName.trim(),
+          language: projectRef.current.language,
+          audio: cloneDraft.base64,
+        }),
+      });
+      const payload = await response.json().catch(() => null) as {
+        voice_id?: unknown; user_id?: unknown; duration_seconds?: unknown; error?: unknown;
+      } | null;
+      if (!response.ok || typeof payload?.voice_id !== "string") {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
+      }
+      const record: ClonedVoiceRecord = {
+        id: payload.voice_id,
+        userId: typeof payload.user_id === "string" ? payload.user_id : userId,
+        name: cloneName.trim(),
+        createdAt: new Date().toISOString(),
+        durationSeconds: typeof payload.duration_seconds === "number" ? payload.duration_seconds : cloneDraft.durationSeconds,
+        language: projectRef.current.language,
+      };
+      setClonedVoices(saveClonedVoice(record));
+      changeDefaults({ defaultVoice: voiceRefFor(record) });
+      setGenerationMessage(`Cloned voice "${record.name}" is ready. Generate a passage to hear it.`);
+      revokeDraftUrl();
+      setCloneName("");
+      setCloneOpen(false);
+      setCloneMode("upload");
+    } catch (error) {
+      setCloneError(error instanceof Error ? error.message : "Voice cloning failed. Try again.");
+    } finally {
+      setCloneBusy(false);
+    }
+  }
+
+  function deleteVoiceClone(record: ClonedVoiceRecord) {
+    setClonedVoices(removeClonedVoice(record.id));
+    if (projectRef.current.defaultVoice === voiceRefFor(record)) changeDefaults({ defaultVoice: "af_heart" });
+    setGenerationMessage(`Removed cloned voice "${record.name}".`);
+  }
+
   async function previewVoice() {
     stopPlayback();
     const epoch = playbackEpoch.current;
     const voice = voiceForLanguage(project.defaultVoice, project.language);
+    if (isClonedVoice(voice)) {
+      setGenerationMessage("Cloned voices have no instant preview. Generate a passage to hear this voice.");
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     if (audioUrl.current) {
@@ -684,7 +834,7 @@ export default function NarrationStudio() {
         </label>
         <label>Project voice
           <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-            {voiceOptions(project.language)}
+            {voiceOptions(project.language, clonedVoices)}
           </select>
         </label>
         <label>Global speaking speed
@@ -693,6 +843,7 @@ export default function NarrationStudio() {
           </select>
         </label>
         <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
+        <button className={styles.secondaryButton} onClick={() => setCloneOpen((open) => !open)} aria-expanded={cloneOpen}>Clone voice</button>
         <span className={styles.previewNote}>Instant sample in project language · No generation time used</span>
         {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
         <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
@@ -704,6 +855,51 @@ export default function NarrationStudio() {
         </button>
         {readyCount === project.segments.length && readyCount > 0 && !generatingAll && <button className={styles.readyExport} disabled={exporting} onClick={() => void downloadVoiceover()}>{exporting ? "Preparing WAV…" : "Download WAV voiceover"}</button>}
       </section>
+
+      {cloneOpen && <section className={styles.clonePanel} aria-label="Voice cloning">
+        <div className={styles.clonePanelHeader}>
+          <div>
+            <strong>Clone a voice</strong>
+            <small>Upload or record {MIN_CLONE_SECONDS}–{MAX_CLONE_SECONDS} seconds of speech. We use at most the first {MAX_CLONE_SECONDS} seconds.</small>
+          </div>
+          <button type="button" className={styles.closeTools} aria-label="Close voice cloning" onClick={() => { setCloneOpen(false); revokeDraftUrl(); setCloneError(""); }}>×</button>
+        </div>
+        <label className={styles.cloneName}>Voice name
+          <input value={cloneName} onChange={(event) => setCloneName(event.target.value)} placeholder="e.g. My narrator" maxLength={80} />
+        </label>
+        <div className={styles.cloneTabs} role="tablist" aria-label="Voice source">
+          <button type="button" role="tab" aria-selected={cloneMode === "upload"} className={cloneMode === "upload" ? styles.activeCloneTab : ""} onClick={() => setCloneMode("upload")}>Upload audio</button>
+          <button type="button" role="tab" aria-selected={cloneMode === "record"} className={cloneMode === "record" ? styles.activeCloneTab : ""} onClick={() => setCloneMode("record")}>Record</button>
+        </div>
+        {cloneMode === "upload" ? <div
+          className={`${styles.cloneDrop} ${dragActive ? styles.cloneDropActive : ""}`}
+          onDragOver={(event) => { event.preventDefault(); setDragActive(true); }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(event) => { event.preventDefault(); setDragActive(false); const file = event.dataTransfer.files?.[0]; if (file) void loadCloneSource(file); }}
+        >
+          <span>Drag an audio file here, or</span>
+          <label className={styles.fileImport}>Browse audio<input type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadCloneSource(file); event.target.value = ""; }} /></label>
+        </div> : <div className={styles.cloneRecorder}>
+          <button type="button" className={recording ? styles.cloneRecordStop : styles.cloneRecordStart} disabled={!recorderSupported} onClick={() => void toggleRecording()}>
+            {recording ? `Stop recording · ${formatTime(recordingSeconds)}` : "Start recording"}
+          </button>
+          <span>{recorderSupported ? `Speak clearly for ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds.` : "Microphone recording is not supported in this browser."}</span>
+        </div>}
+        {cloneDraft && <div className={styles.clonePreview}>
+          <audio controls src={cloneDraft.url} />
+          <span>{cloneDraft.durationSeconds.toFixed(1)}s ready</span>
+        </div>}
+        {cloneError && <p className={styles.cloneError} role="alert">{cloneError}</p>}
+        <div className={styles.cloneActions}>
+          <button type="button" className={styles.importButton} disabled={!cloneDraft || !cloneName.trim() || cloneBusy} onClick={() => void createVoiceClone()}>{cloneBusy ? "Cloning…" : "Create voice clone"}</button>
+        </div>
+        {clonedVoices.length > 0 && <ul className={styles.cloneVoiceList} aria-label="Your cloned voices">
+          {clonedVoices.map((record) => <li key={record.id}>
+            <span><strong>{record.name}</strong> · {record.durationSeconds.toFixed(1)}s</span>
+            <button type="button" aria-label={`Remove cloned voice ${record.name}`} onClick={() => deleteVoiceClone(record)}>×</button>
+          </li>)}
+        </ul>}
+      </section>}
 
       <section className={styles.globalPronunciations} aria-label="Global pronunciations">
         <div className={styles.globalPronunciationsInner}>
@@ -786,7 +982,7 @@ export default function NarrationStudio() {
                     <label>Voice override
                       <select value={segment.voiceId ?? ""} onChange={(event) => changePassageVoice(segment.id, event.target.value ? event.target.value as NarratorVoice : null)}>
                         <option value="">Project voice</option>
-                        {voiceOptions(passageLanguage(segment, project))}
+                        {voiceOptions(passageLanguage(segment, project), clonedVoices)}
                       </select>
                     </label>
                     <label>Speed override

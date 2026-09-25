@@ -124,6 +124,28 @@
 .playerTimeline input { width: 100%; accent-color: var(--green); }
 .exportButton { min-height: 40px; padding: 8px 13px; flex: none; color: var(--green); background: #edf2ff; border: 1px solid #dce4fa; border-radius: 8px; font-size: 12px; font-weight: 700; }
 .playbar audio { display: none; }
+.clonePanel { display: grid; gap: 14px; padding: 18px max(28px, calc((100vw - 1160px) / 2)); background: #fff; border-bottom: 1px solid var(--line); }
+.clonePanelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.clonePanelHeader strong { display: block; color: var(--green); font-size: 13px; }
+.clonePanelHeader small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.clonePanelHeader .closeTools { padding: 0 10px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 6px; font-size: 18px; line-height: 1; }
+.cloneName { display: flex; flex-direction: column; gap: 5px; max-width: 360px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.cloneName input { min-height: 40px; padding: 8px 10px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; font-weight: 400; }
+.cloneTabs { display: inline-flex; gap: 4px; }
+.cloneTabs button { min-height: 34px; padding: 6px 12px; color: var(--muted); background: #f9fafc; border: 1px solid var(--line); border-radius: 7px; font-size: 11px; font-weight: 700; }
+.cloneTabs .activeCloneTab { color: var(--green); background: #edf2ff; border-color: #b9c8ef; }
+.cloneDrop { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 18px; color: var(--muted); background: #f9fafc; border: 1px dashed #c7cfdd; border-radius: 10px; font-size: 12px; }
+.cloneDropActive { background: #eef3ff; border-color: #8ba7ff; }
+.cloneRecorder { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 0; color: var(--muted); font-size: 11px; }
+.cloneRecordStart { min-height: 40px; padding: 8px 14px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 8px; font-size: 12px; font-weight: 700; }
+.cloneRecordStop { min-height: 40px; padding: 8px 14px; color: #fff; background: #c55345; border: 1px solid #c55345; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.clonePreview { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+.clonePreview audio { height: 34px; }
+.cloneError { margin: 0; color: #a43f32; font-size: 12px; }
+.cloneActions { display: flex; justify-content: flex-start; }
+.cloneVoiceList { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.cloneVoiceList li { display: inline-flex; align-items: center; gap: 9px; padding: 6px 7px 6px 12px; background: #f9fafc; border: 1px solid var(--line); border-radius: 7px; font-size: 11px; }
+.cloneVoiceList button { min-height: 24px; padding: 0 5px; color: #9b5148; background: transparent; border: 0; font-size: 17px; }
 @media (max-width: 1100px) {
   .topbar { grid-template-columns: auto minmax(180px, 1fr); }
   .topActions { grid-column: 1 / -1; justify-content: flex-end; }
@@ -137,6 +159,8 @@
   .controlbar label { flex: 1 1 135px; }
   .controlbar .generateButton { margin-left: auto; }
   .globalPronunciations { padding: 12px 14px; }
+  .clonePanel { padding: 12px 14px; }
+  .cloneName { max-width: none; }
   .globalPronunciations form { flex-basis: 100%; }
   .globalPronunciations input { font-size: 16px; }
   .workspace { padding: 20px 12px 130px; }

@@ -3,7 +3,7 @@ import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
-import { isSupertonicVoice } from "./voices";
+import { isClonedVoice, isSupertonicVoice } from "./voices";
 import type { TelemetrySource } from "./telemetry";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
@@ -32,6 +32,10 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
+    // User clones are served by the Qwen3-TTS Modal endpoint in any language.
+    if (isClonedVoice(voice)) {
+      return { model: "qwen3-tts-clone-v1", voice, provider: "Server", mobile: this.mobile };
+    }
     // The reader uses voiceForLanguage to retain its existing English default.
     // Studio can explicitly request an English Supertonic preset by voice ID.
     const selected = language === "en" && isSupertonicVoice(voice) ? voice : voiceForLanguage(voice, language);

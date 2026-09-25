@@ -32,7 +32,24 @@ export const KOKORO_VOICES = [
 ] as const;
 
 export type KokoroVoice = (typeof KOKORO_VOICES)[number][0];
-export type NarratorVoice = KokoroVoice | Voice;
+// User-created clones are addressed with a "clone:" prefix so they stay distinct
+// from the finite built-in voice sets while still flowing through NarratorVoice.
+export type ClonedVoice = `clone:${string}`;
+export type NarratorVoice = KokoroVoice | Voice | ClonedVoice;
+
+const CLONED_VOICE_PREFIX = "clone:";
+
+export function isClonedVoice(voice: NarratorVoice | string): voice is ClonedVoice {
+  return typeof voice === "string" && voice.startsWith(CLONED_VOICE_PREFIX);
+}
+
+export function clonedVoiceId(voice: ClonedVoice | string): string {
+  return isClonedVoice(voice) ? voice.slice(CLONED_VOICE_PREFIX.length) : voice;
+}
+
+export function clonedVoiceRef(id: string): ClonedVoice {
+  return `${CLONED_VOICE_PREFIX}${id}`;
+}
 
 const KOKORO_NAMES = Object.fromEntries(KOKORO_VOICES) as Record<KokoroVoice, string>;
 const SUPERTONIC_NAMES: Record<Voice, string> = {

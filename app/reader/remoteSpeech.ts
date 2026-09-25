@@ -4,6 +4,8 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
+import { clonedVoiceId, isClonedVoice } from "./voices";
+import { findClonedVoice } from "./cloneVoices";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
@@ -49,21 +51,27 @@ export class RemoteSpeechClient {
     this.controller = controller;
     const started = performance.now();
     status?.(items.length > 1 ? `Generating ${items.length} passages` : "Generating speech");
-    const language = options?.language;
-    const supertonic = options?.engine === "supertonic" || (language !== undefined && language !== "en");
-    const body: Record<string, unknown> = {
-      texts: items.map((item) => supertonic
-        ? normalizeForSupertonic(item.text, item.isHeading, language)
-        : normalizeForSpeech(item.text, item.isHeading)),
-      speed: speechSpeed,
-    };
-    if (options) {
-      body.language = language;
-      body.voice = options.voice;
-      body.steps = options.steps;
-      if (options.engine) body.engine = options.engine;
-    }
+    const generationStartedAt = performance.timeOrigin + started;
     try {
+      const requestedVoice = options?.voice;
+      if (requestedVoice && isClonedVoice(requestedVoice)) {
+        return await this.synthesizeClone(items, speechSpeed, status, requestedVoice,
+          options?.language, controller.signal, generationStartedAt);
+      }
+      const language = options?.language;
+      const supertonic = options?.engine === "supertonic" || (language !== undefined && language !== "en");
+      const body: Record<string, unknown> = {
+        texts: items.map((item) => supertonic
+          ? normalizeForSupertonic(item.text, item.isHeading, language)
+          : normalizeForSpeech(item.text, item.isHeading)),
+        speed: speechSpeed,
+      };
+      if (options) {
+        body.language = language;
+        body.voice = options.voice;
+        body.steps = options.steps;
+        if (options.engine) body.engine = options.engine;
+      }
       const userToken = currentAccessToken();
       const response = await fetch("/api/tts", {
         method: "POST",
@@ -84,7 +92,6 @@ export class RemoteSpeechClient {
         throw new Error("This speech server does not support the selected voice yet. Update the speech service and try again.");
       }
       const generationSeconds = Number(response.headers.get("X-Generation-Seconds"));
-      const generationStartedAt = performance.timeOrigin + started;
       const contentType = response.headers.get("Content-Type") ?? "";
       if (contentType.includes("zip")) {
         const durations = (response.headers.get("X-Audio-Durations") ?? "").split(",").map(Number);
@@ -110,5 +117,41 @@ export class RemoteSpeechClient {
     } finally {
       if (this.controller === controller) this.controller = undefined;
     }
+  }
+
+  // Cloned voices are conditioned on the GPU once; each generation only sends the
+  // persisted voice id, never the original reference audio.
+  private async synthesizeClone(items: BatchItem[], speechSpeed: number, status: TtsStatus | undefined,
+    voiceRef: string, language: string | undefined, signal: AbortSignal, generationStartedAt: number): Promise<SpeechResult[]> {
+    const record = findClonedVoice(clonedVoiceId(voiceRef));
+    if (!record) throw new Error("This cloned voice is not available in this browser. Create it again from Clone voice.");
+    const parts: SpeechResult[] = [];
+    for (const item of items) {
+      status?.(items.length > 1
+        ? `Generating ${items.length} passages with your cloned voice`
+        : "Generating with your cloned voice");
+      const response = await fetch("/api/clone-tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: normalizeForSpeech(item.text, item.isHeading, language),
+          voiceId: record.id,
+          userId: record.userId,
+          language,
+          speed: speechSpeed,
+        }),
+        signal,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: unknown } | null;
+        throw new Error(unavailableMessage(response, payload));
+      }
+      const blob = await response.blob();
+      if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");
+      parts.push(speechResult(blob, Number(response.headers.get("X-Audio-Duration")),
+        Number(response.headers.get("X-Generation-Seconds")), generationStartedAt));
+    }
+    status?.("Speech ready", 1);
+    return parts;
   }
 }
