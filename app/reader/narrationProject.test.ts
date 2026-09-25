@@ -11,6 +11,8 @@ test("scripts become editable paragraph segments with bounded long passages", ()
   const segments = segmentScript(script, () => `segment-${++id}`);
 
   assert.equal(segments[0].text, "A short opening paragraph with two sentences. It remains one useful editing unit.");
+  assert.equal(createNarrationProject().language, "en");
+  assert.ok(segments.every((segment) => segment.languageOverride === null));
   assert.ok(segments.length >= 3);
   assert.ok(segments.every((segment) => segment.text.length <= 420));
   assert.deepEqual(segments.map((segment) => segment.id), segments.map((_, index) => `segment-${index + 1}`));
@@ -93,6 +95,7 @@ test("splitting preserves delivery and pause placement while invalidating only t
     return () => String(++index);
   })());
   const ready = { ...first, status: "ready" as const, pauseAfterMs: 1000, voiceId: "F1" as const, speedOverride: 1.2,
+    languageOverride: "es" as const,
     pronunciations: [{ id: "sql", phrase: "SQL", pronunciation: "sequel" }],
     audio: { path: "first", mimeType: "audio/mp4", duration: 2, generatedAt: "now", voice: "F1" as const, model: "supertonic", speed: 1.2 },
   };
@@ -102,6 +105,7 @@ test("splitting preserves delivery and pause placement while invalidating only t
   assert.equal(left.pauseAfterMs, 0);
   assert.equal(right.pauseAfterMs, 1000);
   assert.equal(left.voiceId, "F1");
+  assert.equal(right.languageOverride, "es");
   assert.equal(right.speedOverride, 1.2);
   assert.deepEqual(left.pronunciations.map((rule) => rule.phrase), ["SQL"]);
   assert.deepEqual(right.pronunciations, []);

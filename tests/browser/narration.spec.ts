@@ -107,6 +107,62 @@ test("creator edits a script, generates a voiceover, and refines one passage", a
   await expect(page.getByRole("button", { name: "Export WAV" })).toHaveCount(0);
 });
 
+test("imported Spanish script detects its language and uses Supertonic voices", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/tts", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" }, body: wavBody() });
+  });
+  await page.goto("/narration");
+  await page.getByLabel("YouTube script").fill("Hola. Esta es una prueba larga de la voz móvil en español para confirmar que el idioma se detecta correctamente. Queremos que nuestra narración suene natural y fácil de comprender.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  await expect(page.getByRole("combobox", { name: "Project language" })).toHaveValue("es");
+  const voice = page.getByRole("combobox", { name: "Project voice" });
+  await expect(voice).toHaveValue("M3");
+  await expect(voice.locator('option[value="af_heart"]')).toHaveCount(0);
+  await voice.selectOption("M2");
+  await page.getByRole("button", { name: "Generate voiceover" }).click();
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ language: "es", voice: "M2" });
+  await expect(page.getByText("Saved locally")).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Project language" })).toHaveValue("es");
+  await expect(page.getByRole("combobox", { name: "Project voice" })).toHaveValue("M2");
+});
+
+test("passage language overrides route mixed-language scripts and preserve unaffected audio", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/tts", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, headers: { "Content-Type": "audio/wav", "X-Audio-Duration": "1" }, body: wavBody() });
+  });
+  await page.goto("/narration");
+  await page.getByLabel("YouTube script").fill("We are reading a long English introduction with a clear message for the viewer. Here is enough natural language context for automatic language detection.\n\nThis passage will be translated into Spanish later, but starts in English for the project.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  await expect(page.getByRole("combobox", { name: "Project language" })).toHaveValue("en");
+  await page.getByRole("button", { name: "Generate voiceover" }).click();
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
+
+  await page.getByLabel("Passage 2 text").focus();
+  await page.getByRole("combobox", { name: "Passage language" }).selectOption("es");
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(2);
+  expect(requests.at(-1)).toMatchObject({ language: "es", voice: "M3" });
+  await expect(page.getByRole("combobox", { name: "Voice override" }).locator('option[value="af_heart"]')).toHaveCount(0);
+
+  await page.getByRole("combobox", { name: "Project language" }).selectOption("fr");
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Needs regeneration")).toHaveCount(1);
+  await expect(page.getByRole("combobox", { name: "Passage language" })).toHaveValue("es");
+  await page.getByRole("combobox", { name: "Passage language" }).selectOption("en");
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
+  expect(requests.at(-1)).toMatchObject({ language: "en", voice: "M3", engine: "supertonic" });
+  await page.getByRole("combobox", { name: "Voice override" }).selectOption("af_bella");
+  await expect(page.getByText("Ready", { exact: true })).toHaveCount(1);
+  expect(requests.at(-1)).toMatchObject({ language: "en", voice: "af_bella" });
+  expect(requests.at(-1)).not.toHaveProperty("engine");
+});
+
 test("global pronunciation annotates the script and regenerates only affected passages", async ({ page }) => {
   const requests: Array<{ texts: string[] }> = [];
   await page.route("**/api/tts", async (route) => {

@@ -1,4 +1,5 @@
 import type { NarratorVoice } from "../reader/voices";
+import type { SpeechLanguage } from "../languages";
 
 export type SegmentGenerationStatus = "idle" | "generating" | "ready" | "error";
 
@@ -21,6 +22,7 @@ export interface GeneratedAudioReference {
 export interface NarrationSegment {
   id: string;
   text: string;
+  languageOverride: SpeechLanguage | null;
   voiceId: NarratorVoice | null;
   modelId: string | null;
   speedOverride: number | null;
@@ -36,6 +38,7 @@ export interface NarrationProject {
   id: string;
   title: string;
   defaultVoice: NarratorVoice;
+  language: SpeechLanguage;
   globalSpeed: number;
   pronunciations: PronunciationOverride[];
   segments: NarrationSegment[];
@@ -99,6 +102,7 @@ export function segmentScript(script: string, idFactory: () => string = makeId):
     .map((text) => ({
       id: idFactory(),
       text,
+      languageOverride: null,
       voiceId: null,
       modelId: null,
       speedOverride: null,
@@ -115,6 +119,7 @@ export function createNarrationProject(): NarrationProject {
     id: makeId(),
     title: "Untitled narration",
     defaultVoice: "af_heart",
+    language: "en",
     globalSpeed: 1,
     pronunciations: [],
     segments: [],

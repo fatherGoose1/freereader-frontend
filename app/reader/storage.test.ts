@@ -149,6 +149,7 @@ test("stores narration metadata and resets interrupted generation after reload",
     id: "narration-project",
     title: "Video essay",
     defaultVoice: "af_bella",
+    language: "en",
     globalSpeed: 1.1,
     pronunciations: [{ id: "global-sql", phrase: "SQL", pronunciation: "sequel" }],
     createdAt: now,
@@ -156,6 +157,7 @@ test("stores narration metadata and resets interrupted generation after reload",
     segments: [{
       id: "intro",
       text: "Welcome to the channel.",
+      languageOverride: null,
       voiceId: null,
       modelId: null,
       speedOverride: null,
@@ -169,6 +171,8 @@ test("stores narration metadata and resets interrupted generation after reload",
   await saveNarrationProject(project);
   const stored = (await listNarrationProjects()).find((item) => item.id === project.id);
   assert.equal(stored?.title, "Video essay");
+  assert.equal(stored?.language, "en");
+  assert.equal(stored?.segments[0].languageOverride, null);
   assert.deepEqual(stored?.pronunciations, project.pronunciations);
   assert.equal(stored?.segments[0].pauseAfterMs, 600);
   assert.equal(stored?.segments[0].status, "idle");

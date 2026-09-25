@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import { englishVoices, type NarratorVoice } from "../reader/voices";
+import type { NarratorVoice } from "../reader/voices";
+import { detectSpeechLanguage, voiceForLanguage, voicesForLanguage } from "../reader/speech";
+import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { initAuthToken } from "../reader/authToken";
 import { supabaseClient } from "../reader/supabase";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
@@ -26,7 +28,6 @@ import {
 } from "./model";
 import styles from "./narration.module.css";
 
-const voices = englishVoices();
 const speeds = [0.75, 0.85, 0.9, 1, 1.1, 1.2, 1.35];
 const pauses = [["Short", 250], ["Medium", 600], ["Long", 1000]] as const;
 
@@ -36,15 +37,25 @@ function randomId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function voiceOptions() {
-  return voices.map(([value, name]) => <option key={value} value={value}>{name}</option>);
+function voiceOptions(language: SpeechLanguage) {
+  return voicesForLanguage(language).map(([value, name]) => <option key={value} value={value}>{name}</option>);
+}
+
+function passageLanguage(segment: NarrationSegment, project: NarrationProject): SpeechLanguage {
+  return segment.languageOverride ?? project.language;
+}
+
+function languageName(language: SpeechLanguage): string {
+  return SPEECH_LANGUAGES.find(([code]) => code === language)?.[1] ?? language;
 }
 
 function inputKey(segment: NarrationSegment, project: NarrationProject): string {
+  const language = passageLanguage(segment, project);
   return JSON.stringify({
     text: segment.text,
     spoken: spokenText(segment, project.pronunciations),
-    voice: segment.voiceId ?? project.defaultVoice,
+    language,
+    voice: voiceForLanguage(segment.voiceId ?? project.defaultVoice, language),
     speed: segment.speedOverride ?? project.globalSpeed,
   });
 }
@@ -221,7 +232,17 @@ export default function NarrationStudio() {
     listNarrationProjects()
       .then((projects) => {
         const saved = projects[0] ?? createNarrationProject();
-        const restored = { ...saved, pronunciations: saved.pronunciations ?? [] };
+        const language = saved.language ?? detectSpeechLanguage(saved.segments.map((segment) => segment.text).join(" ")) ?? "en";
+        const restored = {
+          ...saved,
+          language,
+          defaultVoice: voiceForLanguage(saved.defaultVoice, language),
+          pronunciations: saved.pronunciations ?? [],
+          segments: saved.segments.map((segment) => {
+            const restoredSegment = { ...segment, languageOverride: segment.languageOverride ?? null };
+            return !saved.language && language !== "en" ? invalidateSegment(restoredSegment) : restoredSegment;
+          }),
+        };
         projectRef.current = restored;
         setProject(restored);
         setSelectedId(null);
@@ -269,12 +290,13 @@ export default function NarrationStudio() {
     stopPlayback();
     stopGeneration();
     const segments = segmentScript(scriptDraft);
-    commit((current) => ({ ...current, segments }));
+    const language = detectSpeechLanguage(scriptDraft) ?? "en";
+    commit((current) => ({ ...current, language, defaultVoice: voiceForLanguage(current.defaultVoice, language), segments }));
     setSelectedId(null);
     setPlayerTime(0);
     setScriptDraft("");
     setImportOpen(false);
-    setGenerationMessage("Script ready. Edit it here, then generate your voiceover.");
+    setGenerationMessage(`Detected ${languageName(language)}. Edit your script, then generate your voiceover.`);
   }
 
   async function importScriptFile(file: File | undefined) {
@@ -316,6 +338,35 @@ export default function NarrationStudio() {
     }));
   }
 
+  function changeProjectLanguage(language: SpeechLanguage) {
+    if (projectRef.current.language === language) return;
+    stopPlayback();
+    stopGeneration();
+    commit((current) => {
+      const next = { ...current, language, defaultVoice: voiceForLanguage(current.defaultVoice, language) };
+      return { ...next, segments: current.segments.map((segment) =>
+        inputKey(segment, current) === inputKey(segment, next) ? segment : invalidateSegment(segment)) };
+    });
+    setGenerationMessage(`Project language set to ${languageName(language)}. Regenerate affected passages to hear it.`);
+  }
+
+  function changePassageLanguage(id: string, languageOverride: SpeechLanguage | null) {
+    const current = projectRef.current;
+    const segment = current.segments.find((item) => item.id === id);
+    if (!segment) return;
+    const language = languageOverride ?? current.language;
+    const voiceId = segment.voiceId && voicesForLanguage(language).some(([value]) => value === segment.voiceId)
+      ? segment.voiceId : null;
+    const updated = { ...segment, languageOverride, voiceId };
+    const changed = inputKey(segment, current) !== inputKey(updated, current);
+    if (changed) { stopPlayback(); stopGeneration(); }
+    replaceSegment(id, () => changed ? invalidateSegment(updated) : updated);
+    if (changed) {
+      setGenerationMessage(`Generating this passage in ${languageName(language)}…`);
+      void generateSegment(id, true);
+    }
+  }
+
   async function playAudio(segment: NarrationSegment, offset = 0) {
     if (!segment.audio) return;
     stopPlayback();
@@ -351,14 +402,15 @@ export default function NarrationStudio() {
     if (!segment?.text.trim()) return false;
     if (playingIdRef.current === id) stopPlayback();
     const requestKey = inputKey(segment, currentProject);
-    const voice = segment.voiceId ?? currentProject.defaultVoice;
+    const language = passageLanguage(segment, currentProject);
+    const voice = voiceForLanguage(segment.voiceId ?? currentProject.defaultVoice, language);
     const speed = segment.speedOverride ?? currentProject.globalSpeed;
     replaceSegment(id, (item) => ({ ...item, status: "generating", error: undefined }));
     setGenerationMessage(`Generating passage ${currentProject.segments.findIndex((item) => item.id === id) + 1}…`);
     try {
       const result = await synthesize(
         spokenText(segment, currentProject.pronunciations), voice, 12,
-        (message) => setGenerationMessage(message), false, speed, "en", undefined, "youtube_narration",
+        (message) => setGenerationMessage(message), false, speed, language, undefined, "youtube_narration",
       );
       const latestProject = projectRef.current;
       const latest = latestProject.segments.find((item) => item.id === id);
@@ -430,13 +482,18 @@ export default function NarrationStudio() {
   }
 
   async function previewVoice() {
+    const passage = project.segments.find((segment) => passageLanguage(segment, project) === project.language);
+    if (!passage && project.language !== "en") {
+      setGenerationMessage(`Add a ${languageName(project.language)} passage to preview this voice.`);
+      return;
+    }
     stopPlayback();
     const epoch = playbackEpoch.current;
     setGenerationMessage("Preparing voice preview...");
     try {
       const result = await synthesize(
-        "This is how your FreeReader narration voice will sound.",
-        project.defaultVoice, 12, (message) => setGenerationMessage(message), false, project.globalSpeed, "en", undefined, "youtube_narration",
+        passage ? spokenText(passage, project.pronunciations).slice(0, 200) : "This is how your FreeReader narration voice will sound.",
+        voiceForLanguage(project.defaultVoice, project.language), 12, (message) => setGenerationMessage(message), false, project.globalSpeed, project.language, undefined, "youtube_narration",
       );
       if (epoch !== playbackEpoch.current) return;
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
@@ -622,9 +679,14 @@ export default function NarrationStudio() {
       </header>
 
       <section className={styles.controlbar} aria-label="Voiceover settings">
+        <label>Project language
+          <select value={project.language} onChange={(event) => changeProjectLanguage(event.target.value as SpeechLanguage)}>
+            {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+          </select>
+        </label>
         <label>Project voice
           <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-            {voiceOptions()}
+            {voiceOptions(project.language)}
           </select>
         </label>
         <label>Global speaking speed
@@ -672,7 +734,7 @@ export default function NarrationStudio() {
           <button className={styles.importButton} disabled={!scriptDraft.trim()} onClick={importScript}>Add script</button>
         </div> : <div className={styles.editorPanel}>
           <div className={styles.editorHeading}>
-            <div><h1>Script</h1><p>{hasGeneratedAudio ? `${readyCount} of ${project.segments.length} passages ready to listen` : "Edit your script, then generate your voiceover."}</p></div>
+            <div><h1>Script</h1><p>{hasGeneratedAudio ? `${readyCount} of ${project.segments.length} passages ready to listen` : `Detected ${languageName(project.language)}. Edit your script, then generate your voiceover.`}</p></div>
             <button className={styles.secondaryButton} onClick={() => setImportOpen((open) => !open)} aria-expanded={importOpen}>Replace / import script</button>
           </div>
           {importOpen && <div className={styles.replacePanel}>
@@ -716,10 +778,16 @@ export default function NarrationStudio() {
                     <button className={styles.closeTools} aria-label="Close passage options" onClick={() => setSelectedId(null)}>×</button>
                   </div>
                   <div className={styles.passageSettings}>
+                    <label>Passage language
+                      <select value={segment.languageOverride ?? ""} onChange={(event) => changePassageLanguage(segment.id, event.target.value ? event.target.value as SpeechLanguage : null)}>
+                        <option value="">Project language ({languageName(project.language)})</option>
+                        {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                      </select>
+                    </label>
                     <label>Voice override
                       <select value={segment.voiceId ?? ""} onChange={(event) => changePassageVoice(segment.id, event.target.value ? event.target.value as NarratorVoice : null)}>
                         <option value="">Project voice</option>
-                        {voiceOptions()}
+                        {voiceOptions(passageLanguage(segment, project))}
                       </select>
                     </label>
                     <label>Speed override
