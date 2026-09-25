@@ -21,6 +21,15 @@ function CheckIcon() {
   );
 }
 
+function YouTubeIcon() {
+  return (
+    <svg className="youtube-icon" viewBox="0 0 24 18" aria-hidden="true">
+      <rect y="1" width="24" height="16" rx="5" fill="#ff0033" />
+      <path d="m10 5 6 4-6 4V5Z" fill="#fff" />
+    </svg>
+  );
+}
+
 export default function Home() {
   return (
     <main className="landing">
@@ -36,7 +45,7 @@ export default function Home() {
             <div className="hero-actions">
               <Link className="button" href="/reader/audiobooks">Open audiobook reader <ArrowIcon /></Link>
               <Link className="secondary-link" href="/narration">
-                Create a voiceover <ArrowIcon />
+                <YouTubeIcon /> Create a voiceover <ArrowIcon />
               </Link>
             </div>
             <div className="hero-assurances" aria-label="FreeReader product highlights">
@@ -201,7 +210,7 @@ export default function Home() {
           <p>Open a book or start a script. Both workspaces are free to try, with no account required.</p>
           <div className="final-actions">
             <Link className="button" href="/reader/audiobooks">Start listening <ArrowIcon /></Link>
-            <Link className="secondary-link" href="/narration">Create a voiceover <ArrowIcon /></Link>
+            <Link className="secondary-link" href="/narration"><YouTubeIcon /> Create a voiceover <ArrowIcon /></Link>
           </div>
           <small>One free monthly audio allowance shared across both workspaces.</small>
         </div>
