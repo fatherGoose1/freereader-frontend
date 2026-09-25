@@ -1383,7 +1383,7 @@ export default function FreeReaderApp() {
   return (
     <main className={styles.appShell} onClickCapture={(event) => { if (!panel && !organizingBook) dialogTrigger.current = (event.target as Element).closest("button"); }}>
       <header className={styles.libraryHero} inert={!!panel || !!organizingBook}>
-        <Link href="/reader" className={styles.libraryBrand} aria-label="FreeReader workspaces">
+        <Link href="/" className={styles.libraryBrand} aria-label="FreeReader home">
           <span className={styles.appMark} aria-hidden="true"><i /><i /><i /><i /></span>
           <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
         </Link>
