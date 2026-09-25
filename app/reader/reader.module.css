@@ -234,6 +234,7 @@
 .accountSummary { display: grid; gap: 8px; margin: 20px 0; padding: 16px; background: #f5f7fc; border: 1px solid var(--border); border-radius: 10px; }
 .accountSummary span, .accountModal > small { color: #7b879a; font-size: 12px; }
 .accountActions { display: grid; gap: 10px; margin: 20px 0; }
+.accountActions .upgradeButton { color: #fff; background: var(--app-blue); border: 0; font-weight: 700; }
 .catalog { width: min(700px, 100%); }
 .catalogHeader { display: flex; align-items: center; gap: 16px; margin: -30px -30px 24px; padding: 24px 30px; background: #f2f5fc; border-bottom: 1px solid #e6ebf6; }
 .catalogHeader > span { display: grid; place-items: center; width: 45px; height: 52px; flex: none; color: #667da8; background: #dfe7f6; border-radius: 5px; font-size: 12px; font-weight: 700; }

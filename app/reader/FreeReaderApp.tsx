@@ -29,6 +29,7 @@ import {
 import { supabaseClient } from "./supabase";
 import { initAuthToken } from "./authToken";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "./usage";
+import { manageSubscription, startCheckout } from "./billing";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
@@ -286,6 +287,42 @@ export default function FreeReaderApp() {
   }, [session?.user.id]);
 
   useEffect(() => {
+    const checkout = new URLSearchParams(window.location.search).get("checkout");
+    if (!checkout) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    if (checkout === "cancelled") {
+      setMessage("Checkout cancelled. Your plan has not changed.");
+      return;
+    }
+    if (checkout !== "success") return;
+    setMessage("Checkout complete. Confirming your Pro plan…");
+    let attempts = 0;
+    const timer = setInterval(() => {
+      const token = sessionRef.current?.access_token;
+      if (token) void fetchUsage(token).then((summary) => {
+        setUsage(summary);
+        if (summary.plan === "pro") {
+          clearInterval(timer);
+          setMessage("Pro is ready. You now have 20 hours of narration per month.");
+        }
+      }).catch(() => undefined);
+      if (++attempts >= 12) {
+        clearInterval(timer);
+        setMessage("Your payment is still processing. Your Pro plan will appear shortly.");
+      }
+    }, 2500);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!session?.access_token || new URLSearchParams(window.location.search).get("upgrade") !== "pro") return;
+    window.history.replaceState({}, "", window.location.pathname);
+    void startCheckout(session.access_token)
+      .then((url) => window.location.assign(url))
+      .catch(() => setMessage("Couldn't start checkout. Please try again from your account menu."));
+  }, [session?.access_token]);
+
+  useEffect(() => {
     const userId = session?.user.id;
     if (!libraryLoaded || !userId || syncedUser.current === userId) return;
     syncedUser.current = userId;
@@ -384,6 +421,29 @@ export default function FreeReaderApp() {
   function refreshUsage() {
     const token = sessionRef.current?.access_token ?? null;
     fetchUsage(token).then(setUsage).catch(() => undefined);
+  }
+
+  async function upgradeToPro() {
+    const token = sessionRef.current?.access_token;
+    if (!token) {
+      void signIn();
+      return;
+    }
+    try {
+      window.location.href = await startCheckout(token);
+    } catch {
+      setMessage("Could not start checkout. Please try again.");
+    }
+  }
+
+  async function openBillingPortal() {
+    const token = sessionRef.current?.access_token;
+    if (!token) return;
+    try {
+      window.location.assign(await manageSubscription(token));
+    } catch {
+      setMessage("Couldn't open subscription management. Please try again.");
+    }
   }
 
   async function signOut() {
@@ -1436,6 +1496,8 @@ export default function FreeReaderApp() {
               <span>Documents are compressed before upload. Generated audio and voice models never sync.</span>
             </div>
             <div className={styles.accountActions}>
+              {usage?.plan !== "pro" && <button className={styles.upgradeButton} disabled={syncing} onClick={() => void upgradeToPro()}>Upgrade to Pro — $4/month</button>}
+              {usage?.plan === "pro" && <button onClick={() => void openBillingPortal()}>Manage subscription</button>}
               <button disabled={syncing} onClick={() => void syncNow()}>{syncing ? "Syncing..." : "Sync now"}</button>
               <button disabled={syncing} onClick={() => void signOut()}>Sign out</button>
               <button className={styles.destructiveButton} disabled={syncing} onClick={() => void deleteAccountAndCloudData()}>Delete account and cloud copies</button>

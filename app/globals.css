@@ -129,6 +129,7 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
   box-shadow: 0 8px 25px rgba(150, 196, 51, .2);
   font-size: 15px;
   font-weight: 800;
+  cursor: pointer;
   text-decoration: none;
   transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
 }
@@ -482,6 +483,7 @@ footer .brand { color: #fff; }
 .price-card.featured .price-features li { color: rgba(255,255,255,.8); }
 .price-card.featured .price-features svg { stroke: var(--lime); }
 .price-card .button { margin-top: auto; width: 100%; }
+.price-card > small[role="alert"] { margin-top: 9px; color: #b52b32; font-size: 12px; }
 .price-card.featured .button { background: var(--lime-bright); border-color: var(--lime-bright); color: var(--forest-deep); }
 .pricing-note { max-width: 900px; margin: 22px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
 .pricing-faq { max-width: 760px; margin-top: 90px; }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import ProCheckoutButton from "../components/ProCheckoutButton";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -82,7 +83,7 @@ export default function Pricing() {
                 <li key={feature}><CheckIcon />{feature}</li>
               ))}
             </ul>
-            <Link className="button" href={tier.cta.href}>{tier.cta.label}</Link>
+            {tier.featured ? <ProCheckoutButton /> : <Link className="button" href={tier.cta.href}>{tier.cta.label}</Link>}
           </section>
         ))}
       </div>
@@ -90,8 +91,7 @@ export default function Pricing() {
       <p className="pricing-note">
         Audio generation is measured by the length of the narration you create.
         Your monthly allowance is shared between the audiobook reader and the
-        Narration Studio. Pro checkout is rolling out now; the Free tier is
-        available immediately.
+        Narration Studio. Sign in with Google to subscribe to Pro.
       </p>
 
       <section className="pricing-faq" aria-labelledby="pricing-faq-heading">
