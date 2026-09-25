@@ -493,10 +493,12 @@ export default function NarrationStudio() {
       URL.revokeObjectURL(audioUrl.current);
       audioUrl.current = null;
     }
-    audio.src = `/voice-previews/${voice}.m4a`;
+    audio.src = project.language === "en"
+      ? `/voice-previews/${voice}.m4a`
+      : `/voice-previews/${project.language}/${voice}.m4a`;
     voicePreviewRef.current = true;
     setVoicePreviewPlaying(true);
-    setGenerationMessage("Playing voice sample (English)…");
+    setGenerationMessage(`Playing voice sample in ${languageName(project.language)}…`);
     try {
       await audio.play();
       if (epoch === playbackEpoch.current) setIsPlaying(true);
@@ -691,7 +693,7 @@ export default function NarrationStudio() {
           </select>
         </label>
         <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
-        <span className={styles.previewNote}>Instant English sample · No generation time used</span>
+        <span className={styles.previewNote}>Instant sample in project language · No generation time used</span>
         {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
         <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
           {generatingAll && generationProgress ? <>
