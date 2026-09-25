@@ -4,7 +4,7 @@
   "description": "Private, local-first reading and text-to-speech.",
   "start_url": "/reader",
   "display": "standalone",
-  "background_color": "#fffdf8",
-  "theme_color": "#14313b",
+  "background_color": "#f6f7fb",
+  "theme_color": "#365bd6",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }

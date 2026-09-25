@@ -66,7 +66,7 @@ button, textarea, input, select { font: inherit; }
   letter-spacing: -.02em;
   text-decoration: none;
 }
-.brand-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 42px; height: 42px; flex: none; color: #d9f99d; background: #12342d; border-radius: 12px; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 42px; height: 42px; flex: none; color: #fff; background: #365bd6; border-radius: 12px; }
 .brand-mark i { display: block; width: 3px; background: currentColor; border-radius: 99px; }
 .brand-mark i:nth-child(1) { height: 10px; }
 .brand-mark i:nth-child(2) { height: 21px; }
