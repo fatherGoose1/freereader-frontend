@@ -29,7 +29,7 @@ import {
 import { supabaseClient } from "./supabase";
 import { initAuthToken } from "./authToken";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "./usage";
-import { manageSubscription, startCheckout } from "./billing";
+import { fetchProPrice, formatProPrice, manageSubscription, startCheckout } from "./billing";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
@@ -184,6 +184,7 @@ export default function FreeReaderApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [proPrice, setProPrice] = useState("$6");
   const [syncing, setSyncing] = useState(false);
   const sessionRef = useRef<Session | null>(null);
   const syncedUser = useRef<string | undefined>(undefined);
@@ -285,6 +286,10 @@ export default function FreeReaderApp() {
     const token = sessionRef.current?.access_token ?? null;
     (token ? linkInstallation(token) : fetchUsage(null)).then(setUsage).catch(() => undefined);
   }, [session?.user.id]);
+
+  useEffect(() => {
+    void fetchProPrice().then((price) => setProPrice(formatProPrice(price))).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const checkout = new URLSearchParams(window.location.search).get("checkout");
@@ -1501,7 +1506,7 @@ export default function FreeReaderApp() {
               <span>Documents are compressed before upload. Generated audio and voice models never sync.</span>
             </div>
             <div className={styles.accountActions}>
-              {usage?.plan !== "pro" && <button className={styles.upgradeButton} disabled={syncing} onClick={() => void upgradeToPro()}>Upgrade to Pro — $4/month</button>}
+              {usage?.plan !== "pro" && <button className={styles.upgradeButton} disabled={syncing} onClick={() => void upgradeToPro()}>Upgrade to Pro — {proPrice}/month</button>}
               {usage?.plan === "pro" && <button onClick={() => void openBillingPortal()}>Manage subscription</button>}
               <button disabled={syncing} onClick={() => void syncNow()}>{syncing ? "Syncing..." : "Sync now"}</button>
               <button disabled={syncing} onClick={() => void signOut()}>Sign out</button>

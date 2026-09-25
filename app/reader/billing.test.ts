@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { manageSubscription, startCheckout } from "./billing";
+import { fetchProPrice, formatProPrice, manageSubscription, startCheckout } from "./billing";
+
+test("Pro price is read from the configured Stripe Price instead of the checkout button", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ amount_cents: 600, currency: "usd", interval: "month" }));
+  assert.equal(formatProPrice(await fetchProPrice()), "$6");
+  assert.ok(String(fetch.mock.calls[0].arguments[0]).endsWith("/billing/price"));
+});
 
 test("billing actions request a hosted Stripe URL for the signed-in user", async (t) => {
   const requests: Array<{ path: string; authorization: string | null }> = [];

@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ProCheckoutButton from "../components/ProCheckoutButton";
+import { fetchProPrice, formatProPrice } from "../reader/billing";
+
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "FreeReader pricing: start free with 1 hour of audio generation each month, or go Pro for $4/month for up to 20 hours across the audiobook reader and YouTube Narration Studio.",
+    "FreeReader pricing: start free with 1 hour of audio generation each month, or go Pro for $6/month for up to 20 hours across the audiobook reader and YouTube Narration Studio.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -36,7 +39,7 @@ const tiers = [
   },
   {
     name: "Pro",
-    price: "$4",
+    price: "$6",
     cadence: "per month",
     summary: "Room for creators and long reads that go well past an hour.",
     features: [
@@ -49,7 +52,8 @@ const tiers = [
   },
 ];
 
-export default function Pricing() {
+export default async function Pricing() {
+  const proPrice = await fetchProPrice().then(formatProPrice).catch(() => "$6");
   return (
     <main className="wrap pricing">
       <div className="pricing-hero">
@@ -74,7 +78,7 @@ export default function Pricing() {
               {tier.featured && <span className="price-badge">Most room</span>}
             </div>
             <p className="price-amount">
-              <strong>{tier.price}</strong>
+              <strong>{tier.featured ? proPrice : tier.price}</strong>
               <span>{tier.cadence}</span>
             </p>
             <p className="price-summary">{tier.summary}</p>
