@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { POST } from "../api/tts/route";
 
-test("landing speech requests delegate language detection to the backend", async (t) => {
+test("landing speech requests let the backend select a voice after detecting language", async (t) => {
   const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
   const originalBackend = process.env.KOKO_BACKEND_URL;
   process.env.FREEREADER_TTS_API_TOKEN = "test-token";
@@ -19,7 +19,6 @@ test("landing speech requests delegate language detection to the backend", async
       text: "Bonjour l'ami",
       speed: 1,
       detect_language: true,
-      voice: "M3",
       steps: 12,
     });
     return new Response(new Uint8Array([1]), {

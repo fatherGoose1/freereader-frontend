@@ -6,7 +6,6 @@ import { SPEECH_LANGUAGES } from "../languages";
 const DEFAULT_TEXT =
   "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.";
 const MAX_LENGTH = 800;
-const SUPERTONIC_VOICE = "M3";
 const SUPERTONIC_STEPS = 12;
 const SORTED_LANGUAGES = [...SPEECH_LANGUAGES]
   .sort(([, first], [, second]) => first.localeCompare(second, "en"));
@@ -62,7 +61,6 @@ export default function HeroDemo() {
           text: trimmed,
           speed: 1,
           detectLanguage: true,
-          voice: SUPERTONIC_VOICE,
           steps: SUPERTONIC_STEPS,
         }),
         signal: controller.signal,

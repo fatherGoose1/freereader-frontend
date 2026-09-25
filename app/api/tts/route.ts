@@ -23,10 +23,11 @@ export async function POST(request: Request) {
   const upstreamBody: Record<string, unknown> = texts
     ? { texts, speed: body.speed }
     : { text: single, speed: body.speed };
-  // The landing demo lets the backend detect short text; reader narration supplies its language.
+  // When detecting a language, let the backend choose a voice for the detected engine.
+  // A Supertonic voice would be invalid if the text is detected as English (Kokoro).
   if (body.detectLanguage === true) {
     upstreamBody.detect_language = true;
-    if (typeof body.voice === "string") upstreamBody.voice = body.voice;
+    if (body.engine === "supertonic" && typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   } else {
     if (typeof body.language === "string" && (body.language !== "en" || body.engine === "supertonic")) upstreamBody.language = body.language;
