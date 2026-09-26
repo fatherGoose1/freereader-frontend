@@ -4,11 +4,14 @@ const API_BASE = (process.env.NEXT_PUBLIC_KOKO_BACKEND_URL
   ?? "https://koko-backend-production-c887.up.railway.app").replace(/\/$/, "");
 
 export interface UsageSummary {
-  plan: "free" | "pro";
+  plan: "free" | "pro" | "premium";
   period: string;
   budget_seconds: number;
   used_seconds: number;
   remaining_seconds: number;
+  premium_voice_budget_seconds: number;
+  premium_voice_used_seconds: number;
+  premium_voice_remaining_seconds: number;
 }
 
 export function installationId(): string {
@@ -40,6 +43,7 @@ export function formatRemaining(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
+  if (seconds > 0 && !minutes && !hours) return "<1 min";
   if (hours && minutes) return `${hours} hr ${minutes} min`;
   if (hours) return `${hours} hr`;
   return `${minutes} min`;

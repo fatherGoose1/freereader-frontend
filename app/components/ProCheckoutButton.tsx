@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { startCheckout } from "../reader/billing";
+import { startCheckout, type PaidPlan } from "../reader/billing";
 import { supabaseClient } from "../reader/supabase";
 
-export default function ProCheckoutButton() {
+export default function ProCheckoutButton({ plan = "pro" }: { plan?: PaidPlan }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -18,8 +18,8 @@ export default function ProCheckoutButton() {
       if (sessionError) throw sessionError;
       if (!data.session) {
         let redirectTo = `${window.location.origin}/reader/audiobooks`;
-        try { sessionStorage.setItem("freereaderUpgradeToPro", "1"); }
-        catch { redirectTo += "?upgrade=pro"; }
+        try { sessionStorage.setItem("freereaderUpgradePlan", plan); }
+        catch { redirectTo += `?upgrade=${plan}`; }
         const { error: signInError } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo },
@@ -27,9 +27,9 @@ export default function ProCheckoutButton() {
         if (signInError) throw signInError;
         return;
       }
-      window.location.assign(await startCheckout(data.session.access_token));
+      window.location.assign(await startCheckout(data.session.access_token, plan));
     } catch {
-      try { sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
+      try { sessionStorage.removeItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
       setError("Couldn't start checkout. Please try again.");
       setBusy(false);
     }
@@ -37,7 +37,7 @@ export default function ProCheckoutButton() {
 
   return <>
     <button className="button" type="button" onClick={() => void start()} disabled={busy}>
-      {busy ? "Opening checkout…" : "Get Pro"}
+      {busy ? "Opening checkout…" : `Get ${plan === "premium" ? "Premium" : "Pro"}`}
     </button>
     {error && <small role="alert">{error}</small>}
   </>;

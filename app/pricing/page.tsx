@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ProCheckoutButton from "../components/ProCheckoutButton";
-import { fetchProPrice, formatProPrice } from "../reader/billing";
+import { fetchPlanPrice, formatProPrice } from "../reader/billing";
 
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "FreeReader pricing: start free with 1 hour of audio generation each month, go Pro for $6/month for up to 10 hours, or get Premium for $10/month with voice cloning and 20 hours (coming soon).",
+    "FreeReader pricing: start free with 1 hour of audio generation each month, get 10 hours with Pro, or get 20 hours plus 1 hour of cloned-voice narration with Premium.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -28,7 +28,6 @@ type Tier = {
   features: string[];
   cta: { label: string; href: string };
   featured: boolean;
-  inactive?: boolean;
   badge?: string;
 };
 
@@ -65,24 +64,26 @@ const tiers: Tier[] = [
   },
   {
     name: "Premium",
-    price: "$10",
+    price: "—",
     cadence: "per month",
     summary: "Cloned voices and the most hours for power users and teams.",
     features: [
       "Up to 20 hours of audio generation each month",
       "Voice cloning — narrate in your own or a custom voice",
-      "Premium voices beyond the standard library",
+      "1 hour of cloned-voice narration each month, included in the 20 hours",
       "Everything in the Pro tier",
     ],
-    cta: { label: "Coming soon", href: "/reader" },
+    cta: { label: "Get Premium", href: "/reader" },
     featured: false,
-    inactive: true,
-    badge: "Coming soon",
+    badge: "Voice cloning",
   },
 ];
 
 export default async function Pricing() {
-  const proPrice = await fetchProPrice().then(formatProPrice).catch(() => "$6");
+  const [proPrice, premiumPrice] = await Promise.all([
+    fetchPlanPrice("pro").then(formatProPrice).catch(() => null),
+    fetchPlanPrice("premium").then(formatProPrice).catch(() => null),
+  ]);
   return (
     <main className="wrap pricing">
       <div className="pricing-hero">
@@ -90,7 +91,7 @@ export default async function Pricing() {
         <h1>One account, both tools.</h1>
         <p>
           FreeReader turns your reading and your scripts into narration. Start
-          free, and upgrade to Pro when an hour a month is not enough. The same
+          free, and upgrade when an hour a month is not enough. The same
           plan covers the audiobook reader and the YouTube Narration Studio.
         </p>
       </div>
@@ -99,7 +100,7 @@ export default async function Pricing() {
         {tiers.map((tier) => (
           <section
             key={tier.name}
-            className={`price-card${tier.featured ? " featured" : ""}${tier.inactive ? " inactive" : ""}`}
+            className={`price-card${tier.featured ? " featured" : ""}${tier.name === "Premium" && !premiumPrice ? " inactive" : ""}`}
             aria-labelledby={`plan-${tier.name.toLowerCase()}`}
           >
             <div className="price-card-head">
@@ -107,7 +108,7 @@ export default async function Pricing() {
               {tier.badge && <span className="price-badge">{tier.badge}</span>}
             </div>
             <p className="price-amount">
-              <strong>{tier.featured ? proPrice : tier.price}</strong>
+              <strong>{tier.name === "Premium" ? premiumPrice ?? tier.price : tier.featured ? proPrice ?? tier.price : tier.price}</strong>
               <span>{tier.cadence}</span>
             </p>
             <p className="price-summary">{tier.summary}</p>
@@ -116,9 +117,9 @@ export default async function Pricing() {
                 <li key={feature}><CheckIcon />{feature}</li>
               ))}
             </ul>
-            {tier.inactive ? (
-              <button className="button" type="button" disabled>{tier.cta.label}</button>
-            ) : tier.featured ? (
+            {tier.name === "Premium" ? premiumPrice ? (
+              <ProCheckoutButton plan="premium" />
+            ) : <button className="button" type="button" disabled>Unavailable</button> : tier.featured ? (
               <ProCheckoutButton />
             ) : (
               <Link className="button" href={tier.cta.href}>{tier.cta.label}</Link>
@@ -129,8 +130,9 @@ export default async function Pricing() {
 
       <p className="pricing-note">
         Audio generation is measured by the length of the narration you create.
-        Your monthly allowance is shared between the audiobook reader and the
-        Narration Studio. Sign in with Google to subscribe to Pro.
+        Your monthly narration allowance is shared between the audiobook reader and the
+        Narration Studio. Premium cloned-voice audio also draws from its separate 1-hour allowance.
+        Sign in with Google to subscribe.
       </p>
 
       <section className="pricing-faq" aria-labelledby="pricing-faq-heading">
@@ -146,13 +148,14 @@ export default async function Pricing() {
         <p>
           Yes. The audiobook reader and the YouTube Narration Studio draw from
           the same monthly allowance, so you can split your hours however you
-          like.
+          like. Cloned-voice audio also counts toward Premium’s separate 1-hour limit.
         </p>
 
         <h3>What happens when I reach my limit?</h3>
         <p>
           Your library and scripts stay available, but new narration pauses
-          until your allowance resets or you upgrade to Pro.
+          until your allowance resets or you upgrade. When the Premium voice hour is used,
+          you can still generate with standard voices if you have narration time left.
         </p>
 
         <h3>Do I need an account?</h3>
@@ -161,9 +164,9 @@ export default async function Pricing() {
           A Google account is only needed for cross-device sync and paid plans.
         </p>
 
-        <h3>Can I cancel Pro?</h3>
+        <h3>Can I cancel my subscription?</h3>
         <p>
-          Pro is month to month and can be cancelled at any time. When it ends,
+          Paid plans are month to month and can be cancelled at any time. When they end,
           you keep everything you have already generated and return to the Free
           tier.
         </p>

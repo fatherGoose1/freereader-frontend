@@ -29,6 +29,7 @@ test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
     assert.equal(init?.method, "POST");
     const headers = init?.headers as Record<string, string>;
     assert.equal(headers.Authorization, "Bearer tts-key");
+    assert.equal(headers["X-FreeReader-User-Token"], "signed-in-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
       text: "Hello there.", voice_id: "voice-1", user_id: "user-1", language: "en", speed: 0.9,
     });
@@ -43,7 +44,7 @@ test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
   });
   const response = await cloneSpeech(new Request("http://localhost/api/clone-tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer signed-in-token" },
     body: JSON.stringify({ text: "Hello there.", voiceId: "voice-1", userId: "user-1", language: "en", speed: 0.9 }),
   }));
   assert.equal(response.status, 200);
@@ -68,6 +69,7 @@ test("voice cloning forwards the reference clip to the backend voices/clone endp
   setEnv(t, { KOKO_BACKEND_URL: "https://backend.example", FREEREADER_TTS_API_TOKEN: "tts-key" });
   const fetch = t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     assert.equal(String(input), "https://backend.example/api/v1/freereader/voices/clone");
+    assert.equal((init?.headers as Record<string, string>)["X-FreeReader-User-Token"], "signed-in-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
       user_id: "user-1", audio: "AAAA", voice_id: "voice-1", name: "Narrator", language: "en", ref_text: "Hello.",
     });
@@ -79,10 +81,22 @@ test("voice cloning forwards the reference clip to the backend voices/clone endp
   });
   const response = await createClone(new Request("http://localhost/api/voices/clone", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer signed-in-token" },
     body: JSON.stringify({ userId: "user-1", voiceId: "voice-1", name: "Narrator", language: "en", refText: "Hello.", audio: "AAAA" }),
   }));
   assert.equal(response.status, 200);
   assert.equal((await response.json() as { voice_id: string }).voice_id, "voice-1");
   assert.equal(fetch.mock.callCount(), 1);
+});
+
+test("GPU endpoints reject anonymous requests before contacting the backend", async (t) => {
+  setEnv(t, { FREEREADER_TTS_API_TOKEN: "tts-key" });
+  const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("unexpected backend call"); });
+  for (const endpoint of [cloneSpeech, createClone]) {
+    const response = await endpoint(new Request("http://localhost/api/clone", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    }));
+    assert.equal(response.status, 403);
+  }
+  assert.equal(fetch.mock.callCount(), 0);
 });

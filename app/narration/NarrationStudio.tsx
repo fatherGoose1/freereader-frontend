@@ -8,9 +8,9 @@ import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from
 import { isClonedVoice, type NarratorVoice } from "../reader/voices";
 import { detectSpeechLanguage, voiceForLanguage, voicesForLanguage } from "../reader/speech";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
-import { initAuthToken } from "../reader/authToken";
+import { currentAccessToken, initAuthToken } from "../reader/authToken";
 import { supabaseClient } from "../reader/supabase";
-import { fetchUsage, formatRemaining, installationId, linkInstallation, type UsageSummary } from "../reader/usage";
+import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
 import { listClonedVoices, removeClonedVoice, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
 import { MAX_CLONE_SECONDS, MIN_CLONE_SECONDS, VoiceRecorder, prepareCloneAudio } from "../reader/voiceCloneAudio";
 import { exportVoiceover } from "./exportAudio";
@@ -42,11 +42,11 @@ function randomId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function voiceOptions(language: SpeechLanguage, clonedVoices: ClonedVoiceRecord[]) {
+function voiceOptions(language: SpeechLanguage, clonedVoices: ClonedVoiceRecord[], premium = true) {
   const builtIn = voicesForLanguage(language).map(([value, name]) => <option key={value} value={value}>{name}</option>);
   if (!clonedVoices.length) return builtIn;
   return [
-    <optgroup key="cloned" label="Your cloned voices">
+    <optgroup key="cloned" label={premium ? "Your cloned voices" : "Your cloned voices — Premium"} disabled={!premium}>
       {clonedVoices.map((record) => <option key={record.id} value={voiceRefFor(record)}>{record.name}</option>)}
     </optgroup>,
     ...builtIn,
@@ -235,6 +235,11 @@ export default function NarrationStudio() {
   const playable = project.segments.filter((segment) => segment.status === "ready" && segment.audio);
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
+  const hasPremium = usage?.plan === "premium";
+
+  function refreshUsage() {
+    fetchUsage(currentAccessToken()).then(setUsage).catch(() => undefined);
+  }
 
   useEffect(() => { setPlayerTime((time) => Math.min(time, totalDuration)); }, [totalDuration]);
 
@@ -513,6 +518,7 @@ export default function NarrationStudio() {
         },
       };
       replaceSegment(id, () => ready);
+      refreshUsage();
       setGenerationMessage(`Passage ${savedProject.segments.findIndex((item) => item.id === id) + 1} is ready.`);
       if (playWhenReady) {
         try {
@@ -524,6 +530,7 @@ export default function NarrationStudio() {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Narration generation failed.";
+      refreshUsage();
       const latestProject = projectRef.current;
       const latest = latestProject.segments.find((item) => item.id === id);
       if (latest && inputKey(latest, latestProject) === requestKey) {
@@ -623,26 +630,20 @@ export default function NarrationStudio() {
     }
   }
 
-  async function cloneOwnerId(): Promise<string> {
-    const supabase = supabaseClient();
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user.id) return data.session.user.id;
-    }
-    return installationId();
-  }
-
   async function createVoiceClone() {
     if (!cloneDraft || !cloneName.trim() || cloneBusy) return;
     setCloneBusy(true);
     setCloneError("");
     try {
-      const userId = await cloneOwnerId();
+      const supabase = supabaseClient();
+      const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+      const session = data.session;
+      if (!session) throw new Error("Sign in with a Premium account to clone a voice.");
       const response = await fetch("/api/voices/clone", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
-          userId,
+          userId: session.user.id,
           voiceId: randomId(),
           name: cloneName.trim(),
           language: projectRef.current.language,
@@ -653,11 +654,11 @@ export default function NarrationStudio() {
         voice_id?: unknown; user_id?: unknown; duration_seconds?: unknown; error?: unknown;
       } | null;
       if (!response.ok || typeof payload?.voice_id !== "string") {
-        throw new Error(typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
+        throw new Error(payload?.error === "premium_required" ? "A Premium subscription is required to clone a voice." : typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
       }
       const record: ClonedVoiceRecord = {
         id: payload.voice_id,
-        userId: typeof payload.user_id === "string" ? payload.user_id : userId,
+        userId: typeof payload.user_id === "string" ? payload.user_id : session.user.id,
         name: cloneName.trim(),
         createdAt: new Date().toISOString(),
         durationSeconds: typeof payload.duration_seconds === "number" ? payload.duration_seconds : cloneDraft.durationSeconds,
@@ -884,7 +885,7 @@ export default function NarrationStudio() {
         <div className={styles.settingsHeading}>
           <div><span className={styles.kicker}>Narration setup</span><h2>Set the sound for your script</h2><p>These settings apply to every passage unless you change it below.</p></div>
           <div className={styles.generationActions}>
-            {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
+            {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} narration left{hasPremium && <> · {formatRemaining(usage.premium_voice_remaining_seconds)} Premium voice left</>}</span>}
             <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
               {generatingAll && generationProgress ? <>
                 <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
@@ -902,7 +903,7 @@ export default function NarrationStudio() {
           </label>
           <label>Voice
             <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-              {voiceOptions(project.language, clonedVoices)}
+              {voiceOptions(project.language, clonedVoices, hasPremium)}
             </select>
           </label>
           <label>Speaking speed
@@ -915,11 +916,16 @@ export default function NarrationStudio() {
           <button type="button" className={styles.toolButton} onClick={() => void previewVoice()}>▶ <span>Preview voice</span></button>
           <span className={styles.toolDivider} aria-hidden="true" />
           <button type="button" className={styles.toolButton} onClick={() => setGlobalPronunciationsOpen(true)}>Pronunciations{project.pronunciations.length > 0 && <span className={styles.toolCount}>{project.pronunciations.length}</span>}</button>
-          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice</button>
+          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice{!hasPremium && <span className={styles.toolCount}>Premium</span>}</button>
         </div>
       </section>
 
-      {cloneOpen && <StudioDialog title="Clone a voice" description={`Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.`} onClose={closeClone}>
+      {cloneOpen && <StudioDialog title="Clone a voice" description={hasPremium ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Premium to create and use a cloned voice."} onClose={closeClone}>
+        {!hasPremium ? <div className={styles.premiumGate}>
+          <strong>Voice cloning is included with Premium</strong>
+          <p>Get 20 hours of narration each month, including 1 hour with your own cloned voice.</p>
+          <Link className={styles.importButton} href="/pricing">See Premium plans</Link>
+        </div> : <>
         <label className={styles.cloneName}>Voice name
           <input value={cloneName} onChange={(event) => setCloneName(event.target.value)} placeholder="e.g. My narrator" maxLength={80} />
         </label>
@@ -956,6 +962,7 @@ export default function NarrationStudio() {
             <button type="button" aria-label={`Remove cloned voice ${record.name}`} onClick={() => deleteVoiceClone(record)}>×</button>
           </li>)}
         </ul>}
+        </>}
       </StudioDialog>}
 
       {globalPronunciationsOpen && <StudioDialog title="Script pronunciations" description="Set how a word or phrase is spoken throughout your script. Passage-specific pronunciations take priority." onClose={() => setGlobalPronunciationsOpen(false)}>
@@ -1038,7 +1045,7 @@ export default function NarrationStudio() {
                     <label>Voice override
                       <select value={segment.voiceId ?? ""} onChange={(event) => changePassageVoice(segment.id, event.target.value ? event.target.value as NarratorVoice : null)}>
                         <option value="">Project voice</option>
-                        {voiceOptions(passageLanguage(segment, project), clonedVoices)}
+                        {voiceOptions(passageLanguage(segment, project), clonedVoices, hasPremium)}
                       </select>
                     </label>
                     <label>Speed override

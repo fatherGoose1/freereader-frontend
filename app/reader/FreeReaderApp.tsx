@@ -29,7 +29,7 @@ import {
 import { supabaseClient } from "./supabase";
 import { initAuthToken } from "./authToken";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "./usage";
-import { fetchProPrice, formatProPrice, manageSubscription, startCheckout } from "./billing";
+import { fetchPlanPrice, formatProPrice, manageSubscription, startCheckout, type PaidPlan } from "./billing";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
 import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
@@ -185,6 +185,7 @@ export default function FreeReaderApp() {
   const [authReady, setAuthReady] = useState(false);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [proPrice, setProPrice] = useState("$6");
+  const [premiumPrice, setPremiumPrice] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const sessionRef = useRef<Session | null>(null);
   const syncedUser = useRef<string | undefined>(undefined);
@@ -288,11 +289,13 @@ export default function FreeReaderApp() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    void fetchProPrice().then((price) => setProPrice(formatProPrice(price))).catch(() => undefined);
+    void fetchPlanPrice("pro").then((price) => setProPrice(formatProPrice(price))).catch(() => undefined);
+    void fetchPlanPrice("premium").then((price) => setPremiumPrice(formatProPrice(price))).catch(() => undefined);
   }, []);
 
   useEffect(() => {
     const checkout = new URLSearchParams(window.location.search).get("checkout");
+    const checkoutPlan = new URLSearchParams(window.location.search).get("plan") === "premium" ? "premium" : "pro";
     if (!checkout) return;
     window.history.replaceState({}, "", window.location.pathname);
     if (checkout === "cancelled") {
@@ -300,20 +303,20 @@ export default function FreeReaderApp() {
       return;
     }
     if (checkout !== "success") return;
-    setMessage("Checkout complete. Confirming your Pro plan…");
+    setMessage(`Checkout complete. Confirming your ${checkoutPlan === "premium" ? "Premium" : "Pro"} plan…`);
     let attempts = 0;
     const timer = setInterval(() => {
       const token = sessionRef.current?.access_token;
       if (token) void fetchUsage(token).then((summary) => {
         setUsage(summary);
-        if (summary.plan === "pro") {
+        if (summary.plan === checkoutPlan) {
           clearInterval(timer);
-          setMessage("Pro is ready. You now have 10 hours of narration per month.");
+          setMessage(checkoutPlan === "premium" ? "Premium is ready: 20 hours of narration, including 1 hour of cloned-voice audio each month." : "Pro is ready. You now have 10 hours of narration per month.");
         }
       }).catch(() => undefined);
       if (++attempts >= 12) {
         clearInterval(timer);
-        setMessage("Your payment is still processing. Your Pro plan will appear shortly.");
+        setMessage("Your payment is still processing. Your plan will appear shortly.");
       }
     }, 2500);
     return () => clearInterval(timer);
@@ -321,13 +324,14 @@ export default function FreeReaderApp() {
 
   useEffect(() => {
     if (!session?.access_token) return;
-    const requested = new URLSearchParams(window.location.search).get("upgrade") === "pro";
-    let queued = false;
-    try { queued = sessionStorage.getItem("freereaderUpgradeToPro") === "1"; } catch { /* unavailable */ }
-    if (!requested && !queued) return;
-    try { sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
+    const requested = new URLSearchParams(window.location.search).get("upgrade");
+    let queued: string | null = null;
+    try { queued = sessionStorage.getItem("freereaderUpgradePlan") ?? (sessionStorage.getItem("freereaderUpgradeToPro") === "1" ? "pro" : null); } catch { /* unavailable */ }
+    const plan = requested === "premium" || queued === "premium" ? "premium" : requested === "pro" || queued === "pro" ? "pro" : null;
+    if (!plan) return;
+    try { sessionStorage.removeItem("freereaderUpgradePlan"); sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
     window.history.replaceState({}, "", window.location.pathname);
-    void startCheckout(session.access_token)
+    void startCheckout(session.access_token, plan)
       .then((url) => window.location.assign(url))
       .catch(() => setMessage("Couldn't start checkout. Please try again from your account menu."));
   }, [session?.access_token]);
@@ -433,14 +437,14 @@ export default function FreeReaderApp() {
     fetchUsage(token).then(setUsage).catch(() => undefined);
   }
 
-  async function upgradeToPro() {
+  async function upgradeToPlan(plan: PaidPlan) {
     const token = sessionRef.current?.access_token;
     if (!token) {
       void signIn();
       return;
     }
     try {
-      window.location.href = await startCheckout(token);
+      window.location.href = await startCheckout(token, plan);
     } catch {
       setMessage("Could not start checkout. Please try again.");
     }
@@ -825,6 +829,7 @@ export default function FreeReaderApp() {
       ).then(async ({ parts, route: actualRoute }) => {
         if (parts.length !== batch.length) throw new Error("Speech batch size did not match the request.");
         audioPrimed.current = true;
+        refreshUsage();
         return Promise.all(batch.map(async (item, position) => {
           const part = parts[position];
           // A failed remote request may have completed with a local variant. Cache its real route.
@@ -1497,8 +1502,11 @@ export default function FreeReaderApp() {
             {usage && (
               <div className={styles.accountSummary}>
                 <strong>{formatRemaining(usage.remaining_seconds)} of narration left</strong>
-                <span>{usage.plan === "pro" ? "Pro" : "Free"} plan · {formatRemaining(usage.used_seconds)} used of {formatRemaining(usage.budget_seconds)} this month</span>
+                <span>{usage.plan === "premium" ? "Premium" : usage.plan === "pro" ? "Pro" : "Free"} plan · {formatRemaining(usage.used_seconds)} used of {formatRemaining(usage.budget_seconds)} this month</span>
                 <span className={styles.bookProgress}><i style={{ width: `${usage.budget_seconds ? Math.min(100, usage.used_seconds / usage.budget_seconds * 100) : 0}%` }} /></span>
+                {usage.plan === "premium" && <><strong>{formatRemaining(usage.premium_voice_remaining_seconds)} of Premium voice left</strong>
+                  <span>{formatRemaining(usage.premium_voice_used_seconds)} used of {formatRemaining(usage.premium_voice_budget_seconds)} for cloned-voice narration this month</span>
+                  <span className={styles.bookProgress}><i style={{ width: `${usage.premium_voice_budget_seconds ? Math.min(100, usage.premium_voice_used_seconds / usage.premium_voice_budget_seconds * 100) : 0}%` }} /></span></>}
               </div>
             )}
             <div className={styles.accountSummary}>
@@ -1506,8 +1514,9 @@ export default function FreeReaderApp() {
               <span>Documents are compressed before upload. Generated audio and voice models never sync.</span>
             </div>
             <div className={styles.accountActions}>
-              {usage?.plan !== "pro" && <button className={styles.upgradeButton} disabled={syncing} onClick={() => void upgradeToPro()}>Upgrade to Pro — {proPrice}/month</button>}
-              {usage?.plan === "pro" && <button onClick={() => void openBillingPortal()}>Manage subscription</button>}
+              {usage?.plan === "free" && <button className={styles.upgradeButton} disabled={syncing} onClick={() => void upgradeToPlan("pro")}>Upgrade to Pro — {proPrice}/month</button>}
+              {usage?.plan !== "premium" && premiumPrice && <button className={styles.upgradeButton} disabled={syncing} onClick={() => void upgradeToPlan("premium")}>{usage?.plan === "pro" ? "Explore Premium in billing" : "Upgrade to Premium"} — {premiumPrice}/month</button>}
+              {(usage?.plan === "pro" || usage?.plan === "premium") && <button onClick={() => void openBillingPortal()}>Manage subscription</button>}
               <button disabled={syncing} onClick={() => void syncNow()}>{syncing ? "Syncing..." : "Sync now"}</button>
               <button disabled={syncing} onClick={() => void signOut()}>Sign out</button>
               <button className={styles.destructiveButton} disabled={syncing} onClick={() => void deleteAccountAndCloudData()}>Delete account and cloud copies</button>

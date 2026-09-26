@@ -13,8 +13,11 @@ type SpeechOptions = { language: string; voice: string; steps: number; engine?: 
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (payload?.error === "usage_limit_reached") {
-    return "You have used your monthly narration allowance. Upgrade to Pro for more hours.";
+    return "You have used your monthly narration allowance. Check your plan and usage for more hours.";
   }
+  if (payload?.error === "premium_required") return "A Premium subscription is required to use a cloned voice.";
+  if (payload?.error === "premium_voice_limit_reached") return "You have used your 1 hour of Premium voice this month.";
+  if (payload?.error === "voice_not_owned") return "This cloned voice belongs to another account.";
   if (typeof payload?.error === "string" && payload.error) return payload.error;
   if (response.status === 413) return "This passage is too long to narrate.";
   return "Speech service is unavailable. Tap Play to retry.";
@@ -132,7 +135,7 @@ export class RemoteSpeechClient {
         : "Generating with your cloned voice");
       const response = await fetch("/api/clone-tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(currentAccessToken() ? { Authorization: `Bearer ${currentAccessToken()}` } : {}) },
         body: JSON.stringify({
           text: normalizeForSpeech(item.text, item.isHeading, language),
           voiceId: record.id,

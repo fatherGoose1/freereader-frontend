@@ -19,6 +19,7 @@ export async function callBackend(
   path: string,
   body: unknown,
   timeoutMs = 300_000,
+  userToken?: string,
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -27,6 +28,7 @@ export async function callBackend(
     headers: {
       Authorization: `Bearer ${config.token}`,
       "Content-Type": "application/json",
+      ...(userToken ? { "X-FreeReader-User-Token": userToken } : {}),
     },
     body: JSON.stringify(body),
     cache: "no-store",

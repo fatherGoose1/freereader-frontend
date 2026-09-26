@@ -44,7 +44,7 @@
 .generateButton, .importButton { min-height: 42px; padding: 9px 16px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 9px; font-size: 12px; font-weight: 700; }
 .generateButton:hover:not(:disabled), .importButton:hover:not(:disabled) { background: var(--green-dark); }
 .generateButton { min-width: 170px; white-space: nowrap; }
-.usageRemaining { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.usageRemaining { color: var(--muted); font-size: 11px; text-align: right; }
 .generateButton { position: relative; overflow: hidden; }
 .generateFill { position: absolute; inset: 0 auto 0 0; background: rgba(255,255,255,.2); transition: width .2s ease; }
 .generateLabel, .generateButton small { position: relative; display: block; }
@@ -134,6 +134,10 @@
 .dialogClose { display: grid; place-items: center; width: 36px; height: 36px; flex: none; color: var(--muted); background: #f5f7fc; border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 1; }
 .dialogClose:hover { color: var(--green); background: #edf2ff; }
 .dialogActions { display: flex; justify-content: flex-end; margin-top: 24px; }
+.premiumGate { padding: 22px; background: #f5f7fc; border: 1px solid var(--line); border-radius: 12px; }
+.premiumGate strong { font-size: 15px; }
+.premiumGate p { margin: 9px 0 20px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.premiumGate a { display: inline-flex; align-items: center; text-decoration: none; }
 .cloneName { display: flex; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
 .cloneName input { width: 100%; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
 .cloneTabs { display: flex; gap: 4px; margin: 20px 0 14px; padding: 4px; background: #f0f3f9; border-radius: 9px; }

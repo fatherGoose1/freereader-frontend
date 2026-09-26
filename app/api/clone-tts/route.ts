@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const config = freereaderBackendConfig();
   if (!config) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
+  const userToken = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
+  if (!userToken) return NextResponse.json({ error: "premium_required" }, { status: 403 });
 
   const body = await request.json().catch(() => null) as {
     text?: unknown; voiceId?: unknown; userId?: unknown; language?: unknown; speed?: unknown;
@@ -23,7 +25,7 @@ export async function POST(request: Request) {
 
   let response: Response;
   try {
-    response = await callBackend(config, "/api/v1/freereader/speech/clone", upstreamBody);
+    response = await callBackend(config, "/api/v1/freereader/speech/clone", upstreamBody, 300_000, userToken);
   } catch {
     return NextResponse.json({ error: "clone_speech_unavailable" }, { status: 502 });
   }
