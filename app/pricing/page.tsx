@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ProCheckoutButton from "../components/ProCheckoutButton";
-import { fetchPlanPrice, formatProPrice } from "../reader/billing";
+import { fetchPlanPrice, formatProPrice, type PaidPlan } from "../reader/billing";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -27,7 +27,7 @@ type Tier = {
   summary: string;
   features: string[];
   cta: { label: string; href: string };
-  featured: boolean;
+  plan?: PaidPlan;
   badge?: string;
 };
 
@@ -46,7 +46,6 @@ const tiers: Tier[] = [
       "Optional Google sign-in for cross-device sync",
     ],
     cta: { label: "Start free", href: "/reader" },
-    featured: false,
   },
   {
     name: "Pro",
@@ -59,7 +58,7 @@ const tiers: Tier[] = [
       "A single monthly allowance shared across both tools",
     ],
     cta: { label: "Get Pro", href: "/reader" },
-    featured: true,
+    plan: "pro",
     badge: "Most popular",
   },
   {
@@ -74,7 +73,7 @@ const tiers: Tier[] = [
       "Everything in the Pro tier",
     ],
     cta: { label: "Get Premium", href: "/reader" },
-    featured: false,
+    plan: "premium",
     badge: "Voice cloning",
   },
 ];
@@ -84,6 +83,12 @@ export default async function Pricing() {
     fetchPlanPrice("pro").then(formatProPrice).catch(() => null),
     fetchPlanPrice("premium").then(formatProPrice).catch(() => null),
   ]);
+  const premiumUnavailable = !premiumPrice;
+  const priceFor = (tier: Tier) =>
+    tier.plan === "premium" ? premiumPrice ?? tier.price
+      : tier.plan === "pro" ? proPrice ?? tier.price
+        : tier.price;
+
   return (
     <main className="wrap pricing">
       <div className="pricing-hero">
@@ -100,7 +105,7 @@ export default async function Pricing() {
         {tiers.map((tier) => (
           <section
             key={tier.name}
-            className={`price-card${tier.featured ? " featured" : ""}${tier.name === "Premium" && !premiumPrice ? " inactive" : ""}`}
+            className={`price-card${tier.plan === "premium" && premiumUnavailable ? " inactive" : ""}`}
             aria-labelledby={`plan-${tier.name.toLowerCase()}`}
           >
             <div className="price-card-head">
@@ -108,7 +113,7 @@ export default async function Pricing() {
               {tier.badge && <span className="price-badge">{tier.badge}</span>}
             </div>
             <p className="price-amount">
-              <strong>{tier.name === "Premium" ? premiumPrice ?? tier.price : tier.featured ? proPrice ?? tier.price : tier.price}</strong>
+              <strong>{priceFor(tier)}</strong>
               <span>{tier.cadence}</span>
             </p>
             <p className="price-summary">{tier.summary}</p>
@@ -117,10 +122,10 @@ export default async function Pricing() {
                 <li key={feature}><CheckIcon />{feature}</li>
               ))}
             </ul>
-            {tier.name === "Premium" ? premiumPrice ? (
-              <ProCheckoutButton plan="premium" />
-            ) : <button className="button" type="button" disabled>Unavailable</button> : tier.featured ? (
-              <ProCheckoutButton />
+            {tier.plan ? (
+              tier.plan === "premium" && premiumUnavailable
+                ? <button className="button" type="button" disabled>Unavailable</button>
+                : <ProCheckoutButton plan={tier.plan} />
             ) : (
               <Link className="button" href={tier.cta.href}>{tier.cta.label}</Link>
             )}
