@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import BrandMark from "../components/BrandMark";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
 import { isClonedVoice, type NarratorVoice } from "../reader/voices";
@@ -84,6 +84,47 @@ function formatTime(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
+function StudioDialog({ title, description, onClose, children }: {
+  title: string;
+  description: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    dialog?.querySelector<HTMLElement>("input, button, select, textarea")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
+      if (event.key !== "Tab" || !dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']"));
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); previous?.focus(); };
+  }, []);
+
+  return <div className={styles.dialogBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
+      <div className={styles.dialogHeader}>
+        <div><h2 id={titleId}>{title}</h2><p id={descriptionId}>{description}</p></div>
+        <button type="button" className={styles.dialogClose} aria-label={`Close ${title}`} onClick={onClose}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>;
+}
+
 function PassageEditor({ segment, index, active, rules, onFocus, onChange, onSelection, editorRef }: {
   segment: NarrationSegment;
   index: number;
@@ -159,6 +200,7 @@ export default function NarrationStudio() {
   const [pronunciation, setPronunciation] = useState("");
   const [globalPhrase, setGlobalPhrase] = useState("");
   const [globalPronunciation, setGlobalPronunciation] = useState("");
+  const [globalPronunciationsOpen, setGlobalPronunciationsOpen] = useState(false);
   const [pronunciationOpen, setPronunciationOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [playerTime, setPlayerTime] = useState(0);
@@ -522,6 +564,18 @@ export default function NarrationStudio() {
     });
   }
 
+  function closeClone() {
+    if (cloneBusy) return;
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    if (recordingTimer.current) clearInterval(recordingTimer.current);
+    recordingTimer.current = null;
+    setRecording(false);
+    setCloneOpen(false);
+    revokeDraftUrl();
+    setCloneError("");
+  }
+
   async function loadCloneSource(source: Blob) {
     setCloneError("");
     setCloneBusy(true);
@@ -827,49 +881,51 @@ export default function NarrationStudio() {
       </header>
 
       <section className={styles.controlbar} aria-label="Voiceover settings">
-        <label>Project language
-          <select value={project.language} onChange={(event) => changeProjectLanguage(event.target.value as SpeechLanguage)}>
-            {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-          </select>
-        </label>
-        <label>Project voice
-          <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-            {voiceOptions(project.language, clonedVoices)}
-          </select>
-        </label>
-        <label>Global speaking speed
-          <select value={project.globalSpeed} onChange={(event) => changeDefaults({ globalSpeed: Number(event.target.value) })}>
-            {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>) }
-          </select>
-        </label>
-        <button className={styles.secondaryButton} onClick={() => void previewVoice()}>Preview voice</button>
-        <button className={styles.secondaryButton} onClick={() => setCloneOpen((open) => !open)} aria-expanded={cloneOpen}>Clone voice</button>
-        <span className={styles.previewNote}>Instant sample in project language · No generation time used</span>
-        {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
-        <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
-          {generatingAll && generationProgress ? <>
-            <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
-            <span className={styles.generateLabel}>Generating {generationProgress.current} of {generationProgress.total} · {generationPercent}%</span>
-            <small>Click to stop after this passage</small>
-          </> : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
-        </button>
-        {readyCount === project.segments.length && readyCount > 0 && !generatingAll && <button className={styles.readyExport} disabled={exporting} onClick={() => void downloadVoiceover()}>{exporting ? "Preparing WAV…" : "Download WAV voiceover"}</button>}
+        <div className={styles.settingsHeading}>
+          <div><span className={styles.kicker}>Narration setup</span><h2>Set the sound for your script</h2><p>These settings apply to every passage unless you change it below.</p></div>
+          <div className={styles.generationActions}>
+            {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} left this month</span>}
+            <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
+              {generatingAll && generationProgress ? <>
+                <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
+                <span className={styles.generateLabel}>Generating {generationProgress.current} of {generationProgress.total} · {generationPercent}%</span>
+                <small>Click to stop after this passage</small>
+              </> : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
+            </button>
+          </div>
+        </div>
+        <div className={styles.settingsFields}>
+          <label>Language
+            <select value={project.language} onChange={(event) => changeProjectLanguage(event.target.value as SpeechLanguage)}>
+              {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            </select>
+          </label>
+          <label>Voice
+            <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
+              {voiceOptions(project.language, clonedVoices)}
+            </select>
+          </label>
+          <label>Speaking speed
+            <select value={project.globalSpeed} onChange={(event) => changeDefaults({ globalSpeed: Number(event.target.value) })}>
+              {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>) }
+            </select>
+          </label>
+        </div>
+        <div className={styles.settingsTools}>
+          <button type="button" className={styles.toolButton} onClick={() => void previewVoice()}>▶ <span>Preview voice</span></button>
+          <span className={styles.toolDivider} aria-hidden="true" />
+          <button type="button" className={styles.toolButton} onClick={() => setGlobalPronunciationsOpen(true)}>Pronunciations{project.pronunciations.length > 0 && <span className={styles.toolCount}>{project.pronunciations.length}</span>}</button>
+          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice</button>
+        </div>
       </section>
 
-      {cloneOpen && <section className={styles.clonePanel} aria-label="Voice cloning">
-        <div className={styles.clonePanelHeader}>
-          <div>
-            <strong>Clone a voice</strong>
-            <small>Upload or record {MIN_CLONE_SECONDS}–{MAX_CLONE_SECONDS} seconds of speech. We use at most the first {MAX_CLONE_SECONDS} seconds.</small>
-          </div>
-          <button type="button" className={styles.closeTools} aria-label="Close voice cloning" onClick={() => { setCloneOpen(false); revokeDraftUrl(); setCloneError(""); }}>×</button>
-        </div>
+      {cloneOpen && <StudioDialog title="Clone a voice" description={`Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.`} onClose={closeClone}>
         <label className={styles.cloneName}>Voice name
           <input value={cloneName} onChange={(event) => setCloneName(event.target.value)} placeholder="e.g. My narrator" maxLength={80} />
         </label>
-        <div className={styles.cloneTabs} role="tablist" aria-label="Voice source">
-          <button type="button" role="tab" aria-selected={cloneMode === "upload"} className={cloneMode === "upload" ? styles.activeCloneTab : ""} onClick={() => setCloneMode("upload")}>Upload audio</button>
-          <button type="button" role="tab" aria-selected={cloneMode === "record"} className={cloneMode === "record" ? styles.activeCloneTab : ""} onClick={() => setCloneMode("record")}>Record</button>
+        <div className={styles.cloneTabs} role="group" aria-label="Voice source">
+          <button type="button" aria-pressed={cloneMode === "upload"} className={cloneMode === "upload" ? styles.activeCloneTab : ""} onClick={() => setCloneMode("upload")}>Upload audio</button>
+          <button type="button" aria-pressed={cloneMode === "record"} className={cloneMode === "record" ? styles.activeCloneTab : ""} onClick={() => setCloneMode("record")}>Record</button>
         </div>
         {cloneMode === "upload" ? <div
           className={`${styles.cloneDrop} ${dragActive ? styles.cloneDropActive : ""}`}
@@ -891,6 +947,7 @@ export default function NarrationStudio() {
         </div>}
         {cloneError && <p className={styles.cloneError} role="alert">{cloneError}</p>}
         <div className={styles.cloneActions}>
+          <button type="button" className={styles.secondaryButton} disabled={cloneBusy} onClick={closeClone}>Cancel</button>
           <button type="button" className={styles.importButton} disabled={!cloneDraft || !cloneName.trim() || cloneBusy} onClick={() => void createVoiceClone()}>{cloneBusy ? "Cloning…" : "Create voice clone"}</button>
         </div>
         {clonedVoices.length > 0 && <ul className={styles.cloneVoiceList} aria-label="Your cloned voices">
@@ -899,25 +956,24 @@ export default function NarrationStudio() {
             <button type="button" aria-label={`Remove cloned voice ${record.name}`} onClick={() => deleteVoiceClone(record)}>×</button>
           </li>)}
         </ul>}
-      </section>}
+      </StudioDialog>}
 
-      <section className={styles.globalPronunciations} aria-label="Global pronunciations">
-        <div className={styles.globalPronunciationsInner}>
-          <strong>Global pronunciation</strong>
+      {globalPronunciationsOpen && <StudioDialog title="Script pronunciations" description="Set how a word or phrase is spoken throughout your script. Passage-specific pronunciations take priority." onClose={() => setGlobalPronunciationsOpen(false)}>
+        <div className={styles.globalPronunciations}>
           <form onSubmit={addGlobalPronunciation}>
-            <label>Search text<input value={globalPhrase} onChange={(event) => setGlobalPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
+            <label>Written phrase<input value={globalPhrase} onChange={(event) => setGlobalPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
             <label>Say it like<input value={globalPronunciation} onChange={(event) => setGlobalPronunciation(event.target.value)} placeholder="e.g. sequel" /></label>
-            <button disabled={!globalPhrase.trim() || !globalPronunciation.trim()}>Save pronunciation</button>
+            <button className={styles.importButton} disabled={!globalPhrase.trim() || !globalPronunciation.trim()}>Save pronunciation</button>
           </form>
-          {project.pronunciations.length > 0 && <ul aria-label="Global pronunciation rules">
+          {project.pronunciations.length > 0 ? <div className={styles.rulesSection}><strong>Saved pronunciations</strong><ul aria-label="Global pronunciation rules">
             {project.pronunciations.map((rule) => <li key={rule.id}>
               <ruby className={styles.pronunciationMark}><s>{rule.phrase}</s><rt>{rule.pronunciation}</rt></ruby>
               <button aria-label={`Remove global pronunciation for ${rule.phrase}`} onClick={() => changeGlobalPronunciations(projectRef.current.pronunciations.filter((item) => item.id !== rule.id))}>×</button>
             </li>)}
-          </ul>}
-          <small>Used throughout the script. A pronunciation set on one passage takes priority there.</small>
+          </ul></div> : <p className={styles.emptyRules}>No pronunciations added yet.</p>}
         </div>
-      </section>
+        <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={() => setGlobalPronunciationsOpen(false)}>Done</button></div>
+      </StudioDialog>}
 
       <section className={styles.workspace} aria-label="Script workspace">
         {!project.segments.length ? <div className={styles.emptyEditor}>
@@ -966,7 +1022,7 @@ export default function NarrationStudio() {
                     <strong>Selected passage</strong>
                     <button disabled={segment.status === "generating"} onClick={() => segment.status === "ready" ? void playAudio(segment) : void generateSegment(segment.id, true)}>Preview</button>
                     <button disabled={segment.status === "generating"} onClick={() => void generateSegment(segment.id, true)}>Regenerate</button>
-                    <button onClick={openPronunciation}>Pronunciation</button>
+                    <button onClick={openPronunciation}>Pronunciation{segment.pronunciations.length > 0 ? ` (${segment.pronunciations.length})` : ""}</button>
                     <button onClick={() => splitSelectedPassage(segment.id)}>Split at cursor</button>
                     <button disabled={index === 0} onClick={() => mergeAdjacentPassages(project.segments[index - 1].id)}>Merge with previous</button>
                     <button disabled={index === project.segments.length - 1} onClick={() => mergeAdjacentPassages(segment.id)}>Merge with next</button>
@@ -999,15 +1055,6 @@ export default function NarrationStudio() {
                       </div>
                     </fieldset>
                   </div>
-                  {pronunciationOpen && <form className={styles.pronunciationForm} onSubmit={addPronunciation}>
-                    <p>Highlight a word or phrase above to fill the written text.</p>
-                    <label>Written phrase<input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
-                    <label>Say it like<input value={pronunciation} onChange={(event) => setPronunciation(event.target.value)} placeholder="e.g. sequel" /></label>
-                    <button disabled={!phrase.trim() || !pronunciation.trim()}>Save pronunciation</button>
-                  </form>}
-                  {segment.pronunciations.length > 0 && <ul className={styles.pronunciationList} aria-label="Pronunciation overrides">
-                    {segment.pronunciations.map((override) => <li key={override.id}><span><strong>{override.phrase}</strong> → {override.pronunciation}</span><button aria-label={`Remove pronunciation for ${override.phrase}`} onClick={() => configureSegment(segment.id, { pronunciations: segment.pronunciations.filter((item) => item.id !== override.id) })}>×</button></li>)}
-                  </ul>}
                   <button className={styles.deleteButton} onClick={() => {
                     if (playingIdRef.current === segment.id) stopPlayback();
                     commit((current) => ({ ...current, segments: current.segments.filter((item) => item.id !== segment.id) }));
@@ -1025,6 +1072,18 @@ export default function NarrationStudio() {
           </div>
         </div>}
       </section>
+
+      {pronunciationOpen && selected && <StudioDialog title="Passage pronunciation" description="Change how a word or phrase sounds in this passage only. Highlight text in the passage first to fill it in automatically." onClose={() => setPronunciationOpen(false)}>
+        <form className={styles.pronunciationForm} onSubmit={addPronunciation}>
+          <label>Written phrase<input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="e.g. SQL" /></label>
+          <label>Say it like<input value={pronunciation} onChange={(event) => setPronunciation(event.target.value)} placeholder="e.g. sequel" /></label>
+          <button className={styles.importButton} disabled={!phrase.trim() || !pronunciation.trim()}>Save pronunciation</button>
+        </form>
+        {selected.pronunciations.length > 0 ? <div className={styles.rulesSection}><strong>For this passage</strong><ul className={styles.pronunciationList} aria-label="Pronunciation overrides">
+          {selected.pronunciations.map((override) => <li key={override.id}><span><strong>{override.phrase}</strong> → {override.pronunciation}</span><button aria-label={`Remove pronunciation for ${override.phrase}`} onClick={() => configureSegment(selected.id, { pronunciations: selected.pronunciations.filter((item) => item.id !== override.id) })}>×</button></li>)}
+        </ul></div> : <p className={styles.emptyRules}>No pronunciations added to this passage yet.</p>}
+        <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={() => setPronunciationOpen(false)}>Done</button></div>
+      </StudioDialog>}
 
       <footer className={styles.playbar} aria-label="Project voiceover player">
         <div className={styles.nowPlaying}><strong>{project.title || "Untitled narration"}</strong><span role="status">{generationMessage || (readyCount ? "Listen through your voiceover" : "Your voiceover will play here")}</span></div>

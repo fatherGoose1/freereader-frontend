@@ -25,34 +25,42 @@
 .topActions span { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .topActions button, .readerLink { min-height: 40px; padding: 9px 12px; color: #536075; background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; text-decoration: none; white-space: nowrap; }
 .topActions button:hover, .readerLink:hover { color: var(--green); background: #f3f6fc; }
-.controlbar { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; padding: 18px max(28px, calc((100vw - 1160px) / 2)); background: #fff; border-bottom: 1px solid var(--line); }
-.controlbar label, .passageSettings label, .pronunciationForm label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.controlbar select, .passageSettings select, .pronunciationForm input, .pauseControls input { min-height: 40px; padding: 8px 10px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; font-weight: 400; }
+.controlbar { width: min(920px, calc(100% - 40px)); margin: 32px auto 0; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 5px 20px #283a6008; }
+.settingsHeading { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 28px 18px; }
+.kicker { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.settingsHeading h2 { margin: 5px 0 3px; font-size: 20px; }
+.settingsHeading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.generationActions { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 7px; }
+.settingsFields { display: grid; grid-template-columns: 1fr 1.35fr .8fr; gap: 16px; padding: 0 28px 22px; }
+.settingsFields label, .passageSettings label, .pronunciationForm label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
+.settingsFields select, .passageSettings select, .pronunciationForm input, .pauseControls input { width: 100%; min-width: 0; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
+.settingsTools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-height: 54px; padding: 7px 20px; background: #fafbfe; border-top: 1px solid #edf0f5; }
+.toolButton { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 7px 11px; color: #536b9b; background: transparent; border: 0; border-radius: 7px; font-size: 12px; font-weight: 600; }
+.toolButton:hover { background: #edf2ff; }
+.toolDivider { height: 20px; margin: 0 5px; border-left: 1px solid var(--line); }
+.toolCount { display: inline-grid; min-width: 19px; height: 19px; padding: 0 5px; place-items: center; color: #4969c6; background: #e7edfa; border-radius: 99px; font-size: 10px; }
 .secondaryButton { min-height: 36px; padding: 7px 11px; color: var(--green); background: transparent; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; font-weight: 700; }
 .secondaryButton:hover { background: #f3f6fc; }
-.previewNote { color: var(--muted); font-size: 11px; }
-.generateButton, .importButton, .readyExport { min-height: 42px; padding: 9px 16px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 9px; font-size: 12px; font-weight: 700; }
-.generateButton:hover:not(:disabled), .importButton:hover:not(:disabled), .readyExport:hover:not(:disabled) { background: var(--green-dark); }
-.controlbar .generateButton { margin-left: auto; white-space: nowrap; }
+.generateButton, .importButton { min-height: 42px; padding: 9px 16px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 9px; font-size: 12px; font-weight: 700; }
+.generateButton:hover:not(:disabled), .importButton:hover:not(:disabled) { background: var(--green-dark); }
+.generateButton { min-width: 170px; white-space: nowrap; }
 .usageRemaining { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .generateButton { position: relative; overflow: hidden; }
 .generateFill { position: absolute; inset: 0 auto 0 0; background: rgba(255,255,255,.2); transition: width .2s ease; }
 .generateLabel, .generateButton small { position: relative; display: block; }
 .generateButton small { margin-top: 3px; font-size: 10px; font-weight: 500; }
-.readyExport { color: var(--green); background: #edf2ff; border-color: #dce4fa; white-space: nowrap; }
-.readyExport:hover:not(:disabled) { color: #fff; }
-.globalPronunciations { padding: 14px max(28px, calc((100vw - 1160px) / 2)); background: #f9fafc; border-bottom: 1px solid var(--line); }
-.globalPronunciationsInner { display: flex; align-items: end; flex-wrap: wrap; gap: 10px 18px; }
-.globalPronunciationsInner > strong { align-self: center; color: var(--green); font-size: 12px; white-space: nowrap; }
-.globalPronunciations form { display: flex; align-items: end; flex: 1; flex-wrap: wrap; gap: 8px; }
-.globalPronunciations form label { display: flex; flex: 1 1 140px; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.globalPronunciations input { width: 100%; min-height: 40px; padding: 8px 10px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; font-weight: 400; }
-.globalPronunciations button { min-height: 40px; padding: 8px 11px; color: var(--green); background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; font-weight: 700; }
-.globalPronunciations ul { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; padding: 2px 0; margin: 2px 0; list-style: none; }
-.globalPronunciations li { display: inline-flex; align-items: center; gap: 9px; padding: 6px 7px 6px 12px; background: #fff; border: 1px solid var(--line); border-radius: 7px; }
-.globalPronunciations li button { min-height: 24px; padding: 0 5px; background: transparent; border: 0; font-size: 17px; }
-.globalPronunciations small { width: 100%; color: var(--muted); font-size: 10px; }
-.workspace { min-height: calc(100vh - 230px); padding: 42px 20px 160px; }
+.globalPronunciations form, .pronunciationForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; }
+.globalPronunciations form label { display: grid; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
+.globalPronunciations input { width: 100%; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
+.globalPronunciations form .importButton, .pronunciationForm .importButton { grid-column: 1 / -1; justify-self: end; }
+.rulesSection { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
+.rulesSection > strong { font-size: 13px; }
+.globalPronunciations ul, .pronunciationList { display: grid; gap: 8px; padding: 0; margin: 12px 0 0; list-style: none; }
+.globalPronunciations li, .pronunciationList li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 12px; background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.globalPronunciations li button, .pronunciationList button { min-width: 30px; min-height: 30px; color: #9b5148; background: transparent; border: 0; border-radius: 6px; font-size: 20px; }
+.globalPronunciations li button:hover, .pronunciationList button:hover { background: #faeeee; }
+.emptyRules { margin: 24px 0 0; padding: 18px; color: var(--muted); background: #f9fafc; border: 1px dashed var(--line); border-radius: 8px; font-size: 12px; text-align: center; }
+.workspace { min-height: calc(100vh - 230px); padding: 28px 20px 160px; }
 .editorPanel { max-width: 920px; margin: auto; }
 .editorHeading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 12px 20px; }
 .editorHeading h1 { margin: 0 0 5px; font-size: 30px; }
@@ -107,12 +115,6 @@
 .pausePresets .activePreset { color: var(--green); background: #edf2ff; border-color: #b9c8ef; font-weight: 750; }
 .pausePresets label { display: flex; align-items: center; flex-direction: row; gap: 5px; font-weight: 400; }
 .pauseControls input { width: 68px; }
-.pronunciationForm { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-.pronunciationForm p { width: 100%; margin: 0; color: var(--muted); font-size: 11px; }
-.pronunciationForm label { flex: 1 1 150px; }
-.pronunciationList { display: grid; gap: 5px; padding: 0; margin: 14px 0 0; list-style: none; }
-.pronunciationList li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; background: #fff; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; }
-.pronunciationList button { color: #9b5148; background: transparent; border: 0; font-size: 16px; }
 .deleteButton { display: block; margin: 14px 0 0 auto; color: #9b5148; background: transparent; border: 0; font-size: 11px; }
 .addPassage { display: block; margin: 18px 10px 0; padding: 8px 0; color: var(--green); background: transparent; border: 0; font-size: 12px; font-weight: 700; }
 .playbar { position: fixed; z-index: 20; bottom: 18px; left: 50%; display: flex; align-items: center; gap: 22px; width: min(940px, calc(100% - 40px)); min-height: 76px; padding: 14px 24px; color: var(--ink); background: #fffffffa; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 40px #24365c1c; backdrop-filter: blur(20px); transform: translateX(-50%); }
@@ -124,27 +126,30 @@
 .playerTimeline input { width: 100%; accent-color: var(--green); }
 .exportButton { min-height: 40px; padding: 8px 13px; flex: none; color: var(--green); background: #edf2ff; border: 1px solid #dce4fa; border-radius: 8px; font-size: 12px; font-weight: 700; }
 .playbar audio { display: none; }
-.clonePanel { display: grid; gap: 14px; padding: 18px max(28px, calc((100vw - 1160px) / 2)); background: #fff; border-bottom: 1px solid var(--line); }
-.clonePanelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.clonePanelHeader strong { display: block; color: var(--green); font-size: 13px; }
-.clonePanelHeader small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
-.clonePanelHeader .closeTools { padding: 0 10px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 6px; font-size: 18px; line-height: 1; }
-.cloneName { display: flex; flex-direction: column; gap: 5px; max-width: 360px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.cloneName input { min-height: 40px; padding: 8px 10px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; font-weight: 400; }
-.cloneTabs { display: inline-flex; gap: 4px; }
-.cloneTabs button { min-height: 34px; padding: 6px 12px; color: var(--muted); background: #f9fafc; border: 1px solid var(--line); border-radius: 7px; font-size: 11px; font-weight: 700; }
+.dialogBackdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; padding: 24px; background: #17253e66; backdrop-filter: blur(4px); }
+.dialog { width: min(550px, 100%); max-height: calc(100dvh - 48px); overflow: auto; padding: 30px; background: #fff; border: 1px solid #e4e9f3; border-radius: 18px; box-shadow: 0 24px 80px #17253e33; }
+.dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.dialogHeader h2 { margin: 0 0 8px; font-size: 25px; }
+.dialogHeader p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.dialogClose { display: grid; place-items: center; width: 36px; height: 36px; flex: none; color: var(--muted); background: #f5f7fc; border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 1; }
+.dialogClose:hover { color: var(--green); background: #edf2ff; }
+.dialogActions { display: flex; justify-content: flex-end; margin-top: 24px; }
+.cloneName { display: flex; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
+.cloneName input { width: 100%; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
+.cloneTabs { display: flex; gap: 4px; margin: 20px 0 14px; padding: 4px; background: #f0f3f9; border-radius: 9px; }
+.cloneTabs button { flex: 1; min-height: 38px; padding: 6px 12px; color: var(--muted); background: transparent; border: 0; border-radius: 6px; font-size: 12px; font-weight: 600; }
 .cloneTabs .activeCloneTab { color: var(--green); background: #edf2ff; border-color: #b9c8ef; }
-.cloneDrop { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 18px; color: var(--muted); background: #f9fafc; border: 1px dashed #c7cfdd; border-radius: 10px; font-size: 12px; }
+.cloneDrop { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; min-height: 115px; padding: 18px; color: var(--muted); background: #f9fafc; border: 1px dashed #c7cfdd; border-radius: 10px; font-size: 12px; }
 .cloneDropActive { background: #eef3ff; border-color: #8ba7ff; }
-.cloneRecorder { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 0; color: var(--muted); font-size: 11px; }
+.cloneRecorder { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; color: var(--muted); font-size: 12px; }
 .cloneRecordStart { min-height: 40px; padding: 8px 14px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 8px; font-size: 12px; font-weight: 700; }
 .cloneRecordStop { min-height: 40px; padding: 8px 14px; color: #fff; background: #c55345; border: 1px solid #c55345; border-radius: 8px; font-size: 12px; font-weight: 700; }
-.clonePreview { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
-.clonePreview audio { height: 34px; }
-.cloneError { margin: 0; color: #a43f32; font-size: 12px; }
-.cloneActions { display: flex; justify-content: flex-start; }
-.cloneVoiceList { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; list-style: none; }
-.cloneVoiceList li { display: inline-flex; align-items: center; gap: 9px; padding: 6px 7px 6px 12px; background: #f9fafc; border: 1px solid var(--line); border-radius: 7px; font-size: 11px; }
+.clonePreview { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--muted); font-size: 11px; }
+.clonePreview audio { width: min(320px, 100%); height: 34px; }
+.cloneError { margin: 14px 0 0; color: #a43f32; font-size: 12px; }
+.cloneActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.cloneVoiceList { display: grid; gap: 8px; padding: 20px 0 0; margin: 22px 0 0; border-top: 1px solid var(--line); list-style: none; }
+.cloneVoiceList li { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 8px 12px; background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
 .cloneVoiceList button { min-height: 24px; padding: 0 5px; color: #9b5148; background: transparent; border: 0; font-size: 17px; }
 @media (max-width: 1100px) {
   .topbar { grid-template-columns: auto minmax(180px, 1fr); }
@@ -155,14 +160,18 @@
   .projectTitle { grid-column: 1 / -1; grid-row: 2; text-align: left; }
   .topActions { grid-column: 1 / -1; grid-row: 3; justify-content: space-between; }
   .mode { display: none; }
-  .controlbar { flex-wrap: wrap; gap: 10px; padding: 12px 14px; }
-  .controlbar label { flex: 1 1 135px; }
-  .controlbar .generateButton { margin-left: auto; }
-  .globalPronunciations { padding: 12px 14px; }
-  .clonePanel { padding: 12px 14px; }
-  .cloneName { max-width: none; }
-  .globalPronunciations form { flex-basis: 100%; }
-  .globalPronunciations input { font-size: 16px; }
+  .controlbar { width: calc(100% - 24px); margin-top: 16px; }
+  .settingsHeading { align-items: flex-start; flex-direction: column; gap: 14px; padding: 20px 18px 16px; }
+  .generationActions { width: 100%; align-items: stretch; }
+  .generationActions .usageRemaining { align-self: flex-start; }
+  .settingsFields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 18px 18px; }
+  .settingsFields label:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .settingsTools { padding: 7px 10px; }
+  .toolDivider { display: none; }
+  .toolButton { padding-inline: 8px; }
+  .dialogBackdrop { padding: 12px; }
+  .dialog { max-height: calc(100dvh - 24px); padding: 22px; }
+  .dialog :is(input, select) { font-size: 16px; }
   .workspace { padding: 20px 12px 130px; }
   .editorHeading { align-items: flex-start; padding-inline: 4px; }
   .document { padding: 16px 13px 25px; }
@@ -176,4 +185,9 @@
   .exportButton { margin-left: auto; }
   .emptyEditor { padding: 20px; }
   .emptyEditor textarea, .replacePanel textarea { font-size: 16px; }
+}
+@media (max-width: 420px) {
+  .globalPronunciations form, .pronunciationForm { grid-template-columns: 1fr; }
+  .globalPronunciations form .importButton, .pronunciationForm .importButton { grid-column: 1; width: 100%; }
+  .cloneActions { flex-wrap: wrap; }
 }
