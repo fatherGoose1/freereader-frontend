@@ -14,6 +14,7 @@ import { supabaseClient } from "../reader/supabase";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
 import { manageSubscription, startCheckout } from "../reader/billing";
 import ReaderIcon from "../reader/ReaderIcon";
+import { recordTelemetry } from "../reader/telemetry";
 import { removeClonedVoice, replaceClonedVoices, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
 import { MAX_CLONE_SECONDS, MIN_CLONE_SECONDS, VoiceRecorder, prepareCloneAudio } from "../reader/voiceCloneAudio";
 import { exportVoiceover } from "./exportAudio";
@@ -589,6 +590,12 @@ export default function NarrationStudio() {
     const segments = segmentScript(scriptDraft);
     const language = detectSpeechLanguage(scriptDraft) ?? "en";
     commit((current) => ({ ...current, language, defaultVoice: voiceForLanguage(current.defaultVoice, language), segments }));
+    recordTelemetry("script_imported", {
+      source: "paste",
+      language,
+      block_count: segments.length,
+      character_count: scriptDraft.length,
+    }, "youtube_narration");
     setSelectedId(null);
     setPlayerTime(0);
     setScriptDraft("");
@@ -894,6 +901,11 @@ export default function NarrationStudio() {
       setClonedVoices(saveClonedVoice(record));
       void loadClonedVoices(session.access_token);
       changeDefaults({ defaultVoice: voiceRefFor(record) });
+      recordTelemetry("voice_cloned", {
+        voice_name: record.name,
+        language: projectRef.current.language,
+        duration_seconds: record.durationSeconds,
+      }, "youtube_narration");
       setGenerationMessage(`Cloned voice "${record.name}" is ready. Generate a passage to hear it.`);
       revokeDraftUrl();
       setCloneName("");
@@ -1062,6 +1074,11 @@ export default function NarrationStudio() {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      recordTelemetry("voiceover_exported", {
+        block_count: projectRef.current.segments.filter((segment) => segment.audio).length,
+        duration_seconds: Math.min(totalDuration, 604_800),
+        language: projectRef.current.language,
+      }, "youtube_narration");
       setGenerationMessage("Voiceover downloaded.");
     } catch (error) {
       setGenerationMessage(error instanceof Error ? error.message : "Could not export this voiceover.");

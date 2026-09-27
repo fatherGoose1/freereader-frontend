@@ -4,7 +4,7 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
-import { clonedVoiceId, isClonedVoice } from "./voices";
+import { clonedVoiceId, isClonedVoice, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
 import type { SpeechResult } from "./mobileSpeech";
 
@@ -75,6 +75,8 @@ export class RemoteSpeechClient {
         body.voice = options.voice;
         body.steps = options.steps;
         if (options.engine) body.engine = options.engine;
+        const voiceName = options.voice ? voiceDisplayName(options.voice) : undefined;
+        if (voiceName) body.voice_name = voiceName;
       }
       const userToken = options?.source === "youtube_narration" ? currentAccessToken() : null;
       const response = await fetch("/api/tts", {
@@ -141,6 +143,7 @@ export class RemoteSpeechClient {
           text: normalizeForSpeech(item.text, item.isHeading, language),
           voiceId: record.id,
           userId: record.userId,
+          voiceName: record.name,
           language,
           speed: speechSpeed,
         }),

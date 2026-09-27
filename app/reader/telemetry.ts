@@ -26,6 +26,9 @@ const TRANSMITTED_EVENTS = new Set([
   "import_completed",
   "import_failed",
   "playback_first_started",
+  "script_imported",
+  "voice_cloned",
+  "voiceover_exported",
 ]);
 
 interface QueuedEvent {
@@ -91,7 +94,7 @@ function saveQueue(events: QueuedEvent[]) {
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let activeSession: TelemetrySession | null = null;
 
-export function recordTelemetry(eventName: string, properties: TelemetryProperties = {}) {
+export function recordTelemetry(eventName: string, properties: TelemetryProperties = {}, source: TelemetrySource = "audiobook") {
   if (!TRANSMITTED_EVENTS.has(eventName)) return;
   const context = deviceContext();
   const queued: QueuedEvent = {
@@ -99,7 +102,7 @@ export function recordTelemetry(eventName: string, properties: TelemetryProperti
     installation_id: persistentId(),
     session_id: sessionIdentifier(eventName === "app_launch"),
     event_name: eventName,
-    source: "audiobook",
+    source,
     schema_version: 1,
     occurred_at: new Date().toISOString(),
     platform_class: context.platformClass,

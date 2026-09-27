@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as {
     text?: unknown; texts?: unknown; speed?: unknown;
-    language?: unknown; detectLanguage?: unknown; voice?: unknown; steps?: unknown; engine?: unknown;
+    language?: unknown; detectLanguage?: unknown; voice?: unknown; voiceName?: unknown; steps?: unknown; engine?: unknown;
   } | null;
   if (!body || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }
   if (body.engine === "supertonic") upstreamBody.engine = "supertonic";
+  if (typeof body.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);
   const backend = process.env.KOKO_BACKEND_URL
     ?? "https://koko-backend-production-c887.up.railway.app";
   const token = process.env.FREEREADER_TTS_API_TOKEN ?? process.env.PARRYT_API_TOKEN;

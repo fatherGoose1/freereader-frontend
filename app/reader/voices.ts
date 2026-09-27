@@ -90,3 +90,8 @@ export function narratorVoices(): Array<[NarratorVoice, string]> {
     ...supertonicVoices(),
   ];
 }
+
+export function voiceDisplayName(voice: NarratorVoice | string): string | undefined {
+  if (isClonedVoice(voice)) return undefined;
+  return narratorVoices().find(([value]) => value === voice)?.[1];
+}
