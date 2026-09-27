@@ -370,10 +370,12 @@ export default function NarrationStudio() {
 
   async function loadClonedVoices(token: string) {
     const epoch = ++cloneListEpoch.current;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
     setCloneListLoading(true);
     setCloneListError("");
     try {
-      const response = await fetch("/api/voices", { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch("/api/voices", { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
       if (!response.ok) throw new Error("Your voices could not be loaded.");
       const payload = await response.json() as { voices?: Array<{
         id: string; user_id: string; name: string; created_at: string; duration_seconds: number; language: string | null;
@@ -388,6 +390,7 @@ export default function NarrationStudio() {
       if (epoch !== cloneListEpoch.current) return;
       setCloneListError("Could not load your voice slots. Try again.");
     } finally {
+      clearTimeout(timer);
       if (epoch === cloneListEpoch.current) setCloneListLoading(false);
     }
   }
@@ -1198,7 +1201,7 @@ export default function NarrationStudio() {
         <section className={styles.voicePremiumSection} aria-label="Premium cloned voices">
           <div className={styles.voicePremiumHeading}>
             <div><span className={styles.kicker}>Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
-            {hasPremium ? <button type="button" className={styles.addCloneButton} disabled={cloneListLoading || !!cloneListError || clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
+            {hasPremium ? <button type="button" className={styles.addCloneButton} disabled={clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
               : <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
           </div>
           {!hasPremium ? <p className={styles.voicePremiumNote}>Cloned voices are available with Premium. <Link href="/pricing">Explore Premium</Link></p>
