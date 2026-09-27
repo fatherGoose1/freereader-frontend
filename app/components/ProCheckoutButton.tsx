@@ -17,7 +17,7 @@ export default function ProCheckoutButton({ plan = "pro" }: { plan?: PaidPlan })
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       if (!data.session) {
-        let redirectTo = `${window.location.origin}/reader/audiobooks`;
+        let redirectTo = `${window.location.origin}/narration`;
         try { sessionStorage.setItem("freereaderUpgradePlan", plan); }
         catch { redirectTo += `?upgrade=${plan}`; }
         const { error: signInError } = await supabase.auth.signInWithOAuth({

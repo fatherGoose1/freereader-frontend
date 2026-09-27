@@ -126,27 +126,23 @@ export default function Terms() {
         backups, and any content you choose to import. You represent that you
         have the right to use the documents you import with the App or Website.
         VoiceReader data and anonymous FreeReader data are designed to remain
-        local, so Prism Labs cannot recover or restore them. FreeReader web users
-        may optionally sign in and sync compressed parsed documents, library
-        organization, and listening progress. Synced data is subject to the
-        limits and availability of that service. Generated audio and original
-        source files are not synced. Data may be lost if local storage is cleared
-        or the sync service is unavailable.
+        local, so Prism Labs cannot recover or restore them. Audiobook library
+        syncing is currently paused. Previously synced data may remain in your
+        account until you request its removal. Generated audio and original
+        source files are not synced. Local data may be lost if storage is cleared.
       </p>
       <p>
-        You retain any rights you have in content you import. For content you
-        choose to sync, you grant Prism Labs a limited license to host, copy,
-        transmit, and process it only as needed to provide sync. You grant Prism
-        Labs no license to content that never leaves your device.
+        You retain any rights you have in content you import. Previously synced
+        content is stored only to maintain that existing data while syncing is
+        paused. You grant Prism Labs no license to content that never leaves your device.
       </p>
 
       <h2>7. Privacy</h2>
       <p>
         Our <Link href="/privacy">Privacy Policy</Link> explains how the App and
         Website handle information and is incorporated into these Terms.
-        VoiceReader and anonymous FreeReader users do not send us your documents
-        or generated audio. Signed-in FreeReader users intentionally send
-        compressed parsed documents and progress for account sync. The App and
+        The audiobook reader does not upload documents or reading progress for
+        account sync while that feature is paused. The App and
         Website also process limited diagnostics and analytics as described in
         that policy.
       </p>

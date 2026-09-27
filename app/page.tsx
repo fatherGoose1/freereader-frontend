@@ -172,7 +172,7 @@ export default function Home() {
             <h2>Your words stay yours.</h2>
             <p>
               Use either workspace without an account. Your library and narration
-              projects are saved in your browser; sign in if you want library sync.
+              projects are saved in your browser. Audiobook listening is always free.
             </p>
             <Link className="light-link" href="/privacy">Read the privacy policy <ArrowIcon /></Link>
           </div>
@@ -183,7 +183,7 @@ export default function Home() {
             </article>
             <article>
               <span className="trust-icon">02</span>
-              <div><h3>Sync is an explicit choice</h3><p>Signing in syncs compressed document text, folders, and progress. Sign out or delete cloud copies anytime.</p></div>
+              <div><h3>Your library stays local</h3><p>Books, folders, and reading progress stay in this browser. Account syncing is currently paused.</p></div>
             </article>
             <article>
               <span className="trust-icon">03</span>
@@ -229,12 +229,12 @@ export default function Home() {
         <div className="wrap final-cta-inner">
           <span className="eyebrow">Ready when you are</span>
           <h2>Give your words a voice.</h2>
-          <p>Open a book or start a script. Both workspaces are free to try, with no account required.</p>
+          <p>Listen to books for free, or start a video script with one free hour of narration each month.</p>
           <div className="final-actions">
             <Link className="button" href="/reader/audiobooks">Start listening <ArrowIcon /></Link>
             <Link className="secondary-link" href="/narration"><span className="platform-icons"><YouTubeIcon /><TikTokIcon /><InstagramIcon gradientId="ig-cta" /></span> Create a voiceover <ArrowIcon /></Link>
           </div>
-          <small>One free monthly audio allowance shared across both workspaces.</small>
+          <small>Only video voiceovers use a monthly audio allowance.</small>
         </div>
       </section>
     </main>

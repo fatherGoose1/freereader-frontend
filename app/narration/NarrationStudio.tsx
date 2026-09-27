@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Session } from "@supabase/supabase-js";
 import BrandMark from "../components/BrandMark";
 import { useEffect, useId, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
@@ -11,6 +12,8 @@ import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { currentAccessToken, initAuthToken } from "../reader/authToken";
 import { supabaseClient } from "../reader/supabase";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
+import { manageSubscription, startCheckout } from "../reader/billing";
+import ReaderIcon from "../reader/ReaderIcon";
 import { removeClonedVoice, replaceClonedVoices, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
 import { MAX_CLONE_SECONDS, MIN_CLONE_SECONDS, VoiceRecorder, prepareCloneAudio } from "../reader/voiceCloneAudio";
 import { exportVoiceover } from "./exportAudio";
@@ -73,6 +76,15 @@ function statusLabel(segment: NarrationSegment): string {
 function formatTime(seconds: number): string {
   const whole = Math.floor(Math.max(0, seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function UsageMeter({ name, used, budget, remaining }: { name: string; used: number; budget: number; remaining: number }) {
+  const percent = budget ? Math.min(100, Math.max(0, used / budget * 100)) : 0;
+  return <div className={styles.usageMeter}>
+    <div className={styles.usageMeterHeading}><span>{name}</span><strong>{formatRemaining(remaining)} left</strong></div>
+    <div className={styles.usageTrack} role="progressbar" aria-label={`${name} used this month`} aria-valuemin={0} aria-valuemax={budget} aria-valuenow={Math.min(budget, Math.max(0, used))}><i style={{ width: `${percent}%` }} /></div>
+    <small>{formatRemaining(used)} used of {formatRemaining(budget)} this month</small>
+  </div>;
 }
 
 function StudioDialog({ title, description, onClose, children, wide = false, initialFocus }: {
@@ -235,6 +247,9 @@ export default function NarrationStudio() {
   const [voicePicker, setVoicePicker] = useState<{ passageId: string | null } | null>(null);
   const [voiceSearch, setVoiceSearch] = useState("");
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrl = useRef<string | null>(null);
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -268,6 +283,7 @@ export default function NarrationStudio() {
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
   const hasPremium = usage?.plan === "premium";
+  const profileName = session?.user.email?.split("@")[0] ?? "Profile";
   const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
   const builtInProfiles = builtInVoiceProfiles(pickerLanguage);
@@ -327,7 +343,30 @@ export default function NarrationStudio() {
   }
 
   function refreshUsage() {
-    fetchUsage(currentAccessToken()).then(setUsage).catch(() => undefined);
+    fetchUsage(session?.access_token ?? null).then(setUsage).catch(() => setProfileError("Usage is temporarily unavailable. Try again."));
+  }
+
+  async function signIn() {
+    const supabase = supabaseClient();
+    if (!supabase) { setProfileError("Google sign-in is unavailable right now."); return; }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google", options: { redirectTo: `${window.location.origin}/narration` },
+    });
+    if (error) setProfileError("Sign-in could not be started. Try again.");
+  }
+
+  async function signOut() {
+    const supabase = supabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) setProfileError("Could not sign out. Try again.");
+    else { setProfileOpen(false); setProfileError(""); }
+  }
+
+  async function openBilling() {
+    if (!session) return;
+    try { window.location.assign(await manageSubscription(session.access_token)); }
+    catch { setProfileError("Could not open subscription management. Try again."); }
   }
 
   async function loadClonedVoices(token: string) {
@@ -451,7 +490,10 @@ export default function NarrationStudio() {
 
   useEffect(() => {
     initAuthToken();
-    const apply = (token: string | null, userId: string | null) => {
+    const apply = (activeSession: Session | null) => {
+      setSession(activeSession);
+      const token = activeSession?.access_token ?? null;
+      const userId = activeSession?.user.id ?? null;
       if (userId !== cloneAccount.current) {
         cloneAccount.current = userId;
         cloneListEpoch.current += 1;
@@ -471,12 +513,57 @@ export default function NarrationStudio() {
     };
     const supabase = supabaseClient();
     if (!supabase) {
-      apply(null, null);
+      apply(null);
       return;
     }
-    void supabase.auth.getSession().then(({ data }) => apply(data.session?.access_token ?? null, data.session?.user.id ?? null));
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => apply(next?.access_token ?? null, next?.user.id ?? null));
+    void supabase.auth.getSession().then(({ data }) => apply(data.session));
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => apply(next));
     return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    const requested = new URLSearchParams(window.location.search).get("upgrade");
+    let queued: string | null = null;
+    try { queued = sessionStorage.getItem("freereaderUpgradePlan") ?? (sessionStorage.getItem("freereaderUpgradeToPro") === "1" ? "pro" : null); } catch { /* unavailable */ }
+    const plan = requested === "premium" || queued === "premium" ? "premium" : requested === "pro" || queued === "pro" ? "pro" : null;
+    if (!plan) return;
+    try { sessionStorage.removeItem("freereaderUpgradePlan"); sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
+    window.history.replaceState({}, "", window.location.pathname);
+    void startCheckout(session.access_token, plan)
+      .then((url) => window.location.assign(url))
+      .catch(() => setGenerationMessage("Checkout could not be opened. Try again from the pricing page."));
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get("checkout");
+    if (!checkout) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    if (checkout === "cancelled") { setGenerationMessage("Checkout cancelled. Your plan has not changed."); return; }
+    if (checkout !== "success") return;
+    const plan = params.get("plan") === "premium" ? "premium" : "pro";
+    setGenerationMessage("Checkout complete. Confirming your narration plan…");
+    setProfileOpen(true);
+    let attempts = 0;
+    const timer = setInterval(() => {
+      const supabase = supabaseClient();
+      if (supabase) void supabase.auth.getSession().then(({ data }) => {
+        if (!data.session) return;
+        void fetchUsage(data.session.access_token).then((summary) => {
+          setUsage(summary);
+          if (summary.plan === plan) {
+            clearInterval(timer);
+            setGenerationMessage(`${plan === "premium" ? "Premium" : "Pro"} narration is ready.`);
+          }
+        }).catch(() => undefined);
+      });
+      if (++attempts >= 12) {
+        clearInterval(timer);
+        setGenerationMessage("Payment is still processing. Check your profile again shortly.");
+      }
+    }, 2500);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -1037,6 +1124,9 @@ export default function NarrationStudio() {
           <span>{saveState}</span>
           <Link href="/reader/audiobooks" className={styles.readerLink}>Audiobook reader ↗</Link>
           <button onClick={newProject}>New project</button>
+          <button type="button" className={styles.profileButton} aria-label="Open profile and narration usage" onClick={() => { setProfileError(""); refreshUsage(); setProfileOpen(true); }}>
+            <span className={styles.profileAvatar} aria-hidden="true"><ReaderIcon name="user" /></span>{profileName}
+          </button>
         </div>
       </header>
 
@@ -1044,7 +1134,6 @@ export default function NarrationStudio() {
         <div className={styles.settingsHeading}>
           <div><span className={styles.kicker}>Narration setup</span><h2>Set the sound for your script</h2><p>These settings apply to every passage unless you change it below.</p></div>
           <div className={styles.generationActions}>
-            {usage && <span className={styles.usageRemaining}>{formatRemaining(usage.remaining_seconds)} narration left{hasPremium && <> · {formatRemaining(usage.premium_voice_remaining_seconds)} Premium voice left</>}</span>}
             <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
               {generatingAll && generationProgress ? <>
                 <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
@@ -1079,6 +1168,23 @@ export default function NarrationStudio() {
           <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice{!hasPremium && <span className={styles.toolCount}>Premium</span>}</button>
         </div>
       </section>
+
+      {profileOpen && <StudioDialog title="Your narration usage" description="Your monthly allowance is for video voiceovers only. Audiobook reading is always free." onClose={() => setProfileOpen(false)}>
+        <div className={styles.profilePlan}><span>{usage?.plan === "premium" ? "Premium" : usage?.plan === "pro" ? "Pro" : "Free"} plan</span><small>{usage?.period ?? "Monthly allowance"}</small></div>
+        {usage ? <div className={styles.usageChart}>
+          <UsageMeter name="Video narration" used={usage.used_seconds} budget={usage.budget_seconds} remaining={usage.remaining_seconds} />
+          {usage.plan === "premium" && <UsageMeter name="Cloned-voice narration" used={usage.premium_voice_used_seconds} budget={usage.premium_voice_budget_seconds} remaining={usage.premium_voice_remaining_seconds} />}
+        </div> : <p className={styles.profileNote} role="status">Loading your narration allowance…</p>}
+        <p className={styles.profileNote}>Allowance resets each calendar month. Cloned-voice time also counts toward video narration time.</p>
+        {profileError && <p className={styles.cloneError} role="alert">{profileError}</p>}
+        <div className={styles.profileActions}>
+          <Link href="/pricing" className={styles.secondaryButton}>View plans</Link>
+          {session ? <>
+            {(usage?.plan === "pro" || usage?.plan === "premium") && <button type="button" className={styles.secondaryButton} onClick={() => void openBilling()}>Manage subscription</button>}
+            <button type="button" className={styles.secondaryButton} onClick={() => void signOut()}>Sign out</button>
+          </> : <button type="button" className={styles.importButton} onClick={() => void signIn()}>Sign in for a paid plan</button>}
+        </div>
+      </StudioDialog>}
 
       {voicePicker && <StudioDialog title={voicePickerPassage ? "Choose a passage voice" : "Choose a project voice"} description={`Explore voices for ${languageName(pickerLanguage)}. Search by name or how a voice sounds, and listen before choosing.`} onClose={closeVoicePicker} wide initialFocus="input[type='search']">
         <label className={styles.voiceSearch}>Search voices

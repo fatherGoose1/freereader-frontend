@@ -57,9 +57,6 @@
 .appMark i:nth-child(3) { height: 15px; }
 .appMark i:nth-child(4) { height: 7px; }
 .actions { display: flex; align-items: center; gap: 12px; }
-.accountButton { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 12px; color: #536075; background: transparent; border: 0; border-radius: 8px; }
-.accountButton span { max-width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.accountButton:hover { background: #f3f5f9; }
 
 /* Library: entry points first, then the collection. */
 .libraryLayout { width: min(1160px, calc(100% - 56px)); margin: auto; padding: 44px 0 36px; }
@@ -205,14 +202,14 @@
 .modal { width: min(550px, 100%); max-height: calc(100dvh - 48px); overflow: auto; padding: 30px; background: #fff; border: 1px solid #e4e9f3; border-radius: 18px; box-shadow: 0 24px 80px #17253e33; }
 .modal h2 { margin: 8px 0 12px; font-size: 25px; overflow-wrap: anywhere; }
 .modal p { color: var(--app-secondary); font-size: 13px; line-height: 1.65; }
-.folderModal, .addModal, .accountModal { width: min(470px, 100%); }
+.folderModal, .addModal { width: min(470px, 100%); }
 .organizeModal { width: min(500px, 100%); }
 .fieldLabel { display: grid; gap: 8px; margin-top: 20px; color: #56637a; font-size: 13px; font-weight: 500; }
 .fieldLabel input, .catalogSearch input, .pasteArea { width: 100%; min-height: 46px; padding: 12px; color: var(--app-label); background: #f9fafc; border: 1px solid #dfe5ee; border-radius: 8px; font-weight: 400; }
 .pasteArea { min-height: 230px; resize: vertical; }
 .pasteMeta { margin-top: 6px; color: #8390a3; font-size: 11px; text-align: right; }
 .modalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
-.modalActions button:not(.primaryAction), .accountActions button, .catalogSearch button, .catalogList button, .catalog > button { min-height: 44px; padding: 10px 16px; color: #536584; background: #f5f7fc; border: 1px solid var(--border); border-radius: 8px; font-weight: 500; }
+.modalActions button:not(.primaryAction), .catalogSearch button, .catalogList button, .catalog > button { min-height: 44px; padding: 10px 16px; color: #536584; background: #f5f7fc; border: 1px solid var(--border); border-radius: 8px; font-weight: 500; }
 .modalPrivacy { margin-top: 22px; padding-top: 16px; color: #7f8c9e; border-top: 1px solid #edf0f5; font-size: 11px; text-align: center; }
 .folderChoices { overflow: hidden; margin-top: 24px; border: 1px solid var(--border); border-radius: 12px; }
 .folderChoices button { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; color: var(--app-label); background: #fff; border: 0; border-bottom: 1px solid var(--border); text-align: left; }
@@ -231,10 +228,6 @@
 .organizeActions { display: flex; justify-content: space-between; margin-top: 22px; }
 .organizeActions button { min-height: 44px; padding: 8px 12px; color: var(--app-blue); background: transparent; border: 0; border-radius: 8px; }
 .appShell .destructiveButton { color: #bf434b; }
-.accountSummary { display: grid; gap: 8px; margin: 20px 0; padding: 16px; background: #f5f7fc; border: 1px solid var(--border); border-radius: 10px; }
-.accountSummary span, .accountModal > small { color: #7b879a; font-size: 12px; }
-.accountActions { display: grid; gap: 10px; margin: 20px 0; }
-.accountActions .upgradeButton { color: #fff; background: var(--app-blue); border: 0; font-weight: 700; }
 .catalog { width: min(700px, 100%); }
 .catalogHeader { display: flex; align-items: center; gap: 16px; margin: -30px -30px 24px; padding: 24px 30px; background: #f2f5fc; border-bottom: 1px solid #e6ebf6; }
 .catalogHeader > span { display: grid; place-items: center; width: 45px; height: 52px; flex: none; color: #667da8; background: #dfe7f6; border-radius: 5px; font-size: 12px; font-weight: 700; }

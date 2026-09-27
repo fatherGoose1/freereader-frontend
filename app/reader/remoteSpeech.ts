@@ -75,7 +75,7 @@ export class RemoteSpeechClient {
         body.steps = options.steps;
         if (options.engine) body.engine = options.engine;
       }
-      const userToken = currentAccessToken();
+      const userToken = options?.source === "youtube_narration" ? currentAccessToken() : null;
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: {

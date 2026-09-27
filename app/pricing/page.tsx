@@ -8,7 +8,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "FreeReader pricing: start free with 1 hour of audio generation each month, get 10 hours with Pro, or get 20 hours plus 1 hour of cloned-voice narration with Premium.",
+    "YouTube narration pricing: start with 1 free hour of voiceovers each month, get 10 hours with Pro, or 20 hours and 1 hour of cloned-voice narration with Premium. Audiobook reading is always free.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -36,16 +36,16 @@ const tiers: Tier[] = [
     name: "Free",
     price: "$0",
     cadence: "forever",
-    summary: "Both tools, one hour of narration each month, no card required.",
+    summary: "Make your first video voiceovers at no cost. No card required.",
     features: [
-      "1 hour of audio generation each month",
-      "Audiobook reader for EPUB, PDF, DOCX, TXT, HTML, Markdown, and web articles",
-      "YouTube Narration Studio with script editing and voiceover export",
-      "All 31 languages and every available voice",
-      "Project Gutenberg library and private local storage",
-      "Optional Google sign-in for cross-device sync",
+      "1 hour of video narration each month",
+      "Script editing and WAV voiceover export",
+      "Built-in voices across 31 languages",
+      "Pronunciation, pace, and pause control by passage",
+      "Projects saved privately in this browser",
+      "No account or card needed to start",
     ],
-    cta: { label: "Start free", href: "/reader" },
+    cta: { label: "Start free", href: "/narration" },
   },
   {
     name: "Pro",
@@ -53,9 +53,9 @@ const tiers: Tier[] = [
     cadence: "per month",
     summary: "Room for creators and long reads that go well past an hour.",
     features: [
-      "Up to 10 hours of audio generation each month",
+      "Up to 10 hours of video narration each month",
       "Everything in the Free tier",
-      "A single monthly allowance shared across both tools",
+      "More room to revise and regenerate your scripts",
     ],
     cta: { label: "Get Pro", href: "/reader" },
     plan: "pro",
@@ -67,7 +67,7 @@ const tiers: Tier[] = [
     cadence: "per month",
     summary: "Cloned voices and the most hours for power users and teams.",
     features: [
-      "Up to 20 hours of audio generation each month",
+      "Up to 20 hours of video narration each month",
       "Voice cloning — narrate in your own or a custom voice",
       "1 hour of cloned-voice narration each month, included in the 20 hours",
       "Everything in the Pro tier",
@@ -93,11 +93,10 @@ export default async function Pricing() {
     <main className="wrap pricing">
       <div className="pricing-hero">
         <span className="eyebrow">Pricing</span>
-        <h1>One account, both tools.</h1>
+        <h1>Find your voiceover plan.</h1>
         <p>
-          FreeReader turns your reading and your scripts into narration. Start
-          free, and upgrade when an hour a month is not enough. The same
-          plan covers the audiobook reader and the YouTube Narration Studio.
+          Start creating video narration for free. Choose more hours or your own
+          cloned voice when your scripts grow. Audiobook listening stays free, without a monthly limit.
         </p>
       </div>
 
@@ -135,8 +134,8 @@ export default async function Pricing() {
 
       <p className="pricing-note">
         Audio generation is measured by the length of the narration you create.
-        Your monthly narration allowance is shared between the audiobook reader and the
-        Narration Studio. Premium cloned-voice audio also draws from its separate 1-hour allowance.
+        These monthly allowances apply only to the video Narration Studio.
+        Premium cloned-voice audio also draws from its separate 1-hour allowance.
         Sign in with Google to subscribe.
       </p>
 
@@ -149,24 +148,23 @@ export default async function Pricing() {
           editing, importing, and exporting text do not use your allowance.
         </p>
 
-        <h3>Does one allowance cover both products?</h3>
+        <h3>Does this limit the audiobook reader?</h3>
         <p>
-          Yes. The audiobook reader and the YouTube Narration Studio draw from
-          the same monthly allowance, so you can split your hours however you
-          like. Cloned-voice audio also counts toward Premium’s separate 1-hour limit.
+          No. Audiobook listening and generation are free with no monthly limit.
+          Only video voiceovers use the allowances shown above.
         </p>
 
         <h3>What happens when I reach my limit?</h3>
         <p>
-          Your library and scripts stay available, but new narration pauses
+          Your scripts stay available, but new video narration pauses
           until your allowance resets or you upgrade. When the Premium voice hour is used,
           you can still generate with standard voices if you have narration time left.
         </p>
 
         <h3>Do I need an account?</h3>
         <p>
-          No. Your library works entirely in the browser without signing in.
-          A Google account is only needed for cross-device sync and paid plans.
+          No. You can create voiceovers for free without signing in.
+          A Google account is only needed for paid narration plans.
         </p>
 
         <h3>Can I cancel my subscription?</h3>
