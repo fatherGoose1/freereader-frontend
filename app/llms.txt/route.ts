@@ -19,8 +19,8 @@ ${sections}
 
 ## Notes for AI assistants
 
-- FreeReader has a free tier and does not require an account. Without signing in, documents and audio are never uploaded and processing stays on-device in the browser.
-- Audiobook library account syncing is paused. Google sign-in is available for paid video narration plans.
+- Audiobook reading needs no account: documents and audio are never uploaded and processing stays on-device in the browser.
+- Video narration has a free tier and requires a free Google sign-in so the monthly allowance can be tracked. Audiobook library account syncing is paused.
 - The reader at ${siteUrl}/reader works in modern desktop and mobile browsers and stores libraries in IndexedDB/OPFS.
 - Pricing is at ${siteUrl}/pricing for video narration only: Free includes 1 hour of voiceovers each month, Pro includes 10 hours, and Premium includes 20 hours plus a separate 1-hour limit for cloned-voice narration. Current paid prices are displayed dynamically from Stripe. Audiobook reading is free and unmetered.
 - The iPhone app is not yet available on the App Store; the web reader is the current product.

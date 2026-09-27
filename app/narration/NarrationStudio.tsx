@@ -282,7 +282,7 @@ export default function NarrationStudio() {
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
   const hasPremium = usage?.plan === "premium";
-  const profileName = session?.user.email?.split("@")[0] ?? "Profile";
+  const profileName = session?.user.email?.split("@")[0] ?? "Sign in";
   const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
   const builtInProfiles = builtInVoiceProfiles(pickerLanguage);
@@ -695,6 +695,7 @@ export default function NarrationStudio() {
   }
 
   async function generateSegment(id: string, playWhenReady = false): Promise<boolean> {
+    if (!session) { setGenerationMessage("Sign in to generate narration. Audiobook listening stays free."); return false; }
     const currentProject = projectRef.current;
     const segment = currentProject.segments.find((item) => item.id === id);
     if (!segment?.text.trim()) return false;
@@ -759,6 +760,7 @@ export default function NarrationStudio() {
   }
 
   async function generateAll() {
+    if (!session) { setGenerationMessage("Sign in to generate narration. Audiobook listening stays free."); return; }
     const epoch = ++generationEpoch.current;
     setGeneratingAll(true);
     const ids = projectRef.current.segments.map((segment) => segment.id);
@@ -1135,13 +1137,17 @@ export default function NarrationStudio() {
         <div className={styles.settingsHeading}>
           <div><span className={styles.kicker}>Narration setup</span><h2>Set the sound for your script</h2><p>These settings apply to every passage unless you change it below.</p></div>
           <div className={styles.generationActions}>
-            <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
-              {generatingAll && generationProgress ? <>
-                <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
-                <span className={styles.generateLabel}>Generating {generationProgress.current} of {generationProgress.total} · {generationPercent}%</span>
-                <small>Click to stop after this passage</small>
-              </> : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
-            </button>
+            {session ? (
+              <button className={styles.generateButton} disabled={!project.segments.length || (readyCount === project.segments.length && !generatingAll)} onClick={generatingAll ? stopGeneration : () => void generateAll()}>
+                {generatingAll && generationProgress ? <>
+                  <span className={styles.generateFill} style={{ width: `${generationPercent}%` }} aria-hidden="true" />
+                  <span className={styles.generateLabel}>Generating {generationProgress.current} of {generationProgress.total} · {generationPercent}%</span>
+                  <small>Click to stop after this passage</small>
+                </> : readyCount === project.segments.length && readyCount > 0 ? "Voiceover ready" : "Generate voiceover"}
+              </button>
+            ) : (
+              <button className={styles.generateButton} onClick={() => void signIn()}>Sign in to generate</button>
+            )}
           </div>
         </div>
         <div className={styles.settingsFields}>
@@ -1183,7 +1189,7 @@ export default function NarrationStudio() {
           {session ? <>
             {(usage?.plan === "pro" || usage?.plan === "premium") && <button type="button" className={styles.secondaryButton} onClick={() => void openBilling()}>Manage subscription</button>}
             <button type="button" className={styles.secondaryButton} onClick={() => void signOut()}>Sign out</button>
-          </> : <button type="button" className={styles.importButton} onClick={() => void signIn()}>Sign in for a paid plan</button>}
+          </> : <button type="button" className={styles.importButton} onClick={() => void signIn()}>Sign in with Google</button>}
         </div>
       </StudioDialog>}
 

@@ -15,6 +15,7 @@ function unavailableMessage(response: Response, payload: { error?: unknown } | n
   if (payload?.error === "usage_limit_reached") {
     return "You have used your monthly narration allowance. Check your plan and usage for more hours.";
   }
+  if (payload?.error === "sign_in_required") return "Sign in to generate narration. Audiobook listening stays free.";
   if (payload?.error === "premium_required") return "A Premium subscription is required to use a cloned voice.";
   if (payload?.error === "premium_voice_limit_reached") return "You have used your 1 hour of Premium voice this month.";
   if (payload?.error === "voice_not_owned") return "This cloned voice belongs to another account.";

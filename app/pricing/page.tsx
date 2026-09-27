@@ -43,7 +43,7 @@ const tiers: Tier[] = [
       "Built-in voices across 31 languages",
       "Pronunciation, pace, and pause control by passage",
       "Projects saved privately in this browser",
-      "No account or card needed to start",
+      "Free Google sign-in, no card required",
     ],
     cta: { label: "Start free", href: "/narration" },
   },
@@ -57,7 +57,7 @@ const tiers: Tier[] = [
       "Everything in the Free tier",
       "More room to revise and regenerate your scripts",
     ],
-    cta: { label: "Get Pro", href: "/reader" },
+    cta: { label: "Get Pro", href: "/narration" },
     plan: "pro",
     badge: "Most popular",
   },
@@ -163,8 +163,9 @@ export default async function Pricing() {
 
         <h3>Do I need an account?</h3>
         <p>
-          No. You can create voiceovers for free without signing in.
-          A Google account is only needed for paid narration plans.
+          Video narration needs a free Google sign-in so your monthly allowance can
+          be tracked. No card is required, and the audiobook reader stays free
+          without an account.
         </p>
 
         <h3>Can I cancel my subscription?</h3>

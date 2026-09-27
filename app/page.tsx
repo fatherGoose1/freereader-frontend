@@ -82,7 +82,7 @@ export default function Home() {
             <div className="hero-assurances" aria-label="FreeReader product highlights">
               <span><CheckIcon /> Start free</span>
               <span><CheckIcon /> 31 languages</span>
-              <span><CheckIcon /> No account required</span>
+              <span><CheckIcon /> Audiobooks need no account</span>
             </div>
           </div>
           <div className="hero-shot" aria-label="FreeReader live speech demo">
