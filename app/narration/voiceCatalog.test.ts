@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { builtInVoiceProfiles, POPULAR_VOICE_IDS, searchVoiceProfiles } from "./voiceCatalog";
 
-test("English exposes both engines with three available popular voices and sound tags", () => {
+test("English lists three popular voices with sound tags", () => {
   const profiles = builtInVoiceProfiles("en");
   assert.deepEqual(POPULAR_VOICE_IDS.map((id) => profiles.find((profile) => profile.id === id)?.name), ["Heart", "Olivia", "Bella"]);
   assert.ok(profiles.every((profile) => profile.tags.length >= 3));
-  assert.ok(profiles.some((profile) => profile.engine === "Kokoro"));
-  assert.ok(profiles.some((profile) => profile.engine === "Supertonic"));
+  assert.ok(profiles.some((profile) => profile.id === "af_heart"));
+  assert.ok(profiles.some((profile) => profile.id === "F4"));
 });
 
 test("search surfaces the strongest tag match and respects language availability", () => {
@@ -18,6 +18,5 @@ test("search surfaces the strongest tag match and respects language availability
   assert.deepEqual(searchVoiceProfiles(english, "unknown sound"), []);
   const spanish = builtInVoiceProfiles("es");
   assert.equal(spanish.length, 10);
-  assert.ok(spanish.every((profile) => profile.engine === "Supertonic"));
   assert.ok(!spanish.some((profile) => profile.id === "af_heart"));
 });

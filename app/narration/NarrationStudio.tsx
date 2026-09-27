@@ -152,7 +152,6 @@ function VoiceCard({ profile, selected, previewing, bestMatch = false, onSelect,
       <span className={styles.voiceAvatar} style={palette} aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</span>
       <span className={styles.voiceDetails}>
         <span className={styles.voiceName}><strong>{profile.name}</strong>{bestMatch && <span className={styles.bestMatchMark}>Best match</span>}{selected && <span className={styles.selectedVoiceMark}>Selected</span>}</span>
-        <small>{profile.engine}</small>
         <span className={styles.voiceTags}>{profile.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>
       </span>
     </button>
@@ -288,7 +287,7 @@ export default function NarrationStudio() {
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
   const builtInProfiles = builtInVoiceProfiles(pickerLanguage);
   const clonedProfiles: VoiceProfile[] = hasPremium ? clonedVoices.map((record) => ({
-    id: voiceRefFor(record), name: record.name, engine: "Your cloned voice", tags: ["custom", "personal"],
+    id: voiceRefFor(record), name: record.name, tags: ["custom", "personal"],
   })) : [];
   const popularProfiles = pickerLanguage === "en"
     ? POPULAR_VOICE_IDS.map((id) => builtInProfiles.find((profile) => profile.id === id)).filter((profile): profile is VoiceProfile => !!profile)
@@ -1122,7 +1121,6 @@ export default function NarrationStudio() {
         />
         <div className={styles.topActions}>
           <span>{saveState}</span>
-          <Link href="/reader/audiobooks" className={styles.readerLink}>Audiobook reader ↗</Link>
           <button onClick={newProject}>New project</button>
           <button type="button" className={styles.profileButton} aria-label="Open profile and narration usage" onClick={() => { setProfileError(""); refreshUsage(); setProfileOpen(true); }}>
             <span className={styles.profileAvatar} aria-hidden="true"><ReaderIcon name="user" /></span>{profileName}

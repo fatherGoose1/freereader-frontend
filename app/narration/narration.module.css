@@ -23,8 +23,8 @@
 .projectTitle:focus { border-color: #8ba7ff; }
 .topActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .topActions span { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.topActions button, .readerLink { min-height: 40px; padding: 9px 12px; color: #536075; background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; text-decoration: none; white-space: nowrap; }
-.topActions button:hover, .readerLink:hover { color: var(--green); background: #f3f6fc; }
+.topActions button { min-height: 40px; padding: 9px 12px; color: #536075; background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; text-decoration: none; white-space: nowrap; }
+.topActions button:hover { color: var(--green); background: #f3f6fc; }
 .topActions .profileButton { display: inline-flex; align-items: center; gap: 7px; max-width: 155px; padding: 5px 9px 5px 5px; overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; }
 .profileAvatar { display: grid; place-items: center; width: 29px; height: 29px; flex: none; color: #4969c6; background: #edf2ff; border-radius: 50%; }
 .profileAvatar svg { width: 16px; height: 16px; }
@@ -36,10 +36,10 @@
 .generationActions { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 7px; }
 .settingsFields { display: grid; grid-template-columns: 1fr 1.35fr .8fr; gap: 16px; padding: 0 28px 22px; }
 .settingsFields label, .passageSettings label, .pronunciationForm label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
-.settingsFields select, .passageSettings select, .pronunciationForm input, .pauseControls input { width: 100%; min-width: 0; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
+.settingsFields select, .passageSettings select, .pronunciationForm input, .pauseControls input { width: 100%; min-width: 0; height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
 .voiceField { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
 .passageSettings > .voiceField { flex: 1 1 125px; }
-.voicePickerTrigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 500; text-align: left; }
+.voicePickerTrigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 500; text-align: left; }
 .voicePickerTrigger:hover { background: #f1f4fc; border-color: #b9c8ef; }
 .voicePickerTrigger span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voicePickerTrigger span:last-child { color: #8390a3; font-size: 18px; }
@@ -185,7 +185,6 @@
 .voiceDetails { display: grid; min-width: 0; gap: 3px; }
 .voiceName { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .voiceName strong { font-size: 13px; }
-.voiceDetails small { color: var(--muted); font-size: 10px; }
 .voiceTags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .voiceTags > span { padding: 3px 6px; color: #62718c; background: #f0f3f9; border-radius: 5px; font-size: 10px; }
 .selectedVoiceMark, .bestMatchMark { padding: 3px 6px; color: #385ab5; background: #e5ecfc; border-radius: 5px; font-size: 9px; font-weight: 700; }

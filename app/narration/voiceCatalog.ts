@@ -1,11 +1,10 @@
 import { voicesForLanguage, type SpeechLanguage } from "../reader/speech";
-import { isKokoroVoice, type KokoroVoice, type NarratorVoice } from "../reader/voices";
+import type { KokoroVoice, NarratorVoice } from "../reader/voices";
 import type { Voice } from "../reader/tts";
 
 export type VoiceProfile = {
   id: NarratorVoice;
   name: string;
-  engine: string;
   tags: readonly string[];
 };
 
@@ -56,7 +55,6 @@ export function builtInVoiceProfiles(language: SpeechLanguage): VoiceProfile[] {
   return voicesForLanguage(language).map(([id, name]) => ({
     id,
     name,
-    engine: isKokoroVoice(id) ? "Kokoro" : "Supertonic",
     tags: VOICE_TAGS[id as KokoroVoice | Voice],
   }));
 }
@@ -67,9 +65,8 @@ export function searchVoiceProfiles(profiles: VoiceProfile[], query: string): Vo
   return profiles.map((profile, index) => {
     const name = profile.name.toLocaleLowerCase();
     const tags = profile.tags.map((tag) => tag.toLocaleLowerCase());
-    const engine = profile.engine.toLocaleLowerCase();
     const matches = terms.map((term) => name === term ? 8 : name.includes(term) ? 5
-      : tags.includes(term) ? 4 : tags.some((tag) => tag.includes(term)) ? 2 : engine.includes(term) ? 1 : 0);
+      : tags.includes(term) ? 4 : tags.some((tag) => tag.includes(term)) ? 2 : 0);
     return { profile, index, score: matches.reduce<number>((sum, match) => sum + match, 0), matches: matches.every(Boolean) };
   }).filter((result) => result.matches)
     .sort((a, b) => b.score - a.score || a.index - b.index)
