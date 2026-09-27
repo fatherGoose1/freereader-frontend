@@ -34,6 +34,12 @@
 .settingsFields { display: grid; grid-template-columns: 1fr 1.35fr .8fr; gap: 16px; padding: 0 28px 22px; }
 .settingsFields label, .passageSettings label, .pronunciationForm label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
 .settingsFields select, .passageSettings select, .pronunciationForm input, .pauseControls input { width: 100%; min-width: 0; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
+.voiceField { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
+.passageSettings > .voiceField { flex: 1 1 125px; }
+.voicePickerTrigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 9px 12px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 500; text-align: left; }
+.voicePickerTrigger:hover { background: #f1f4fc; border-color: #b9c8ef; }
+.voicePickerTrigger span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voicePickerTrigger span:last-child { color: #8390a3; font-size: 18px; }
 .settingsTools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-height: 54px; padding: 7px 20px; background: #fafbfe; border-top: 1px solid #edf0f5; }
 .toolButton { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 7px 11px; color: #536b9b; background: transparent; border: 0; border-radius: 7px; font-size: 12px; font-weight: 600; }
 .toolButton:hover { background: #edf2ff; }
@@ -128,12 +134,55 @@
 .playbar audio { display: none; }
 .dialogBackdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; padding: 24px; background: #17253e66; backdrop-filter: blur(4px); }
 .dialog { width: min(550px, 100%); max-height: calc(100dvh - 48px); overflow: auto; padding: 30px; background: #fff; border: 1px solid #e4e9f3; border-radius: 18px; box-shadow: 0 24px 80px #17253e33; }
+.wideDialog { width: min(780px, 100%); }
 .dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .dialogHeader h2 { margin: 0 0 8px; font-size: 25px; }
 .dialogHeader p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .dialogClose { display: grid; place-items: center; width: 36px; height: 36px; flex: none; color: var(--muted); background: #f5f7fc; border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 1; }
 .dialogClose:hover { color: var(--green); background: #edf2ff; }
 .dialogActions { display: flex; justify-content: flex-end; margin-top: 24px; }
+.voiceSearch { position: sticky; z-index: 1; top: 0; display: grid; gap: 8px; padding: 8px 0 12px; margin-top: -8px; color: #607087; background: #fff; font-size: 12px; font-weight: 600; }
+.voiceSearch input { width: 100%; min-height: 48px; padding: 11px 14px; color: var(--ink); background: #f9fafc; border: 1px solid var(--line); border-radius: 9px; font-size: 14px; }
+.voiceSuggestions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 12px 0 22px; }
+.voiceSuggestions > span { margin-right: 3px; color: var(--muted); font-size: 11px; }
+.voiceSuggestions button { min-height: 32px; padding: 6px 10px; color: #536b9b; background: #f2f5fc; border: 1px solid #e5eaf5; border-radius: 99px; font-size: 11px; font-weight: 600; }
+.voiceSuggestions button:hover { color: var(--green); border-color: #b9c8ef; }
+.voicePremiumSection { padding: 19px; background: #f5f7ff; border: 1px solid #dce4fa; border-radius: 13px; }
+.voicePremiumHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.voicePremiumHeading h3 { margin: 5px 0; font-size: 16px; }
+.voicePremiumHeading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.addCloneButton { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 38px; padding: 7px 12px; flex: none; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 8px; font-size: 12px; font-weight: 700; }
+.addCloneButton:hover:not(:disabled) { background: var(--green-dark); }
+.addCloneButton span { font-size: 18px; line-height: 1; }
+.lockedVoiceBadge { padding: 7px 10px; flex: none; color: #647393; background: #e7ebf5; border-radius: 99px; font-size: 11px; font-weight: 700; }
+.cloneSlots { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+.cloneSlots button, .voicePremiumNote button { padding: 4px 6px; color: var(--green); background: transparent; border: 0; font-size: 11px; font-weight: 700; }
+.cloneSlotStatus { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.voiceSection { margin-top: 24px; }
+.voiceSectionHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.voiceSectionHeading h3 { margin: 0; font-size: 15px; }
+.voiceSectionHeading > span { color: var(--muted); font-size: 11px; }
+.voiceGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.popularVoiceGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.voiceCard { display: flex; min-width: 0; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
+.voiceCard:hover { border-color: #b4c4ef; box-shadow: 0 4px 16px #283a600d; }
+.selectedVoiceCard, .bestMatchCard { border-color: #a8bbed; background: #f8faff; }
+.voiceChoice { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 14px 12px 8px; color: var(--ink); background: transparent; border: 0; border-radius: 12px; text-align: left; }
+.voiceAvatar { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 50%; font-size: 18px; font-weight: 700; }
+.voiceDetails { display: grid; min-width: 0; gap: 3px; }
+.voiceName { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.voiceName strong { font-size: 13px; }
+.voiceDetails small { color: var(--muted); font-size: 10px; }
+.voiceTags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.voiceTags > span { padding: 3px 6px; color: #62718c; background: #f0f3f9; border-radius: 5px; font-size: 10px; }
+.selectedVoiceMark, .bestMatchMark { padding: 3px 6px; color: #385ab5; background: #e5ecfc; border-radius: 5px; font-size: 9px; font-weight: 700; }
+.bestMatchMark { color: #397360; background: #e4f3ec; }
+.voiceSample { align-self: flex-start; min-height: 30px; margin: auto 0 8px 65px; padding: 5px 8px; color: #536b9b; background: transparent; border: 0; border-radius: 6px; font-size: 11px; font-weight: 650; }
+.voiceSample:hover { background: #edf2ff; }
+.inheritVoice { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 46px; padding: 10px 14px; color: var(--green); background: #f5f7fc; border: 1px solid var(--line); border-radius: 9px; font-size: 12px; font-weight: 650; text-align: left; }
+.inheritVoice span { color: var(--muted); font-weight: 500; }
+.voicePremiumNote { padding: 12px; color: var(--muted); background: #f9fafc; border-radius: 8px; font-size: 12px; }
+.voicePremiumNote a { color: var(--green); font-weight: 600; }
 .premiumGate { padding: 22px; background: #f5f7fc; border: 1px solid var(--line); border-radius: 12px; }
 .premiumGate strong { font-size: 15px; }
 .premiumGate p { margin: 9px 0 20px; color: var(--muted); font-size: 13px; line-height: 1.6; }
@@ -169,13 +218,15 @@
   .generationActions { width: 100%; align-items: stretch; }
   .generationActions .usageRemaining { align-self: flex-start; }
   .settingsFields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 18px 18px; }
-  .settingsFields label:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .settingsFields .voiceField { grid-column: 1 / -1; grid-row: 2; }
   .settingsTools { padding: 7px 10px; }
   .toolDivider { display: none; }
   .toolButton { padding-inline: 8px; }
   .dialogBackdrop { padding: 12px; }
   .dialog { max-height: calc(100dvh - 24px); padding: 22px; }
   .dialog :is(input, select) { font-size: 16px; }
+  .voiceGrid, .popularVoiceGrid { grid-template-columns: minmax(0, 1fr); }
+  .voicePremiumHeading { align-items: flex-start; flex-wrap: wrap; }
   .workspace { padding: 20px 12px 130px; }
   .editorHeading { align-items: flex-start; padding-inline: 4px; }
   .document { padding: 16px 13px 25px; }

@@ -11,9 +11,10 @@ import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { currentAccessToken, initAuthToken } from "../reader/authToken";
 import { supabaseClient } from "../reader/supabase";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
-import { listClonedVoices, removeClonedVoice, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
+import { removeClonedVoice, replaceClonedVoices, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
 import { MAX_CLONE_SECONDS, MIN_CLONE_SECONDS, VoiceRecorder, prepareCloneAudio } from "../reader/voiceCloneAudio";
 import { exportVoiceover } from "./exportAudio";
+import { builtInVoiceProfiles, POPULAR_VOICE_IDS, searchVoiceProfiles, type VoiceProfile } from "./voiceCatalog";
 import {
   createNarrationProject,
   effectivePronunciations,
@@ -33,6 +34,7 @@ import styles from "./narration.module.css";
 
 const speeds = [0.75, 0.85, 0.9, 1, 1.1, 1.2, 1.35];
 const pauses = [["Short", 250], ["Medium", 600], ["Long", 1000]] as const;
+const MAX_CLONED_VOICES = 3;
 
 type CloneDraft = { blob: Blob; durationSeconds: number; base64: string; url: string };
 
@@ -40,17 +42,6 @@ function randomId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function voiceOptions(language: SpeechLanguage, clonedVoices: ClonedVoiceRecord[], premium = true) {
-  const builtIn = voicesForLanguage(language).map(([value, name]) => <option key={value} value={value}>{name}</option>);
-  if (!clonedVoices.length) return builtIn;
-  return [
-    <optgroup key="cloned" label={premium ? "Your cloned voices" : "Your cloned voices — Premium"} disabled={!premium}>
-      {clonedVoices.map((record) => <option key={record.id} value={voiceRefFor(record)}>{record.name}</option>)}
-    </optgroup>,
-    ...builtIn,
-  ];
 }
 
 function passageLanguage(segment: NarrationSegment, project: NarrationProject): SpeechLanguage {
@@ -84,11 +75,13 @@ function formatTime(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-function StudioDialog({ title, description, onClose, children }: {
+function StudioDialog({ title, description, onClose, children, wide = false, initialFocus }: {
   title: string;
   description: string;
   onClose: () => void;
   children: React.ReactNode;
+  wide?: boolean;
+  initialFocus?: string;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -99,7 +92,7 @@ function StudioDialog({ title, description, onClose, children }: {
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
-    dialog?.querySelector<HTMLElement>("input, button, select, textarea")?.focus();
+    dialog?.querySelector<HTMLElement>(initialFocus ?? "input, button, select, textarea")?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
       if (event.key !== "Tab" || !dialog) return;
@@ -115,13 +108,45 @@ function StudioDialog({ title, description, onClose, children }: {
   }, []);
 
   return <div className={styles.dialogBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
+    <div ref={dialogRef} className={`${styles.dialog} ${wide ? styles.wideDialog : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
       <div className={styles.dialogHeader}>
         <div><h2 id={titleId}>{title}</h2><p id={descriptionId}>{description}</p></div>
         <button type="button" className={styles.dialogClose} aria-label={`Close ${title}`} onClick={onClose}>×</button>
       </div>
       {children}
     </div>
+  </div>;
+}
+
+const avatarPalettes = [
+  { background: "#e8edfc", color: "#455fb0" },
+  { background: "#fce9ea", color: "#ad5762" },
+  { background: "#e2f1ed", color: "#3d8272" },
+  { background: "#f5e9f7", color: "#875d9d" },
+  { background: "#fbeddc", color: "#92683f" },
+];
+
+function VoiceCard({ profile, selected, previewing, bestMatch = false, onSelect, onPreview }: {
+  profile: VoiceProfile;
+  selected: boolean;
+  previewing: boolean;
+  bestMatch?: boolean;
+  onSelect: () => void;
+  onPreview?: () => void;
+}) {
+  const palette = avatarPalettes[[...profile.id].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % avatarPalettes.length];
+  return <div className={`${styles.voiceCard} ${selected ? styles.selectedVoiceCard : ""} ${bestMatch ? styles.bestMatchCard : ""}`}>
+    <button type="button" className={styles.voiceChoice} aria-pressed={selected} onClick={onSelect}>
+      <span className={styles.voiceAvatar} style={palette} aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</span>
+      <span className={styles.voiceDetails}>
+        <span className={styles.voiceName}><strong>{profile.name}</strong>{bestMatch && <span className={styles.bestMatchMark}>Best match</span>}{selected && <span className={styles.selectedVoiceMark}>Selected</span>}</span>
+        <small>{profile.engine}</small>
+        <span className={styles.voiceTags}>{profile.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>
+      </span>
+    </button>
+    {onPreview && <button type="button" className={styles.voiceSample} onClick={onPreview} aria-label={`${previewing ? "Stop" : "Preview"} ${profile.name} voice`}>
+      {previewing ? "■ Stop" : "▶ Listen"}
+    </button>}
   </div>;
 }
 
@@ -206,6 +231,9 @@ export default function NarrationStudio() {
   const [playerTime, setPlayerTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(false);
+  const [previewingVoiceId, setPreviewingVoiceId] = useState<NarratorVoice | null>(null);
+  const [voicePicker, setVoicePicker] = useState<{ passageId: string | null } | null>(null);
+  const [voiceSearch, setVoiceSearch] = useState("");
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrl = useRef<string | null>(null);
@@ -216,6 +244,10 @@ export default function NarrationStudio() {
   const generationEpoch = useRef(0);
   const editors = useRef(new Map<string, HTMLTextAreaElement>());
   const [clonedVoices, setClonedVoices] = useState<ClonedVoiceRecord[]>([]);
+  const [cloneListLoading, setCloneListLoading] = useState(false);
+  const [cloneListError, setCloneListError] = useState("");
+  const cloneListEpoch = useRef(0);
+  const cloneAccount = useRef<string | null>(null);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneMode, setCloneMode] = useState<"upload" | "record">("upload");
   const [cloneName, setCloneName] = useState("");
@@ -236,9 +268,90 @@ export default function NarrationStudio() {
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
   const hasPremium = usage?.plan === "premium";
+  const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
+  const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
+  const builtInProfiles = builtInVoiceProfiles(pickerLanguage);
+  const clonedProfiles: VoiceProfile[] = hasPremium ? clonedVoices.map((record) => ({
+    id: voiceRefFor(record), name: record.name, engine: "Your cloned voice", tags: ["custom", "personal"],
+  })) : [];
+  const popularProfiles = pickerLanguage === "en"
+    ? POPULAR_VOICE_IDS.map((id) => builtInProfiles.find((profile) => profile.id === id)).filter((profile): profile is VoiceProfile => !!profile)
+    : [];
+  const otherProfiles = builtInProfiles.filter((profile) => !popularProfiles.some((popular) => popular.id === profile.id));
+  const matchingClones = searchVoiceProfiles(clonedProfiles, voiceSearch);
+  const searchResults = searchVoiceProfiles(builtInProfiles, voiceSearch);
+  const currentPickerVoice = voiceForLanguage(voicePickerPassage?.voiceId ?? project.defaultVoice, pickerLanguage);
+
+  function voiceName(voice: NarratorVoice, language: SpeechLanguage): string {
+    return clonedVoices.find((record) => voiceRefFor(record) === voice)?.name
+      ?? voicesForLanguage(language).find(([id]) => id === voice)?.[1]
+      ?? "Choose a voice";
+  }
+
+  function openVoicePicker(passageId: string | null = null) {
+    setVoiceSearch("");
+    setVoicePicker({ passageId });
+  }
+
+  function closeVoicePicker() {
+    if (voicePreviewRef.current) stopPlayback();
+    setVoicePicker(null);
+  }
+
+  function openCloneFromPicker() {
+    closeVoicePicker();
+    setCloneOpen(true);
+  }
+
+  async function retryClonedVoices() {
+    const supabase = supabaseClient();
+    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+    if (data.session) await loadClonedVoices(data.session.access_token);
+  }
+
+  function selectVoice(voice: NarratorVoice | null) {
+    if (!voicePicker) return;
+    const passage = voicePicker.passageId ? projectRef.current.segments.find((item) => item.id === voicePicker.passageId) : null;
+    if (passage && passage.voiceId !== voice) changePassageVoice(passage.id, voice);
+    else if (!passage && voice && projectRef.current.defaultVoice !== voice) changeDefaults({ defaultVoice: voice });
+    closeVoicePicker();
+  }
+
+  function renderVoiceCard(profile: VoiceProfile, bestMatch = false) {
+    return <VoiceCard key={profile.id} profile={profile} bestMatch={bestMatch}
+      selected={currentPickerVoice === profile.id}
+      previewing={voicePreviewPlaying && previewingVoiceId === profile.id}
+      onSelect={() => selectVoice(profile.id)}
+      onPreview={isClonedVoice(profile.id) ? undefined : () => voicePreviewPlaying && previewingVoiceId === profile.id
+        ? stopPlayback() : void previewVoice(profile.id, pickerLanguage)} />;
+  }
 
   function refreshUsage() {
     fetchUsage(currentAccessToken()).then(setUsage).catch(() => undefined);
+  }
+
+  async function loadClonedVoices(token: string) {
+    const epoch = ++cloneListEpoch.current;
+    setCloneListLoading(true);
+    setCloneListError("");
+    try {
+      const response = await fetch("/api/voices", { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error("Your voices could not be loaded.");
+      const payload = await response.json() as { voices?: Array<{
+        id: string; user_id: string; name: string; created_at: string; duration_seconds: number; language: string | null;
+      }> };
+      if (!Array.isArray(payload.voices)) throw new Error("Your voices could not be loaded.");
+      if (epoch !== cloneListEpoch.current) return;
+      setClonedVoices(replaceClonedVoices(payload.voices.map((voice) => ({
+        id: voice.id, userId: voice.user_id, name: voice.name,
+        createdAt: voice.created_at, durationSeconds: voice.duration_seconds, language: voice.language,
+      }))));
+    } catch {
+      if (epoch !== cloneListEpoch.current) return;
+      setCloneListError("Could not load your voice slots. Try again.");
+    } finally {
+      if (epoch === cloneListEpoch.current) setCloneListLoading(false);
+    }
   }
 
   useEffect(() => { setPlayerTime((time) => Math.min(time, totalDuration)); }, [totalDuration]);
@@ -262,6 +375,7 @@ export default function NarrationStudio() {
     voicePreviewRef.current = false;
     setPlayingId(null);
     setVoicePreviewPlaying(false);
+    setPreviewingVoiceId(null);
     setIsPlaying(false);
   }
 
@@ -337,21 +451,35 @@ export default function NarrationStudio() {
 
   useEffect(() => {
     initAuthToken();
-    const apply = (token: string | null) => {
-      (token ? linkInstallation(token) : fetchUsage(null)).then(setUsage).catch(() => undefined);
+    const apply = (token: string | null, userId: string | null) => {
+      if (userId !== cloneAccount.current) {
+        cloneAccount.current = userId;
+        cloneListEpoch.current += 1;
+        setClonedVoices([]);
+      }
+      (token ? linkInstallation(token) : fetchUsage(null)).then((summary) => {
+        if (userId !== cloneAccount.current) return;
+        setUsage(summary);
+        if (summary.plan === "premium" && token) void loadClonedVoices(token);
+        else {
+          cloneListEpoch.current += 1;
+          setClonedVoices([]);
+          setCloneListLoading(false);
+          setCloneListError("");
+        }
+      }).catch(() => undefined);
     };
     const supabase = supabaseClient();
     if (!supabase) {
-      apply(null);
+      apply(null, null);
       return;
     }
-    void supabase.auth.getSession().then(({ data }) => apply(data.session?.access_token ?? null));
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => apply(next?.access_token ?? null));
+    void supabase.auth.getSession().then(({ data }) => apply(data.session?.access_token ?? null, data.session?.user.id ?? null));
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => apply(next?.access_token ?? null, next?.user.id ?? null));
     return () => data.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    setClonedVoices(listClonedVoices());
     setRecorderSupported(VoiceRecorder.supported());
   }, []);
 
@@ -632,6 +760,11 @@ export default function NarrationStudio() {
 
   async function createVoiceClone() {
     if (!cloneDraft || !cloneName.trim() || cloneBusy) return;
+    if (cloneListLoading || cloneListError) return;
+    if (clonedVoices.length >= MAX_CLONED_VOICES) {
+      setCloneError("You can have up to 3 cloned voices. Remove one before adding another.");
+      return;
+    }
     setCloneBusy(true);
     setCloneError("");
     try {
@@ -654,7 +787,10 @@ export default function NarrationStudio() {
         voice_id?: unknown; user_id?: unknown; duration_seconds?: unknown; error?: unknown;
       } | null;
       if (!response.ok || typeof payload?.voice_id !== "string") {
-        throw new Error(payload?.error === "premium_required" ? "A Premium subscription is required to clone a voice." : typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
+        if (payload?.error === "voice_limit_reached") void loadClonedVoices(session.access_token);
+        throw new Error(payload?.error === "premium_required" ? "A Premium subscription is required to clone a voice."
+          : payload?.error === "voice_limit_reached" ? "You already have 3 cloned voices. Remove one before adding another."
+            : typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
       }
       const record: ClonedVoiceRecord = {
         id: payload.voice_id,
@@ -665,6 +801,7 @@ export default function NarrationStudio() {
         language: projectRef.current.language,
       };
       setClonedVoices(saveClonedVoice(record));
+      void loadClonedVoices(session.access_token);
       changeDefaults({ defaultVoice: voiceRefFor(record) });
       setGenerationMessage(`Cloned voice "${record.name}" is ready. Generate a passage to hear it.`);
       revokeDraftUrl();
@@ -678,16 +815,37 @@ export default function NarrationStudio() {
     }
   }
 
-  function deleteVoiceClone(record: ClonedVoiceRecord) {
-    setClonedVoices(removeClonedVoice(record.id));
-    if (projectRef.current.defaultVoice === voiceRefFor(record)) changeDefaults({ defaultVoice: "af_heart" });
-    setGenerationMessage(`Removed cloned voice "${record.name}".`);
+  async function deleteVoiceClone(record: ClonedVoiceRecord) {
+    if (cloneBusy) return;
+    setCloneBusy(true);
+    setCloneError("");
+    try {
+      const supabase = supabaseClient();
+      if (!supabase) throw new Error("Sign in to manage your voices.");
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Sign in to manage your voices.");
+      const response = await fetch(`/api/voices/${encodeURIComponent(record.id)}`, {
+        method: "DELETE", headers: { Authorization: `Bearer ${data.session.access_token}` },
+      });
+      if (!response.ok) throw new Error("Could not remove this voice. Try again.");
+      setClonedVoices(removeClonedVoice(record.id));
+      void loadClonedVoices(data.session.access_token);
+      const voice = voiceRefFor(record);
+      if (projectRef.current.defaultVoice === voice) changeDefaults({ defaultVoice: voiceForLanguage("af_heart", projectRef.current.language) });
+      commit((current) => ({ ...current, segments: current.segments.map((segment) => segment.voiceId === voice
+        ? invalidateSegment({ ...segment, voiceId: null }) : segment) }));
+      setGenerationMessage(`Removed cloned voice "${record.name}".`);
+    } catch (error) {
+      setCloneError(error instanceof Error ? error.message : "Could not remove this voice.");
+    } finally {
+      setCloneBusy(false);
+    }
   }
 
-  async function previewVoice() {
+  async function previewVoice(voiceId: NarratorVoice = project.defaultVoice, language: SpeechLanguage = project.language) {
     stopPlayback();
     const epoch = playbackEpoch.current;
-    const voice = voiceForLanguage(project.defaultVoice, project.language);
+    const voice = voiceForLanguage(voiceId, language);
     if (isClonedVoice(voice)) {
       setGenerationMessage("Cloned voices have no instant preview. Generate a passage to hear this voice.");
       return;
@@ -698,12 +856,13 @@ export default function NarrationStudio() {
       URL.revokeObjectURL(audioUrl.current);
       audioUrl.current = null;
     }
-    audio.src = project.language === "en"
+    audio.src = language === "en"
       ? `/voice-previews/${voice}.m4a`
-      : `/voice-previews/${project.language}/${voice}.m4a`;
+      : `/voice-previews/${language}/${voice}.m4a`;
     voicePreviewRef.current = true;
     setVoicePreviewPlaying(true);
-    setGenerationMessage(`Playing voice sample in ${languageName(project.language)}…`);
+    setPreviewingVoiceId(voice);
+    setGenerationMessage(`Playing ${voiceName(voice, language)} sample in ${languageName(language)}…`);
     try {
       await audio.play();
       if (epoch === playbackEpoch.current) setIsPlaying(true);
@@ -901,11 +1060,12 @@ export default function NarrationStudio() {
               {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
             </select>
           </label>
-          <label>Voice
-            <select value={project.defaultVoice} onChange={(event) => changeDefaults({ defaultVoice: event.target.value as NarratorVoice })}>
-              {voiceOptions(project.language, clonedVoices, hasPremium)}
-            </select>
-          </label>
+          <div className={styles.voiceField}>
+            <span>Voice</span>
+            <button type="button" className={styles.voicePickerTrigger} aria-label={`Choose project voice, currently ${voiceName(project.defaultVoice, project.language)}`} onClick={() => openVoicePicker()}>
+              <span>{voiceName(project.defaultVoice, project.language)}</span><span aria-hidden="true">⌄</span>
+            </button>
+          </div>
           <label>Speaking speed
             <select value={project.globalSpeed} onChange={(event) => changeDefaults({ globalSpeed: Number(event.target.value) })}>
               {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>) }
@@ -920,12 +1080,60 @@ export default function NarrationStudio() {
         </div>
       </section>
 
+      {voicePicker && <StudioDialog title={voicePickerPassage ? "Choose a passage voice" : "Choose a project voice"} description={`Explore voices for ${languageName(pickerLanguage)}. Search by name or how a voice sounds, and listen before choosing.`} onClose={closeVoicePicker} wide initialFocus="input[type='search']">
+        <label className={styles.voiceSearch}>Search voices
+          <input type="search" value={voiceSearch} onChange={(event) => setVoiceSearch(event.target.value)} placeholder="Try calm, ASMR, quiet, storytelling…" />
+        </label>
+        <div className={styles.voiceSuggestions} aria-label="Suggested sounds">
+          <span>Try a sound</span>
+          {["Calm", "Warm", "Energetic", "Storytelling", "ASMR"].map((tag) => <button type="button" key={tag} onClick={() => setVoiceSearch(tag)}>{tag}</button>)}
+        </div>
+        {voicePickerPassage && <button type="button" className={styles.inheritVoice} onClick={() => selectVoice(null)}>
+          Use project voice <span>{voiceName(voiceForLanguage(project.defaultVoice, pickerLanguage), pickerLanguage)}{!voicePickerPassage.voiceId ? " · Current" : ""}</span>
+        </button>}
+        <section className={styles.voicePremiumSection} aria-label="Premium cloned voices">
+          <div className={styles.voicePremiumHeading}>
+            <div><span className={styles.kicker}>Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
+            {hasPremium ? <button type="button" className={styles.addCloneButton} disabled={cloneListLoading || !!cloneListError || clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
+              : <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
+          </div>
+          {!hasPremium ? <p className={styles.voicePremiumNote}>Cloned voices are available with Premium. <Link href="/pricing">Explore Premium</Link></p>
+            : cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
+              : cloneListError ? <p className={styles.voicePremiumNote} role="alert">{cloneListError} <button type="button" onClick={() => void retryClonedVoices()}>Retry</button></p>
+                : <>
+                  {matchingClones.length > 0 ? <div className={styles.voiceGrid}>{matchingClones.map((profile) => renderVoiceCard(profile))}</div>
+                    : <p className={styles.voicePremiumNote}>{voiceSearch.trim() ? "No cloned voices match this search." : "No cloned voices yet. Add one to make your narration your own."}</p>}
+                  <div className={styles.cloneSlots}><span>{clonedVoices.length} of {MAX_CLONED_VOICES} voice slots used</span>
+                    {clonedVoices.length >= MAX_CLONED_VOICES && <button type="button" onClick={openCloneFromPicker}>Manage voices</button>}</div>
+                </>}
+        </section>
+        {voiceSearch.trim() ? (searchResults.length > 0 || matchingClones.length === 0) && <section className={styles.voiceSection} aria-label="Voice search results">
+          <div className={styles.voiceSectionHeading}><h3>Best matches</h3><span role="status">{searchResults.length} {searchResults.length === 1 ? "voice" : "voices"} found</span></div>
+          {searchResults.length ? <div className={styles.voiceGrid}>{searchResults.map((profile, index) => renderVoiceCard(profile, index === 0))}</div>
+            : <p className={styles.emptyRules}>No voices match that search. Try a sound like warm or gentle.</p>}
+        </section> : <>
+          {popularProfiles.length > 0 && <section className={styles.voiceSection} aria-label="Most popular voices">
+            <div className={styles.voiceSectionHeading}><h3>Most popular</h3><span>Listener favorites</span></div>
+            <div className={`${styles.voiceGrid} ${styles.popularVoiceGrid}`}>{popularProfiles.map((profile) => renderVoiceCard(profile))}</div>
+          </section>}
+          <section className={styles.voiceSection} aria-label="All available voices">
+            <div className={styles.voiceSectionHeading}><h3>Explore all voices</h3><span>{otherProfiles.length} more to discover</span></div>
+            <div className={styles.voiceGrid}>{otherProfiles.map((profile) => renderVoiceCard(profile))}</div>
+          </section>
+        </>}
+      </StudioDialog>}
+
       {cloneOpen && <StudioDialog title="Clone a voice" description={hasPremium ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Premium to create and use a cloned voice."} onClose={closeClone}>
         {!hasPremium ? <div className={styles.premiumGate}>
           <strong>Voice cloning is included with Premium</strong>
           <p>Get 20 hours of narration each month, including 1 hour with your own cloned voice.</p>
           <Link className={styles.importButton} href="/pricing">See Premium plans</Link>
         </div> : <>
+        <p className={styles.cloneSlotStatus}>{clonedVoices.length} of {MAX_CLONED_VOICES} cloned voice slots used</p>
+        {cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
+          : cloneListError ? <p className={styles.voicePremiumNote} role="alert">{cloneListError} <button type="button" onClick={() => void retryClonedVoices()}>Retry</button></p>
+            : clonedVoices.length >= MAX_CLONED_VOICES ? <p className={styles.voicePremiumNote}>All 3 slots are full. Remove a voice below before adding a new one.</p>
+              : <>
         <label className={styles.cloneName}>Voice name
           <input value={cloneName} onChange={(event) => setCloneName(event.target.value)} placeholder="e.g. My narrator" maxLength={80} />
         </label>
@@ -951,15 +1159,16 @@ export default function NarrationStudio() {
           <audio controls src={cloneDraft.url} />
           <span>{cloneDraft.durationSeconds.toFixed(1)}s ready</span>
         </div>}
-        {cloneError && <p className={styles.cloneError} role="alert">{cloneError}</p>}
         <div className={styles.cloneActions}>
           <button type="button" className={styles.secondaryButton} disabled={cloneBusy} onClick={closeClone}>Cancel</button>
           <button type="button" className={styles.importButton} disabled={!cloneDraft || !cloneName.trim() || cloneBusy} onClick={() => void createVoiceClone()}>{cloneBusy ? "Cloning…" : "Create voice clone"}</button>
         </div>
+        </>}
+        {cloneError && <p className={styles.cloneError} role="alert">{cloneError}</p>}
         {clonedVoices.length > 0 && <ul className={styles.cloneVoiceList} aria-label="Your cloned voices">
           {clonedVoices.map((record) => <li key={record.id}>
             <span><strong>{record.name}</strong> · {record.durationSeconds.toFixed(1)}s</span>
-            <button type="button" aria-label={`Remove cloned voice ${record.name}`} onClick={() => deleteVoiceClone(record)}>×</button>
+            <button type="button" disabled={cloneBusy} aria-label={`Remove cloned voice ${record.name}`} onClick={() => void deleteVoiceClone(record)}>×</button>
           </li>)}
         </ul>}
         </>}
@@ -1042,12 +1251,12 @@ export default function NarrationStudio() {
                         {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
                       </select>
                     </label>
-                    <label>Voice override
-                      <select value={segment.voiceId ?? ""} onChange={(event) => changePassageVoice(segment.id, event.target.value ? event.target.value as NarratorVoice : null)}>
-                        <option value="">Project voice</option>
-                        {voiceOptions(passageLanguage(segment, project), clonedVoices, hasPremium)}
-                      </select>
-                    </label>
+                    <div className={styles.voiceField}>
+                      <span>Voice override</span>
+                      <button type="button" className={styles.voicePickerTrigger} aria-label={`Choose passage voice, currently ${segment.voiceId ? voiceName(segment.voiceId, passageLanguage(segment, project)) : "project voice"}`} onClick={() => openVoicePicker(segment.id)}>
+                        <span>{segment.voiceId ? voiceName(segment.voiceId, passageLanguage(segment, project)) : `Project voice (${voiceName(voiceForLanguage(project.defaultVoice, passageLanguage(segment, project)), passageLanguage(segment, project))})`}</span><span aria-hidden="true">⌄</span>
+                      </button>
+                    </div>
                     <label>Speed override
                       <select value={segment.speedOverride ?? ""} onChange={(event) => configureSegment(segment.id, { speedOverride: event.target.value ? Number(event.target.value) : null })}>
                         <option value="">Project speed ({project.globalSpeed}x)</option>

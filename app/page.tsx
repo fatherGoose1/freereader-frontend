@@ -74,7 +74,7 @@ export default function Home() {
               Or turn your video script into a voiceover you can edit, preview, and export.
             </p>
             <div className="hero-actions">
-              <Link className="button" href="/reader/audiobooks">Open audiobook reader <ArrowIcon /></Link>
+              <Link className="button audiobook-cta" href="/reader/audiobooks">Open audiobook reader <ArrowIcon /><span className="always-free-badge">Always free</span></Link>
               <Link className="secondary-link" href="/narration">
                 <span className="platform-icons"><YouTubeIcon /><TikTokIcon /><InstagramIcon gradientId="ig-hero" /></span> Create a voiceover <ArrowIcon />
               </Link>

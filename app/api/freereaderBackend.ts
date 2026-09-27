@@ -35,3 +35,19 @@ export async function callBackend(
     signal: controller.signal,
   }).finally(() => clearTimeout(timer));
 }
+
+export async function manageBackendVoice(
+  config: FreeReaderBackendConfig,
+  path: string,
+  userToken: string,
+  method: "GET" | "DELETE",
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 300_000);
+  return fetch(`${config.url}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${config.token}`, "X-FreeReader-User-Token": userToken },
+    cache: "no-store",
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
+}

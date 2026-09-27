@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { POST as cloneSpeech } from "../api/clone-tts/route";
 import { POST as createClone } from "../api/voices/clone/route";
+import { GET as listClones } from "../api/voices/route";
+import { DELETE as deleteClone } from "../api/voices/[id]/route";
 
 const ENV_KEYS = ["KOKO_BACKEND_URL", "FREEREADER_TTS_API_TOKEN", "PARRYT_API_TOKEN"] as const;
 type EnvValues = Partial<Record<(typeof ENV_KEYS)[number], string>>;
@@ -99,4 +101,22 @@ test("GPU endpoints reject anonymous requests before contacting the backend", as
     assert.equal(response.status, 403);
   }
   assert.equal(fetch.mock.callCount(), 0);
+});
+
+test("voice management uses the signed-in account for listing and deleting", async (t) => {
+  setEnv(t, { KOKO_BACKEND_URL: "https://backend.example", FREEREADER_TTS_API_TOKEN: "tts-key" });
+  const calls: Array<{ url: string; method: string; token: string | undefined }> = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), method: init?.method ?? "GET", token: (init?.headers as Record<string, string>)["X-FreeReader-User-Token"] });
+    return Response.json(calls.length === 1 ? { voices: [{ id: "mine" }], limit: 3 } : { deleted: true });
+  });
+  const request = new Request("http://localhost/api/voices", { headers: { Authorization: "Bearer user-token" } });
+  const listed = await listClones(request);
+  assert.equal((await listed.json() as { limit: number }).limit, 3);
+  const deleted = await deleteClone(new Request("http://localhost/api/voices/mine", { method: "DELETE", headers: { Authorization: "Bearer user-token" } }), { params: Promise.resolve({ id: "mine" }) });
+  assert.equal((await deleted.json() as { deleted: boolean }).deleted, true);
+  assert.deepEqual(calls, [
+    { url: "https://backend.example/api/v1/freereader/voices", method: "GET", token: "user-token" },
+    { url: "https://backend.example/api/v1/freereader/voices/mine", method: "DELETE", token: "user-token" },
+  ]);
 });

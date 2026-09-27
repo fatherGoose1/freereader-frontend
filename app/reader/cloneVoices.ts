@@ -12,7 +12,6 @@ export interface ClonedVoiceRecord {
 }
 
 const STORAGE_KEY = "freereaderClonedVoices";
-const MAX_CLONED_VOICES = 20;
 
 function storage(): Storage | null {
   try {
@@ -44,13 +43,16 @@ export function listClonedVoices(): ClonedVoiceRecord[] {
 }
 
 function persist(records: ClonedVoiceRecord[]): ClonedVoiceRecord[] {
-  const trimmed = records.slice(0, MAX_CLONED_VOICES);
   try {
-    storage()?.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    storage()?.setItem(STORAGE_KEY, JSON.stringify(records));
   } catch {
     // Private browsing can reject writes; keep the in-memory result anyway.
   }
-  return trimmed;
+  return records;
+}
+
+export function replaceClonedVoices(records: ClonedVoiceRecord[]): ClonedVoiceRecord[] {
+  return persist(records);
 }
 
 export function saveClonedVoice(record: ClonedVoiceRecord): ClonedVoiceRecord[] {

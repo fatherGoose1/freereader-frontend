@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { clonedVoiceId, clonedVoiceRef, isClonedVoice } from "./voices";
 import { voiceForLanguage } from "./speech";
-import { findClonedVoice, listClonedVoices, removeClonedVoice, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "./cloneVoices";
+import { findClonedVoice, listClonedVoices, removeClonedVoice, replaceClonedVoices, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "./cloneVoices";
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -43,15 +43,17 @@ test("cloned voice references round-trip and are language-agnostic", () => {
   assert.equal(voiceForLanguage(ref, "fr"), ref);
 });
 
-test("cloned voices persist newest-first and cap the list", () => {
+test("cloned voices persist newest-first, including legacy voices above the new account limit", () => {
   const storage = useMemoryWindow();
   storage.clear();
   for (let index = 0; index < 25; index += 1) saveClonedVoice(record(`v${index}`));
   const saved = listClonedVoices();
-  assert.equal(saved.length, 20);
+  assert.equal(saved.length, 25);
   assert.equal(saved[0].id, "v24");
   assert.equal(findClonedVoice("v24")?.name, "Voice v24");
-  assert.equal(findClonedVoice("v0"), undefined);
+  assert.equal(findClonedVoice("v0")?.name, "Voice v0");
+  assert.deepEqual(replaceClonedVoices([record("remote")]).map(({ id }) => id), ["remote"]);
+  assert.equal(findClonedVoice("v24"), undefined);
 });
 
 test("saving the same id replaces the existing record", () => {

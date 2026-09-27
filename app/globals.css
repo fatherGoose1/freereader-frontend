@@ -186,6 +186,8 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
   box-shadow: 0 0 0 5px #e9efff;
 }
 .hero-actions, .final-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.audiobook-cta { position: relative; }
+.always-free-badge { position: absolute; top: -16px; right: -12px; padding: 5px 10px; color: #493712; background: #ffe29a; border: 1px solid #f3c765; border-radius: 6px; box-shadow: 0 3px 10px #49371226; font-size: 10px; font-weight: 850; letter-spacing: .04em; line-height: 1.2; text-transform: uppercase; white-space: nowrap; transform: rotate(9deg); }
 .secondary-link { display: inline-flex; align-items: center; gap: 9px; min-height: 54px; padding: 14px 19px; color: var(--forest); background: #fff; border: 1px solid var(--line); border-radius: 9px; font-size: 15px; font-weight: 700; text-decoration: none; }
 .secondary-link:hover { background: #f1f4fc; border-color: #b9c8ef; }
 .secondary-link svg { width: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
@@ -530,6 +532,7 @@ footer .brand { color: var(--ink); }
 @media (max-width: 460px) {
   .hero-actions { flex-direction: column; gap: 17px; }
   .hero-actions .button { width: 100%; }
+  .always-free-badge { right: -4px; }
   .hero-assurances { gap: 8px 14px; }
   .hero-demo { padding: 14px; }
   .hero-demo textarea { min-height: 145px; padding: 14px; font-size: 14px; }
