@@ -1,3 +1,5 @@
+import { recordTelemetry } from "./telemetry";
+
 const API_BASE = (process.env.NEXT_PUBLIC_KOKO_BACKEND_URL
   ?? "https://koko-backend-production-c887.up.railway.app").replace(/\/$/, "");
 
@@ -46,6 +48,7 @@ async function billingUrl(path: "checkout" | "portal", token: string, plan?: Pai
   if (typeof data.url !== "string") throw new Error("checkout_unavailable");
   const url = new URL(data.url);
   if (url.protocol !== "https:" || !url.hostname.endsWith(".stripe.com")) throw new Error("checkout_unavailable");
+  if (path === "checkout") recordTelemetry("checkout_viewed", { plan: plan ?? "pro" }, "youtube_narration");
   return url.href;
 }
 
