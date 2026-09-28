@@ -182,12 +182,17 @@
 .popularVoiceGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .voiceCard { display: flex; min-width: 0; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
 .voiceCard:hover { border-color: #b4c4ef; box-shadow: 0 4px 16px #283a600d; }
+.premiumVoiceCard { border-color: #e8d4a1; }
+.premiumVoiceCard:hover { border-color: #d6b764; }
+.premiumVoiceCard .voiceChoice:disabled { opacity: .8; cursor: not-allowed; }
 .selectedVoiceCard, .bestMatchCard { border-color: #a8bbed; background: #f8faff; }
 .voiceChoice { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 14px 12px 8px; color: var(--ink); background: transparent; border: 0; border-radius: 12px; text-align: left; }
 .voiceAvatar { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 50%; font-size: 18px; font-weight: 700; }
 .voiceDetails { display: grid; min-width: 0; gap: 3px; }
 .voiceName { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .voiceName strong { font-size: 13px; }
+.premiumVoiceBadge { padding: 3px 7px; color: #75500c; background: #fff0c8; border-radius: 5px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.premiumVoiceBadge span { color: #be8814; }
 .voiceTags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .voiceTags > span { padding: 3px 6px; color: #62718c; background: #f0f3f9; border-radius: 5px; font-size: 10px; }
 .selectedVoiceMark, .bestMatchMark { padding: 3px 6px; color: #385ab5; background: #e5ecfc; border-radius: 5px; font-size: 9px; font-weight: 700; }
@@ -197,6 +202,7 @@
 .inheritVoice { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 46px; padding: 10px 14px; color: var(--green); background: #f5f7fc; border: 1px solid var(--line); border-radius: 9px; font-size: 12px; font-weight: 650; text-align: left; }
 .inheritVoice span { color: var(--muted); font-weight: 500; }
 .voicePremiumNote { padding: 12px; color: var(--muted); background: #f9fafc; border-radius: 8px; font-size: 12px; }
+.voiceGrid + .voicePremiumNote { margin: 12px 0 0; }
 .voicePremiumNote a { color: var(--green); font-weight: 600; }
 .premiumGate { padding: 22px; background: #f5f7fc; border: 1px solid var(--line); border-radius: 12px; }
 .premiumGate strong { font-size: 15px; }

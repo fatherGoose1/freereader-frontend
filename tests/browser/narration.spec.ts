@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-test("Qwen delivery instructions are gated to Premium voices", async ({ page }) => {
+test("Qwen voices are visible with Premium badges while delivery instructions stay gated", async ({ page }) => {
   await page.goto("/narration");
   await page.getByRole("button", { name: /Choose project voice/ }).click();
   const premium = page.getByRole("region", { name: "Premium Qwen voices" });
-  await expect(premium).toContainText("Locked");
-  await expect(premium.getByRole("button", { name: /Ryan/ })).toHaveCount(0);
+  await expect(premium.getByRole("button", { name: /Ryan.*Premium/ })).toBeVisible();
+  await expect(premium.getByRole("button", { name: /Ryan.*Premium/ })).toBeDisabled();
+  await expect(premium.getByRole("button", { name: /Premium/ })).toHaveCount(9);
   await page.getByRole("dialog").getByRole("button", { name: "Close Choose a project voice" }).click();
   await page.getByLabel("YouTube script").fill("This is a new passage for narration.");
   await page.getByRole("button", { name: "Add script" }).click();

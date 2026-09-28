@@ -141,20 +141,22 @@ const avatarPalettes = [
   { background: "#fbeddc", color: "#92683f" },
 ];
 
-function VoiceCard({ profile, selected, previewing, bestMatch = false, onSelect, onPreview }: {
+function VoiceCard({ profile, selected, previewing, bestMatch = false, premium = false, locked = false, onSelect, onPreview }: {
   profile: VoiceProfile;
   selected: boolean;
   previewing: boolean;
   bestMatch?: boolean;
+  premium?: boolean;
+  locked?: boolean;
   onSelect: () => void;
   onPreview?: () => void;
 }) {
   const palette = avatarPalettes[[...profile.id].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % avatarPalettes.length];
-  return <div className={`${styles.voiceCard} ${selected ? styles.selectedVoiceCard : ""} ${bestMatch ? styles.bestMatchCard : ""}`}>
-    <button type="button" className={styles.voiceChoice} aria-pressed={selected} onClick={onSelect}>
+  return <div className={`${styles.voiceCard} ${selected ? styles.selectedVoiceCard : ""} ${bestMatch ? styles.bestMatchCard : ""} ${premium ? styles.premiumVoiceCard : ""}`}>
+    <button type="button" className={styles.voiceChoice} aria-pressed={selected} disabled={locked} onClick={onSelect}>
       <span className={styles.voiceAvatar} style={palette} aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</span>
       <span className={styles.voiceDetails}>
-        <span className={styles.voiceName}><strong>{profile.name}</strong>{bestMatch && <span className={styles.bestMatchMark}>Best match</span>}{selected && <span className={styles.selectedVoiceMark}>Selected</span>}</span>
+        <span className={styles.voiceName}><strong>{profile.name}</strong>{premium && <span className={styles.premiumVoiceBadge}><span aria-hidden="true">★</span> Premium</span>}{bestMatch && <span className={styles.bestMatchMark}>Best match</span>}{selected && <span className={styles.selectedVoiceMark}>Selected</span>}</span>
         <span className={styles.voiceTags}>{profile.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>
       </span>
     </button>
@@ -289,6 +291,7 @@ export default function NarrationStudio() {
   const profileName = session?.user.email?.split("@")[0] ?? "Sign in";
   const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
+  const qwenAvailable = QWEN_LANGUAGES.has(pickerLanguage);
   const builtInProfiles = builtInVoiceProfiles(pickerLanguage);
   const clonedProfiles: VoiceProfile[] = hasPremium ? clonedVoices.map((record) => ({
     id: voiceRefFor(record), name: record.name, tags: ["custom", "personal"],
@@ -1230,6 +1233,16 @@ export default function NarrationStudio() {
         {voicePickerPassage && <button type="button" className={styles.inheritVoice} onClick={() => selectVoice(null)}>
           Use project voice <span>{voiceName(voiceForLanguage(project.defaultVoice, pickerLanguage), pickerLanguage)}{!voicePickerPassage.voiceId ? " · Current" : ""}</span>
         </button>}
+        <section className={styles.voicePremiumSection} aria-label="Premium Qwen voices">
+          <div className={styles.voicePremiumHeading}>
+            <div><span className={styles.kicker}>★ Premium · Qwen3-TTS</span><h3>Expressive voices</h3><p>Choose a Qwen voice to direct the feeling of each passage.</p></div>
+          </div>
+          <div className={styles.voiceGrid}>{QWEN_VOICES.map(([id, name]) =>
+            <VoiceCard key={id} profile={{ id, name, tags: ["Qwen3-TTS", "expressive"] }} selected={currentPickerVoice === id}
+              previewing={false} premium locked={!hasPremium || !qwenAvailable} onSelect={() => selectVoice(id)} />)}</div>
+          {!qwenAvailable && <p className={styles.voicePremiumNote}>Qwen3-TTS voices are not available for {languageName(pickerLanguage)}. Choose a supported language to use them.</p>}
+          {!hasPremium && <p className={styles.voicePremiumNote}>Unlock these voices and delivery instructions with Premium. <Link href="/pricing">Explore Premium</Link></p>}
+        </section>
         <section className={styles.voicePremiumSection} aria-label="Premium cloned voices">
           <div className={styles.voicePremiumHeading}>
             <div><span className={styles.kicker}>Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
@@ -1246,16 +1259,6 @@ export default function NarrationStudio() {
                     {clonedVoices.length >= MAX_CLONED_VOICES && <button type="button" onClick={openCloneFromPicker}>Manage voices</button>}</div>
                 </>}
         </section>
-        {QWEN_LANGUAGES.has(pickerLanguage) && <section className={styles.voicePremiumSection} aria-label="Premium Qwen voices">
-          <div className={styles.voicePremiumHeading}>
-            <div><span className={styles.kicker}>Premium · Qwen3-TTS</span><h3>Expressive voices</h3><p>Choose a Qwen voice to direct the feeling of each passage.</p></div>
-            {!hasPremium && <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
-          </div>
-          {hasPremium ? <div className={styles.voiceGrid}>{QWEN_VOICES.map(([id, name]) =>
-            <VoiceCard key={id} profile={{ id, name, tags: ["premium", "expressive"] }} selected={currentPickerVoice === id}
-              previewing={false} onSelect={() => selectVoice(id)} />)}</div>
-            : <p className={styles.voicePremiumNote}>Expressive Qwen voices and delivery instructions are available with Premium. <Link href="/pricing">Explore Premium</Link></p>}
-        </section>}
         {voiceSearch.trim() ? (searchResults.length > 0 || matchingClones.length === 0) && <section className={styles.voiceSection} aria-label="Voice search results">
           <div className={styles.voiceSectionHeading}><h3>Best matches</h3><span role="status">{searchResults.length} {searchResults.length === 1 ? "voice" : "voices"} found</span></div>
           {searchResults.length ? <div className={styles.voiceGrid}>{searchResults.map((profile, index) => renderVoiceCard(profile, index === 0))}</div>
