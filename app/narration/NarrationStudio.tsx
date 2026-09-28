@@ -286,14 +286,14 @@ export default function NarrationStudio() {
   const playable = project.segments.filter((segment) => segment.status === "ready" && segment.audio);
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
-  const hasPremium = usage?.plan === "premium";
+  const hasVoicePlan = usage?.plan === "pro" || usage?.plan === "premium";
   const selectedQwenVoice = selected && isQwenVoice(voiceForLanguage(selected.voiceId ?? project.defaultVoice, passageLanguage(selected, project)));
   const profileName = session?.user.email?.split("@")[0] ?? "Sign in";
   const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
   const qwenAvailable = QWEN_LANGUAGES.has(pickerLanguage);
   const builtInProfiles = builtInVoiceProfiles(pickerLanguage);
-  const clonedProfiles: VoiceProfile[] = hasPremium ? clonedVoices.map((record) => ({
+  const clonedProfiles: VoiceProfile[] = hasVoicePlan ? clonedVoices.map((record) => ({
     id: voiceRefFor(record), name: record.name, tags: ["custom", "personal"],
   })) : [];
   const popularProfiles = pickerLanguage === "en"
@@ -512,7 +512,7 @@ export default function NarrationStudio() {
       (token ? linkInstallation(token) : fetchUsage(null)).then((summary) => {
         if (userId !== cloneAccount.current) return;
         setUsage(summary);
-        if (summary.plan === "premium" && token) void loadClonedVoices(token);
+        if ((summary.plan === "pro" || summary.plan === "premium") && token) void loadClonedVoices(token);
         else {
           cloneListEpoch.current += 1;
           setClonedVoices([]);
@@ -724,7 +724,7 @@ export default function NarrationStudio() {
       const result = await synthesize(
         spokenText(segment, currentProject.pronunciations), voice, 12,
         (message) => setGenerationMessage(message), false, speed, language, undefined, "youtube_narration",
-        isQwenVoice(voice) && hasPremium ? segment.instruct?.trim() : undefined,
+        isQwenVoice(voice) && hasVoicePlan ? segment.instruct?.trim() : undefined,
       );
       const latestProject = projectRef.current;
       const latest = latestProject.segments.find((item) => item.id === id);
@@ -877,7 +877,7 @@ export default function NarrationStudio() {
       const supabase = supabaseClient();
       const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
       const session = data.session;
-      if (!session) throw new Error("Sign in with a Premium account to clone a voice.");
+      if (!session) throw new Error("Sign in with a Pro or Premium account to clone a voice.");
       const response = await fetch("/api/voices/clone", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -894,7 +894,7 @@ export default function NarrationStudio() {
       } | null;
       if (!response.ok || typeof payload?.voice_id !== "string") {
         if (payload?.error === "voice_limit_reached") void loadClonedVoices(session.access_token);
-        throw new Error(payload?.error === "premium_required" ? "A Premium subscription is required to clone a voice."
+        throw new Error(payload?.error === "premium_required" ? "A Pro or Premium subscription is required to clone a voice."
           : payload?.error === "voice_limit_reached" ? "You already have 3 cloned voices. Remove one before adding another."
             : typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
       }
@@ -1201,7 +1201,7 @@ export default function NarrationStudio() {
           <button type="button" className={styles.toolButton} onClick={() => void previewVoice()}>▶ <span>Preview voice</span></button>
           <span className={styles.toolDivider} aria-hidden="true" />
           <button type="button" className={styles.toolButton} onClick={() => setGlobalPronunciationsOpen(true)}>Pronunciations{project.pronunciations.length > 0 && <span className={styles.toolCount}>{project.pronunciations.length}</span>}</button>
-          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice{!hasPremium && <span className={styles.toolCount}>Premium</span>}</button>
+          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice{!hasVoicePlan && <span className={styles.toolCount}>Pro</span>}</button>
         </div>
       </section>
 
@@ -1209,9 +1209,9 @@ export default function NarrationStudio() {
         <div className={styles.profilePlan}><span>{usage?.plan === "premium" ? "Premium" : usage?.plan === "pro" ? "Pro" : "Free"} plan</span><small>{usage?.period ?? "Monthly allowance"}</small></div>
         {usage ? <div className={styles.usageChart}>
           <UsageMeter name="Video narration" used={usage.used_seconds} budget={usage.budget_seconds} remaining={usage.remaining_seconds} />
-          {usage.plan === "premium" && <UsageMeter name="Cloned-voice narration" used={usage.premium_voice_used_seconds} budget={usage.premium_voice_budget_seconds} remaining={usage.premium_voice_remaining_seconds} />}
+          {usage.premium_voice_budget_seconds > 0 && <UsageMeter name="Premium voice generation" used={usage.premium_voice_used_seconds} budget={usage.premium_voice_budget_seconds} remaining={usage.premium_voice_remaining_seconds} />}
         </div> : <p className={styles.profileNote} role="status">Loading your narration allowance…</p>}
-        <p className={styles.profileNote}>Allowance resets each calendar month. Cloned-voice time also counts toward video narration time.</p>
+        <p className={styles.profileNote}>Allowance resets each calendar month. Cloned and expressive Qwen voices share the premium voice allowance and also count toward video narration time.</p>
         {profileError && <p className={styles.cloneError} role="alert">{profileError}</p>}
         <div className={styles.profileActions}>
           <Link href="/pricing" className={styles.secondaryButton}>View plans</Link>
@@ -1239,17 +1239,17 @@ export default function NarrationStudio() {
           </div>
           <div className={styles.voiceGrid}>{QWEN_VOICES.map(([id, name]) =>
             <VoiceCard key={id} profile={{ id, name, tags: ["Qwen3-TTS", "expressive"] }} selected={currentPickerVoice === id}
-              previewing={false} premium locked={!hasPremium || !qwenAvailable} onSelect={() => selectVoice(id)} />)}</div>
+              previewing={false} premium locked={!hasVoicePlan || !qwenAvailable} onSelect={() => selectVoice(id)} />)}</div>
           {!qwenAvailable && <p className={styles.voicePremiumNote}>Qwen3-TTS voices are not available for {languageName(pickerLanguage)}. Choose a supported language to use them.</p>}
-          {!hasPremium && <p className={styles.voicePremiumNote}>Unlock these voices and delivery instructions with Premium. <Link href="/pricing">Explore Premium</Link></p>}
+          {!hasVoicePlan && <p className={styles.voicePremiumNote}>Unlock these voices and delivery instructions with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>}
         </section>
         <section className={styles.voicePremiumSection} aria-label="Premium cloned voices">
           <div className={styles.voicePremiumHeading}>
-            <div><span className={styles.kicker}>Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
-            {hasPremium ? <button type="button" className={styles.addCloneButton} disabled={clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
+            <div><span className={styles.kicker}>Pro & Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
+            {hasVoicePlan ? <button type="button" className={styles.addCloneButton} disabled={clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
               : <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
           </div>
-          {!hasPremium ? <p className={styles.voicePremiumNote}>Cloned voices are available with Premium. <Link href="/pricing">Explore Premium</Link></p>
+          {!hasVoicePlan ? <p className={styles.voicePremiumNote}>Cloned voices are available with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>
             : cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
               : cloneListError ? <p className={styles.voicePremiumNote} role="alert">{cloneListError} <button type="button" onClick={() => void retryClonedVoices()}>Retry</button></p>
                 : <>
@@ -1275,11 +1275,11 @@ export default function NarrationStudio() {
         </>}
       </StudioDialog>}
 
-      {cloneOpen && <StudioDialog title="Clone a voice" description={hasPremium ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Premium to create and use a cloned voice."} onClose={closeClone}>
-        {!hasPremium ? <div className={styles.premiumGate}>
-          <strong>Voice cloning is included with Premium</strong>
-          <p>Get 20 hours of narration each month, including 1 hour with your own cloned voice.</p>
-          <Link className={styles.importButton} href="/pricing">See Premium plans</Link>
+      {cloneOpen && <StudioDialog title="Clone a voice" description={hasVoicePlan ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Pro or Premium to create and use a cloned voice."} onClose={closeClone}>
+        {!hasVoicePlan ? <div className={styles.premiumGate}>
+          <strong>Voice cloning is included with Pro and Premium</strong>
+          <p>Pro includes 1 hour of premium voice generation each month; Premium includes 5 hours.</p>
+          <Link className={styles.importButton} href="/pricing">See plans</Link>
         </div> : <>
         <p className={styles.cloneSlotStatus}>{clonedVoices.length} of {MAX_CLONED_VOICES} cloned voice slots used</p>
         {cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
@@ -1415,7 +1415,7 @@ export default function NarrationStudio() {
                         {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
                       </select>
                     </label>
-                    {hasPremium && selectedQwenVoice && <label className={styles.deliveryInstruction}>Delivery instruction · Qwen Premium
+                    {hasVoicePlan && selectedQwenVoice && <label className={styles.deliveryInstruction}>Delivery instruction · Qwen premium voice
                       <input type="text" maxLength={200} value={segment.instruct ?? ""} placeholder="e.g. Speak calmly, with a hint of sadness"
                         onChange={(event) => configureSegment(segment.id, { instruct: event.target.value })} />
                       <small>Set the feeling for this passage. Changing it requires new audio.</small>

@@ -16,8 +16,8 @@ function unavailableMessage(response: Response, payload: { error?: unknown } | n
     return "You have used your monthly narration allowance. Check your plan and usage for more hours.";
   }
   if (payload?.error === "sign_in_required") return "Sign in to generate narration. Audiobook listening stays free.";
-  if (payload?.error === "premium_required") return "A Premium subscription is required to use a cloned voice.";
-  if (payload?.error === "premium_voice_limit_reached") return "You have used your 1 hour of Premium voice this month.";
+  if (payload?.error === "premium_required") return "A Pro or Premium subscription is required to use premium voices.";
+  if (payload?.error === "premium_voice_limit_reached") return "You have used your monthly premium voice allowance. Try a standard voice or upgrade your plan.";
   if (payload?.error === "voice_not_owned") return "This cloned voice belongs to another account.";
   if (typeof payload?.error === "string" && payload.error) return payload.error;
   if (response.status === 413) return "This passage is too long to narrate.";

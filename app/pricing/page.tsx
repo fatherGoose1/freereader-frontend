@@ -8,7 +8,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "YouTube narration pricing: start with 1 free hour of voiceovers each month, get 10 hours with Pro, or 20 hours and 1 hour of cloned-voice narration with Premium. Audiobook reading is always free.",
+    "YouTube narration pricing: Free includes 1 hour, Pro includes 10 hours with 1 hour of premium voices and voice cloning, and Premium includes 20 hours with 5 hours of premium voices. Audiobook reading is always free.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -54,6 +54,9 @@ const tiers: Tier[] = [
     summary: "Room for creators and long reads that go well past an hour.",
     features: [
       "Up to 10 hours of video narration each month",
+      "Voice cloning — narrate in your own or a custom voice",
+      "Expressive Qwen voices with per-passage delivery instructions",
+      "1 hour of premium voice generation each month (Qwen or cloned)",
       "Everything in the Free tier",
       "More room to revise and regenerate your scripts",
     ],
@@ -65,12 +68,10 @@ const tiers: Tier[] = [
     name: "Premium",
     price: "—",
     cadence: "per month",
-    summary: "Cloned voices and the most hours for power users and teams.",
+    summary: "More time with your favorite voices for power users and teams.",
     features: [
       "Up to 20 hours of video narration each month",
-      "Voice cloning — narrate in your own or a custom voice",
-      "Expressive Qwen narration with per-passage delivery instructions",
-      "1 hour of cloned-voice narration each month, included in the 20 hours",
+      "5 hours of premium voice generation each month (Qwen or cloned)",
       "Everything in the Pro tier",
     ],
     cta: { label: "Get Premium", href: "/reader" },
@@ -136,7 +137,8 @@ export default async function Pricing() {
       <p className="pricing-note">
         Audio generation is measured by the length of the narration you create.
         These monthly allowances apply only to the video Narration Studio.
-        Premium cloned-voice audio also draws from its separate 1-hour allowance.
+        Built-in Qwen and cloned-voice audio share the premium voice allowance:
+        1 hour on Pro or 5 hours on Premium, included in each plan&apos;s narration hours.
         Sign in with Google to subscribe.
       </p>
 
@@ -158,7 +160,7 @@ export default async function Pricing() {
         <h3>What happens when I reach my limit?</h3>
         <p>
           Your scripts stay available, but new video narration pauses
-          until your allowance resets or you upgrade. When the Premium voice hour is used,
+          until your allowance resets or you upgrade. When your premium voice hours are used,
           you can still generate with standard voices if you have narration time left.
         </p>
 
