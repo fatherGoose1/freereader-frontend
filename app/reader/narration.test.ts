@@ -13,7 +13,7 @@ function setup(mobile: boolean, remoteError?: Error) {
     },
     remote: {
       async synthesize(text, _speed, _isHeading, _status, options) {
-        calls.push(`remote:${text}${options ? `:${options.language}:${options.voice}:${options.steps}` : ""}`);
+        calls.push(`remote:${text}${options ? `:${options.language}:${options.voice}:${options.steps}${options.instruct ? `:${options.instruct}` : ""}` : ""}`);
         if (remoteError) throw remoteError;
         return audio;
       },
@@ -65,6 +65,14 @@ test("English Supertonic selections use their chosen voice and server model", as
     assert.equal(result.route.voice, voice);
   }
   assert.deepEqual(calls, ["remote:Hello:en:F1:12", "remote:Hello:en:M2:12"]);
+});
+
+test("Qwen CustomVoice receives a delivery instruction without routing Kokoro or Supertonic through Qwen", async () => {
+  const { router, calls } = setup(false);
+  const premium = await router.synthesize("Welcome", "qwen_ryan", 12, undefined, false, 1, "en", undefined, "youtube_narration", "Speak calmly");
+  assert.equal(premium.route.model, "qwen3-tts-customvoice-v1");
+  await router.synthesize("Hello", "af_heart", 12, undefined, false, 1, "en");
+  assert.deepEqual(calls, ["remote:Welcome:en:qwen_ryan:12:Speak calmly", "remote:Hello:en:af_heart:12"]);
 });
 
 for (const mobile of [false, true]) {

@@ -15,6 +15,16 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
+test("guests see the storage warning and Google sign-in in the library and reader", async ({ page }) => {
+  const notice = page.getByRole("region", { name: "Save your library" });
+  await expect(notice).toContainText("Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.");
+  await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  await upload(page, "Guest reading");
+  await page.getByRole("button", { name: /^html Guest reading/ }).click();
+  await expect(notice).toBeVisible();
+  await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+});
+
 test("library entry points, search, sorting, and folders are usable", async ({ page }, testInfo) => {
   await expect(page.getByRole("button", { name: "Add your first file" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("empty-library.png"), fullPage: true });

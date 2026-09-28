@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalPage
       title="VoiceReader Privacy Policy"
-      updated="September 18, 2026"
+      updated="September 27, 2026"
       intro="VoiceReader is the iOS app, also known as FreeReader on the web. This policy explains the limited information the App and Website handle."
     >
       <h2>1. Who we are</h2>
@@ -38,27 +38,28 @@ export default function PrivacyPolicy() {
       </ul>
       <p>
         Original imported files, generated audio, and downloaded voice models
-        remain on your device. Audiobook library syncing is currently paused.
+        remain on your device. Anonymous audiobook libraries stay in this browser
+        until its storage is cleared.
       </p>
 
-      <h2>3. Account sign-in and paused library sync</h2>
+      <h2>3. Account sign-in and library sync</h2>
       <p>
-        Video narration users may sign in with Google through Supabase for paid
-        plans. If you sign in, we receive your Google account identifier,
-        email address, and basic profile information made available by Google.
-        Audiobook account syncing is paused; the web reader does not upload new
-        documents, folders, or reading progress to your account.
+        You may sign in with Google through Supabase to sync your audiobook library
+        or use video narration plans. If you sign in, we receive your Google
+        account identifier, email address, and basic profile information made
+        available by Google. The web reader syncs your parsed documents, folders,
+        and reading progress to your account while you are signed in.
       </p>
-      <p>If you used account sync before it was paused, stored data may include:</p>
+      <p>Synced audiobook data may include:</p>
       <ul>
         <li>compressed parsed document text, titles, filenames, source references, and cover images;</li>
         <li>folder organization and document metadata; and</li>
         <li>reading position and playback speed.</li>
       </ul>
       <p>
-        Previously synced content is stored privately using Supabase and is made
+        Synced content is stored privately using Supabase and is made
         available only to authenticated requests for your account. Generated audio
-        and voice models were not synced. To request removal of previously synced
+        and voice models are not synced. To request removal of synced
         content, contact us through the <a href="/support">support page</a>.
       </p>
 
@@ -113,8 +114,8 @@ export default function PrivacyPolicy() {
       <h2>8. Retention and deletion</h2>
       <p>
         Local documents and audio remain on your device until you remove them or
-        clear the Website or App&apos;s storage. Previously synced web content
-        remains until you request its removal.
+        clear the Website or App&apos;s storage. Synced web content remains in
+        your account until you delete it or request its removal.
         Diagnostics are retained only as long as reasonably needed to understand
         product use and diagnose problems. Deleting the App resets its
         installation identifier.

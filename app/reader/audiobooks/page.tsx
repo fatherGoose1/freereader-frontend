@@ -3,7 +3,7 @@ import FreeReaderApp from "../FreeReaderApp";
 
 export const metadata: Metadata = {
   title: "Audiobook Reader",
-  description: "A private, local-first document reader and audiobook player.",
+  description: "A local-first audiobook reader with optional account sync for your library and reading progress.",
 };
 
 export default function AudiobookReaderPage() {

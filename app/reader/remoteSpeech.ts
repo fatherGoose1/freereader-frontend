@@ -4,12 +4,12 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
-import { clonedVoiceId, isClonedVoice, voiceDisplayName } from "./voices";
+import { clonedVoiceId, isClonedVoice, isQwenVoice, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
-type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic"; source?: TelemetrySource };
+type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic"; source?: TelemetrySource; instruct?: string };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (payload?.error === "usage_limit_reached") {
@@ -61,6 +61,21 @@ export class RemoteSpeechClient {
       if (requestedVoice && isClonedVoice(requestedVoice)) {
         return await this.synthesizeClone(items, speechSpeed, status, requestedVoice,
           options?.language, controller.signal, generationStartedAt);
+      }
+      if (requestedVoice && isQwenVoice(requestedVoice)) {
+        if (items.length !== 1 || options?.source !== "youtube_narration") throw new Error("Premium voices are available for video narration only.");
+        const response = await fetch("/api/premium-tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(currentAccessToken() ? { Authorization: `Bearer ${currentAccessToken()}` } : {}) },
+          body: JSON.stringify({ text: normalizeForSpeech(items[0].text, items[0].isHeading, options.language),
+            voiceId: requestedVoice, language: options.language, instruct: options.instruct?.trim() || undefined }),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(unavailableMessage(response, await response.json().catch(() => null)));
+        const blob = await response.blob();
+        if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");
+        return [speechResult(blob, Number(response.headers.get("X-Audio-Duration")),
+          Number(response.headers.get("X-Generation-Seconds")), generationStartedAt)];
       }
       const language = options?.language;
       const supertonic = options?.engine === "supertonic" || (language !== undefined && language !== "en");

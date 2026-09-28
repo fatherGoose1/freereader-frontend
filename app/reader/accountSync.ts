@@ -323,7 +323,9 @@ export async function synchronizeLibrary(
     let resolved = book;
     let resolvedRemote = remote;
     if (remote.updatedAt > book.updatedAt) {
-      resolved = await downloadDocument(token, remote, remoteProgress.get(book.id));
+      // Document edits and listening progress have independent timestamps. Keep
+      // local progress until it has been compared with the remote progress row.
+      resolved = { ...await downloadDocument(token, remote), position: book.position };
       await saveBook(resolved);
       books = books.map((value) => value.id === book.id ? resolved : value);
       downloaded += 1;

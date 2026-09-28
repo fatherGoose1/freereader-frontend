@@ -1,5 +1,18 @@
 import { test, expect } from "@playwright/test";
 
+test("Qwen delivery instructions are gated to Premium voices", async ({ page }) => {
+  await page.goto("/narration");
+  await page.getByRole("button", { name: /Choose project voice/ }).click();
+  const premium = page.getByRole("region", { name: "Premium Qwen voices" });
+  await expect(premium).toContainText("Locked");
+  await expect(premium.getByRole("button", { name: /Ryan/ })).toHaveCount(0);
+  await page.getByRole("dialog").getByRole("button", { name: "Close Choose a project voice" }).click();
+  await page.getByLabel("YouTube script").fill("This is a new passage for narration.");
+  await page.getByRole("button", { name: "Add script" }).click();
+  await page.getByLabel("Passage 1 text").click();
+  await expect(page.getByRole("textbox", { name: /Delivery instruction/ })).toHaveCount(0);
+});
+
 function wavBody(sampleRate = 24_000, toneHz = 0): Buffer {
   const body = Buffer.alloc(44 + sampleRate * 2);
   body.write("RIFF", 0);

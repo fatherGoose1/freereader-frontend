@@ -69,6 +69,7 @@ const tiers: Tier[] = [
     features: [
       "Up to 20 hours of video narration each month",
       "Voice cloning — narrate in your own or a custom voice",
+      "Expressive Qwen narration with per-passage delivery instructions",
       "1 hour of cloned-voice narration each month, included in the 20 hours",
       "Everything in the Pro tier",
     ],

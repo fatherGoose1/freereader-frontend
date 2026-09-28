@@ -183,7 +183,7 @@ export default function Home() {
             </article>
             <article>
               <span className="trust-icon">02</span>
-              <div><h3>Your library stays local</h3><p>Books, folders, and reading progress stay in this browser. Account syncing is currently paused.</p></div>
+              <div><h3>Your library, your choice</h3><p>Books, folders, and reading progress stay in this browser unless you sign in to sync them to your account.</p></div>
             </article>
             <article>
               <span className="trust-icon">03</span>

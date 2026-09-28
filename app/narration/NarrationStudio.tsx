@@ -6,7 +6,7 @@ import BrandMark from "../components/BrandMark";
 import { useEffect, useId, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import { isClonedVoice, type NarratorVoice } from "../reader/voices";
+import { isClonedVoice, isQwenVoice, QWEN_LANGUAGES, QWEN_VOICES, type NarratorVoice } from "../reader/voices";
 import { detectSpeechLanguage, voiceForLanguage, voicesForLanguage } from "../reader/speech";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { currentAccessToken, initAuthToken } from "../reader/authToken";
@@ -58,12 +58,14 @@ function languageName(language: SpeechLanguage): string {
 
 function inputKey(segment: NarrationSegment, project: NarrationProject): string {
   const language = passageLanguage(segment, project);
+  const voice = voiceForLanguage(segment.voiceId ?? project.defaultVoice, language);
   return JSON.stringify({
     text: segment.text,
     spoken: spokenText(segment, project.pronunciations),
     language,
-    voice: voiceForLanguage(segment.voiceId ?? project.defaultVoice, language),
+    voice,
     speed: segment.speedOverride ?? project.globalSpeed,
+    ...(isQwenVoice(voice) && { instruct: segment.instruct?.trim() ?? "" }),
   });
 }
 
@@ -283,6 +285,7 @@ export default function NarrationStudio() {
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
   const hasPremium = usage?.plan === "premium";
+  const selectedQwenVoice = selected && isQwenVoice(voiceForLanguage(selected.voiceId ?? project.defaultVoice, passageLanguage(selected, project)));
   const profileName = session?.user.email?.split("@")[0] ?? "Sign in";
   const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
@@ -300,6 +303,7 @@ export default function NarrationStudio() {
 
   function voiceName(voice: NarratorVoice, language: SpeechLanguage): string {
     return clonedVoices.find((record) => voiceRefFor(record) === voice)?.name
+      ?? QWEN_VOICES.find(([id]) => id === voice)?.[1]
       ?? voicesForLanguage(language).find(([id]) => id === voice)?.[1]
       ?? "Choose a voice";
   }
@@ -717,6 +721,7 @@ export default function NarrationStudio() {
       const result = await synthesize(
         spokenText(segment, currentProject.pronunciations), voice, 12,
         (message) => setGenerationMessage(message), false, speed, language, undefined, "youtube_narration",
+        isQwenVoice(voice) && hasPremium ? segment.instruct?.trim() : undefined,
       );
       const latestProject = projectRef.current;
       const latest = latestProject.segments.find((item) => item.id === id);
@@ -951,6 +956,10 @@ export default function NarrationStudio() {
     const voice = voiceForLanguage(voiceId, language);
     if (isClonedVoice(voice)) {
       setGenerationMessage("Cloned voices have no instant preview. Generate a passage to hear this voice.");
+      return;
+    }
+    if (isQwenVoice(voice)) {
+      setGenerationMessage("Generate a passage to hear this Premium voice and its delivery instruction.");
       return;
     }
     const audio = audioRef.current;
@@ -1237,6 +1246,16 @@ export default function NarrationStudio() {
                     {clonedVoices.length >= MAX_CLONED_VOICES && <button type="button" onClick={openCloneFromPicker}>Manage voices</button>}</div>
                 </>}
         </section>
+        {QWEN_LANGUAGES.has(pickerLanguage) && <section className={styles.voicePremiumSection} aria-label="Premium Qwen voices">
+          <div className={styles.voicePremiumHeading}>
+            <div><span className={styles.kicker}>Premium · Qwen3-TTS</span><h3>Expressive voices</h3><p>Choose a Qwen voice to direct the feeling of each passage.</p></div>
+            {!hasPremium && <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
+          </div>
+          {hasPremium ? <div className={styles.voiceGrid}>{QWEN_VOICES.map(([id, name]) =>
+            <VoiceCard key={id} profile={{ id, name, tags: ["premium", "expressive"] }} selected={currentPickerVoice === id}
+              previewing={false} onSelect={() => selectVoice(id)} />)}</div>
+            : <p className={styles.voicePremiumNote}>Expressive Qwen voices and delivery instructions are available with Premium. <Link href="/pricing">Explore Premium</Link></p>}
+        </section>}
         {voiceSearch.trim() ? (searchResults.length > 0 || matchingClones.length === 0) && <section className={styles.voiceSection} aria-label="Voice search results">
           <div className={styles.voiceSectionHeading}><h3>Best matches</h3><span role="status">{searchResults.length} {searchResults.length === 1 ? "voice" : "voices"} found</span></div>
           {searchResults.length ? <div className={styles.voiceGrid}>{searchResults.map((profile, index) => renderVoiceCard(profile, index === 0))}</div>
@@ -1393,6 +1412,11 @@ export default function NarrationStudio() {
                         {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
                       </select>
                     </label>
+                    {hasPremium && selectedQwenVoice && <label className={styles.deliveryInstruction}>Delivery instruction · Qwen Premium
+                      <input type="text" maxLength={200} value={segment.instruct ?? ""} placeholder="e.g. Speak calmly, with a hint of sadness"
+                        onChange={(event) => configureSegment(segment.id, { instruct: event.target.value })} />
+                      <small>Set the feeling for this passage. Changing it requires new audio.</small>
+                    </label>}
                     <fieldset className={styles.pauseControls}>
                       <legend>Pause after</legend>
                       <div className={styles.pausePresets}>

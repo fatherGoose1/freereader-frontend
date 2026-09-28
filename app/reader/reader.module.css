@@ -57,6 +57,13 @@
 .appMark i:nth-child(3) { height: 15px; }
 .appMark i:nth-child(4) { height: 7px; }
 .actions { display: flex; align-items: center; gap: 12px; }
+.accountNotice { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 18px max(28px, calc((100vw - 1160px) / 2)); color: #503711; background: #fff1d4; border-bottom: 1px solid #e8ca83; }
+.accountNotice strong { display: block; font-size: 17px; }
+.accountNotice p { margin: 3px 0 0; font-size: 14px; line-height: 1.5; }
+.accountNotice button { flex: none; min-height: 44px; padding: 10px 18px; color: #fff; background: #365bd6; border: 0; border-radius: 9px; font-weight: 650; }
+.accountNotice button:hover { background: #294bbe; }
+.syncBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px max(28px, calc((100vw - 1160px) / 2)); color: #425578; background: #eaf0fc; font-size: 12px; }
+.syncBar button { padding: 6px 10px; color: #365bd6; background: transparent; border: 0; border-radius: 6px; }
 
 /* Library: entry points first, then the collection. */
 .libraryLayout { width: min(1160px, calc(100% - 56px)); margin: auto; padding: 44px 0 36px; }
@@ -136,6 +143,7 @@
 /* Reading canvas and navigation */
 .readingShell { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
 .readingShell .readerTop { flex: none; }
+.readingShell .accountNotice, .readingShell .syncBar { flex: none; }
 .readingShell .readerGrid { flex: 1; min-height: 0; overflow-y: auto; align-items: start; padding-bottom: 24px; }
 .readingShell .chapterRail { top: 0; }
 .readingShell .readingPane { min-height: 0; }
@@ -280,6 +288,11 @@
   .continueCard > button { margin-left: 82px; }
 }
 @media (max-width: 560px) {
+  .accountNotice { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 16px; }
+  .accountNotice strong { font-size: 14px; }
+  .accountNotice p { font-size: 12px; }
+  .accountNotice button { align-self: flex-start; min-height: 40px; padding: 8px 12px; font-size: 12px; }
+  .syncBar { padding-inline: 16px; }
   .libraryHero { min-height: 72px; padding: 14px 16px; gap: 10px; }
   .libraryBrand { gap: 8px; font-size: 17px; }
   .brandSubtitle { display: none; }

@@ -35,7 +35,17 @@ export type KokoroVoice = (typeof KOKORO_VOICES)[number][0];
 // User-created clones are addressed with a "clone:" prefix so they stay distinct
 // from the finite built-in voice sets while still flowing through NarratorVoice.
 export type ClonedVoice = `clone:${string}`;
-export type NarratorVoice = KokoroVoice | Voice | ClonedVoice;
+export const QWEN_VOICES = [
+  ["qwen_ryan", "Ryan"], ["qwen_aiden", "Aiden"], ["qwen_vivian", "Vivian"],
+  ["qwen_serena", "Serena"], ["qwen_ono_anna", "Ono Anna"], ["qwen_sohee", "Sohee"],
+  ["qwen_eric", "Eric"], ["qwen_dylan", "Dylan"], ["qwen_uncle_fu", "Uncle Fu"],
+] as const;
+export type QwenVoice = (typeof QWEN_VOICES)[number][0];
+export type NarratorVoice = KokoroVoice | Voice | ClonedVoice | QwenVoice;
+export const QWEN_LANGUAGES = new Set(["en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"]);
+export function isQwenVoice(voice: string): voice is QwenVoice {
+  return QWEN_VOICES.some(([id]) => id === voice);
+}
 
 const CLONED_VOICE_PREFIX = "clone:";
 
@@ -93,5 +103,6 @@ export function narratorVoices(): Array<[NarratorVoice, string]> {
 
 export function voiceDisplayName(voice: NarratorVoice | string): string | undefined {
   if (isClonedVoice(voice)) return undefined;
+  if (isQwenVoice(voice)) return QWEN_VOICES.find(([id]) => id === voice)?.[1];
   return narratorVoices().find(([value]) => value === voice)?.[1];
 }

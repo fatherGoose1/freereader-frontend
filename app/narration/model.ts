@@ -26,6 +26,7 @@ export interface NarrationSegment {
   voiceId: NarratorVoice | null;
   modelId: string | null;
   speedOverride: number | null;
+  instruct?: string;
   pronunciations: PronunciationOverride[];
   pauseAfterMs: number;
   status: SegmentGenerationStatus;

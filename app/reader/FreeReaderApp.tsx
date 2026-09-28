@@ -28,6 +28,9 @@ import posthog from "posthog-js";
 import styles from "./reader.module.css";
 import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
+import { supabaseClient } from "./supabase";
+import { synchronizeLibrary } from "./accountSync";
+import type { Session } from "@supabase/supabase-js";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
@@ -167,6 +170,13 @@ export default function FreeReaderApp() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
   const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "saved" | "limited" | "error">("idle");
+  const [localRevision, setLocalRevision] = useState(0);
+  const [syncAttempt, setSyncAttempt] = useState(0);
+  const localRevisionRef = useRef(0);
+  const syncRunning = useRef(false);
   const [importErrorMessage, setImportErrorMessage] = useState("");
   const [url, setUrl] = useState("");
   const [pastedTitle, setPastedTitle] = useState("");
@@ -216,6 +226,84 @@ export default function FreeReaderApp() {
   }, [selected?.id, selected?.position.blockIndex, pageStarts]);
   const lastPositionSave = useRef(0);
 
+  function libraryChanged() {
+    localRevisionRef.current += 1;
+    setLocalRevision(localRevisionRef.current);
+  }
+
+  useEffect(() => {
+    const supabase = supabaseClient();
+    if (!supabase) { setAuthReady(true); return; }
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next);
+      setAuthReady(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!libraryLoaded || !session) return;
+    let cancelled = false;
+    const sync = async () => {
+      if (cancelled) return;
+      if (syncRunning.current) { window.setTimeout(() => void sync(), 1_000); return; }
+      syncRunning.current = true;
+      setSyncStatus("syncing");
+      const revision = localRevisionRef.current;
+      try {
+        const [storedBooks, storedFolders] = await Promise.all([listBooks(), listFolders()]);
+        const result = await synchronizeLibrary(session.access_token, session.user.id, storedBooks, storedFolders);
+        if (!cancelled) {
+          if (revision === localRevisionRef.current) {
+            setBooks(result.books);
+            setFolders(result.folders);
+            const current = selectedRef.current;
+            const updated = result.books.find((book) => book.id === current?.id);
+            if (updated && !wantsPlayback.current) {
+              selectedRef.current = updated;
+              setSelected(updated);
+            }
+          } else setLocalRevision(localRevisionRef.current);
+          setSyncStatus(result.localOnly ? "limited" : "saved");
+        }
+      } catch {
+        if (!cancelled) setSyncStatus("error");
+      } finally {
+        syncRunning.current = false;
+      }
+    };
+    const timer = window.setTimeout(() => void sync(), localRevision ? 2_000 : 0);
+    const interval = window.setInterval(() => void sync(), 60_000);
+    return () => { cancelled = true; clearTimeout(timer); clearInterval(interval); };
+  }, [libraryLoaded, session, localRevision, syncAttempt]);
+
+  async function signIn() {
+    const supabase = supabaseClient();
+    if (!supabase) { setMessage("Google sign-in is unavailable right now."); return; }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google", options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
+    });
+    if (error) setMessage("Sign-in could not be started. Try again.");
+  }
+
+  async function signOut() {
+    const { error } = await supabaseClient()!.auth.signOut();
+    if (error) setMessage("Could not sign out. Try again.");
+    else setSyncStatus("idle");
+  }
+
+  const accountNotice = authReady && !session && (
+    <section className={styles.accountNotice} aria-label="Save your library">
+      <div><strong>Keep your library and progress</strong><p>Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.</p></div>
+      <button type="button" onClick={() => void signIn()}>Sign in with Google</button>
+    </section>
+  );
+  const syncBar = session && <div className={styles.syncBar} role="status">
+    <span>{syncStatus === "syncing" ? "Syncing your library…" : syncStatus === "error" ? "Library sync failed. Your changes are still on this device." : syncStatus === "limited" ? "Some books could not sync and remain on this device (account storage limit)." : syncStatus === "saved" ? "Library and progress synced to your account" : "Signed in"}</span>
+    {syncStatus === "error" && <button type="button" onClick={() => setSyncAttempt((attempt) => attempt + 1)}>Retry sync</button>}
+    <button type="button" onClick={() => void signOut()}>Sign out</button>
+  </div>;
+
   useEffect(() => {
     recordTelemetry("app_launch");
     posthog.capture("app_launched");
@@ -245,7 +333,7 @@ export default function FreeReaderApp() {
       const current = currentAudio();
       if (!current) return;
       const positioned = positionBook(current.book, current.source.index, current.audio.currentTime);
-      saveBook(positioned).catch(() => undefined);
+      saveBook(positioned).then(libraryChanged).catch(() => undefined);
     };
     document.addEventListener("visibilitychange", saveBeforeBackground);
     return () => document.removeEventListener("visibilitychange", saveBeforeBackground);
@@ -289,6 +377,7 @@ export default function FreeReaderApp() {
       const book = makeBook(parsed, file.name, file.size, sourceIdentifier, activeFolderId ?? undefined);
       stage = "storage";
       await saveBook(book);
+      libraryChanged();
       setBooks((current) => [book, ...current]);
       setLibrarySearch("");
       setPanel(null);
@@ -353,6 +442,7 @@ export default function FreeReaderApp() {
       );
       stage = "storage";
       await saveBook(book);
+      libraryChanged();
       setBooks((current) => [book, ...current]);
       setLibrarySearch("");
       setPanel(null);
@@ -412,6 +502,7 @@ export default function FreeReaderApp() {
       const book = makeBook({ ...parsed, title }, title, size, undefined, activeFolderId ?? undefined);
       stage = "storage";
       await saveBook(book);
+      libraryChanged();
       setBooks((current) => [book, ...current]);
       setLibrarySearch("");
       setPanel(null);
@@ -503,7 +594,7 @@ export default function FreeReaderApp() {
     selectedRef.current = book;
     setSelected(book);
     setBooks((current) => current.map((value) => value.id === book.id ? book : value));
-    saveBook(book).catch(() => setMessage("Reading position could not be saved."));
+    saveBook(book).then(libraryChanged).catch(() => setMessage("Reading position could not be saved."));
   }
 
   function positionBook(book: LibraryBook, blockIndex: number, offsetSeconds = 0): LibraryBook {
@@ -878,11 +969,12 @@ export default function FreeReaderApp() {
   }
 
   async function deleteBook(book: LibraryBook) {
-    if (!window.confirm(`Remove "${book.title}" from this browser?`)) return;
+    if (!window.confirm(`Remove "${book.title}" from ${session ? "your synced library" : "this browser"}?`)) return;
     await removeBook(book.id);
+    libraryChanged();
     setBooks((current) => current.filter((value) => value.id !== book.id));
     setOrganizingBook(null);
-    setMessage(`${book.title} was removed from this browser.`);
+    setMessage(`${book.title} was removed from your library.`);
     recordTelemetry("document_deleted", { document_id: book.id });
     posthog.capture("document_deleted", {
       file_type: book.format,
@@ -902,7 +994,7 @@ export default function FreeReaderApp() {
     setVoice((current) => voiceForLanguage(current, language));
     if (!book.language) {
       setBooks((current) => current.map((value) => value.id === book.id ? ready : value));
-      saveBook(ready).catch(() => undefined);
+      saveBook(ready).then(libraryChanged).catch(() => undefined);
     }
     recordTelemetry("document_opened", documentProperties(ready));
     posthog.capture("document_opened", {
@@ -944,6 +1036,7 @@ export default function FreeReaderApp() {
     };
     try {
       await saveFolder(folder);
+      libraryChanged();
       setFolders((current) => [...current, folder]);
       setFolderName("");
       setPanel(null);
@@ -957,6 +1050,7 @@ export default function FreeReaderApp() {
     const updated = { ...book, parentId, updatedAt: new Date().toISOString() };
     try {
       await saveBook(updated);
+      libraryChanged();
       setBooks((current) => current.map((value) => value.id === book.id ? updated : value));
       setOrganizingBook(null);
       const destination = parentId ? folders.find((folder) => folder.id === parentId)?.name : undefined;
@@ -1000,6 +1094,8 @@ export default function FreeReaderApp() {
             <button className={styles.textButton} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
         </div>
+        {accountNotice}
+        {syncBar}
         <div className={styles.readerGrid} inert={panel === "voice"}>
           <aside className={styles.chapterRail}>
             <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
@@ -1134,13 +1230,15 @@ export default function FreeReaderApp() {
           }} />
         </div>
       </header>
+      {accountNotice}
+      {syncBar}
       <div className={styles.libraryLayout} inert={!!panel || !!organizingBook}>
         <section className={styles.shelf}>
           <div className={styles.workspaceHeading}>
             <div>
               <h1>Your library</h1>
             </div>
-            <span className={styles.storageBadge}><span className={styles.localDot} />Free listening · Saved on this device</span>
+            <span className={styles.storageBadge}><span className={styles.localDot} />Free listening · {session ? "Account sync" : "Saved on this device"}</span>
           </div>
           {!activeFolderId && !search && continueBook && (
             <section className={styles.continueCard} aria-label="Continue reading">
@@ -1275,7 +1373,7 @@ export default function FreeReaderApp() {
                 {busy ? "Adding" : "Add to Library"}
               </button>
             </div>
-            <div className={styles.modalPrivacy}>Pasted text is parsed and stored only on this device.</div>
+            <div className={styles.modalPrivacy}>Pasted text is stored in this browser{session ? " and synced to your account" : " until you sign in to sync it"}.</div>
           </form>
         </div>
       )}
@@ -1324,14 +1422,14 @@ export default function FreeReaderApp() {
             <label className={styles.fieldLabel}>Article or document URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
             {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
             <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Import link"}</button></div>
-            <div className={styles.modalPrivacy}>Imported content is processed and stored only on this device.</div>
+            <div className={styles.modalPrivacy}>Imported content is stored in this browser{session ? " and synced to your account" : " until you sign in to sync it"}.</div>
           </form>
         </div>
       )}
       {panel === "gutenberg" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
           <div className={`${styles.modal} ${styles.catalog}`} role="dialog" aria-modal="true" aria-label="Free Books" onMouseDown={(event) => event.stopPropagation()}>
-            <div className={styles.catalogHeader}><span>PG</span><div><strong>PROJECT GUTENBERG</strong><p>Choose a public-domain EPUB and FreeReader will keep it on this device for reading and narration.</p></div></div>
+            <div className={styles.catalogHeader}><span>PG</span><div><strong>PROJECT GUTENBERG</strong><p>Choose a public-domain EPUB to add to your library for reading and narration.</p></div></div>
             <h2>Free Books</h2>
             <form className={styles.catalogSearch} onSubmit={(event) => { event.preventDefault(); void searchGutenberg(); }}>
               <input aria-label="Search free books" placeholder="Title or author" value={query} onChange={(event) => setQuery(event.target.value)} />

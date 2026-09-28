@@ -3,7 +3,7 @@ import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
-import { isClonedVoice, isSupertonicVoice } from "./voices";
+import { isClonedVoice, isQwenVoice, isSupertonicVoice } from "./voices";
 import type { TelemetrySource } from "./telemetry";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
@@ -36,6 +36,9 @@ export class NarrationRouter {
     if (isClonedVoice(voice)) {
       return { model: "qwen3-tts-clone-v1", voice, provider: "Server", mobile: this.mobile };
     }
+    if (isQwenVoice(voice)) {
+      return { model: "qwen3-tts-customvoice-v1", voice, provider: "Server", mobile: this.mobile };
+    }
     // The reader uses voiceForLanguage to retain its existing English default.
     // Studio can explicitly request an English Supertonic preset by voice ID.
     const selected = language === "en" && isSupertonicVoice(voice) ? voice : voiceForLanguage(voice, language);
@@ -50,7 +53,7 @@ export class NarrationRouter {
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
     isHeading: boolean, speechSpeed: number, language: SpeechLanguage,
-    isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook"): Promise<SpeechResult & { route: NarrationRoute }> {
+    isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook", instruct?: string): Promise<SpeechResult & { route: NarrationRoute }> {
     const epoch = this.epoch;
     const checkRequest = () => {
       if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
@@ -66,7 +69,7 @@ export class NarrationRouter {
         this.active = "remote";
         result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status,
           { language, voice: String(route.voice), steps,
-            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}), source });
+            ...(language === "en" && isSupertonicVoice(route.voice) ? { engine: "supertonic" as const } : {}), source, instruct });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
         if (this.active === "remote") this.clients.remote.stop();
@@ -142,8 +145,8 @@ export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage) {
 }
 
 export function synthesize(text: string, voice: NarratorVoice = "af_heart", steps = 8, status?: TtsStatus,
-  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook") {
-  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded, source);
+  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook", instruct?: string) {
+  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded, source, instruct);
 }
 
 export function synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice = "af_heart", steps = 8,
