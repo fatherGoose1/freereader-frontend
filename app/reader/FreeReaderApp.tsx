@@ -928,7 +928,7 @@ export default function FreeReaderApp() {
     if (!current) return;
     const { audio, book, source } = current;
     setAudioProgress(audio.duration ? audio.currentTime / audio.duration : 0);
-    if (Date.now() - lastPositionSave.current > 5_000) {
+    if (Date.now() - lastPositionSave.current > 15_000) {
       lastPositionSave.current = Date.now();
       const positioned = positionBook(book, source.index, audio.currentTime);
       updateBook(positioned);

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import CtaButton from "./components/CtaButton";
-import HeroDemo from "./components/HeroDemo";
-import { SPEECH_LANGUAGES } from "./languages";
+import CtaButton from "../components/CtaButton";
+import HeroDemo from "../components/HeroDemo";
+import { SPEECH_LANGUAGES } from "../languages";
 
 const formats = ["EPUB", "PDF", "DOCX", "TXT", "HTML", "Markdown"];
 

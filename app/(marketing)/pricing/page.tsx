@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import ProCheckoutButton from "../components/ProCheckoutButton";
-import { fetchPlanPrice, formatProPrice, type PaidPlan } from "../reader/billing";
+import ProCheckoutButton from "../../components/ProCheckoutButton";
+import { fetchPlanPrice, formatProPrice, type PaidPlan } from "../../reader/billing";
 
 export const revalidate = 300;
 

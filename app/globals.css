@@ -81,20 +81,7 @@ button, textarea, input, select { font: inherit; }
   transition: color .2s ease;
 }
 .links a:hover { color: var(--ink); }
-.links .nav-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 15px;
-  color: #fff;
-  background: var(--forest);
-  border-radius: 9px;
-}
-.links .nav-cta:hover { color: #fff; background: var(--forest-deep); }
-.nav-cta span { color: #fff; }
 
-body:has(.reader-app-route) > .site-header,
-body:has(.reader-app-route) > footer { display: none; }
 .reader-app-route { min-height: 100vh; }
 
 /* Shared type and controls */
@@ -494,8 +481,7 @@ footer .brand { color: var(--ink); }
 @media (max-width: 760px) {
   .wrap { width: min(100% - 32px, 580px); }
   .site-header nav { min-height: 64px; }
-  .links { gap: 0; }
-  .links > a:not(.nav-cta) { display: none; }
+  .links { display: none; }
   .brand-mark { width: 36px; height: 36px; border-radius: 10px; }
   .section { padding: 90px 0; }
   h1 { font-size: clamp(50px, 15vw, 70px); }
