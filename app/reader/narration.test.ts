@@ -77,6 +77,7 @@ test("Qwen CustomVoice receives a delivery instruction without routing Kokoro or
 
 test("Darwin, VoxCPM2, and Qwen cloned voices keep separate routes and cache keys", async () => {
   const { router } = setup(false);
+  assert.equal((await router.route("clone:q17_voice-1", "en")).model, "qwen3-tts-1.7b-clone-v1");
   assert.equal((await router.route("clone:darwin_voice-1", "en")).model, "darwin-tts-clone-v1");
   assert.equal((await router.route("clone:vox2_voice-1", "en")).model, "voxcpm2-clone-v1");
   assert.equal((await router.route("clone:legacy-voice", "en")).model, "qwen3-tts-clone-v1");
