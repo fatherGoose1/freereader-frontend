@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { browseGutenberg, downloadGutenbergBook } from "./gutenberg";
+import { archiveIdentifier, importInternetArchive } from "./internetArchive";
 import { parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
 import { asImportError, failureCategory, importFailureProperties, type ImportFileType, type ImportStage } from "./importErrors";
 import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
@@ -33,7 +34,7 @@ import { synchronizeLibrary } from "./accountSync";
 import { linkInstallation } from "./usage";
 import type { Session } from "@supabase/supabase-js";
 
-type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
+type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "archive" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
@@ -180,6 +181,7 @@ export default function FreeReaderApp() {
   const syncRunning = useRef(false);
   const [importErrorMessage, setImportErrorMessage] = useState("");
   const [url, setUrl] = useState("");
+  const [archiveUrl, setArchiveUrl] = useState("");
   const [pastedTitle, setPastedTitle] = useState("");
   const [pastedText, setPastedText] = useState("");
   const [query, setQuery] = useState("");
@@ -423,17 +425,20 @@ export default function FreeReaderApp() {
     }
   }
 
-  async function importUrl() {
-    if (!url.trim()) return;
+  async function importUrl(rawUrl = url) {
+    if (!rawUrl.trim()) return;
+    const isArchive = !!archiveIdentifier(rawUrl);
+    const source = isArchive ? "internet_archive" : "url";
     setBusy(true);
     setImportErrorMessage("");
-    setMessage("Trying the page directly in your browser...");
+    setMessage(isArchive ? "Loading Internet Archive book..." : "Trying the page directly in your browser...");
     await new Promise((resolve) => setTimeout(resolve, 50));
     const started = Date.now();
-    let fileType: ImportFileType = urlFileTypeHint(url);
+    let fileType: ImportFileType = urlFileTypeHint(rawUrl);
     let stage: ImportStage = "direct_fetch";
     try {
-      const { parsed, sourceUrl } = await parseWebLink(url);
+      const archive = isArchive ? await importInternetArchive(rawUrl) : undefined;
+      const { parsed, sourceUrl } = archive ?? await parseWebLink(rawUrl);
       fileType = parsed.format;
       const snapshot = new Blob([parsed.blocks.map((block) => block.text).join("\n\n")], { type: "text/plain" });
       const book = makeBook(
@@ -443,6 +448,11 @@ export default function FreeReaderApp() {
         sourceUrl,
         activeFolderId ?? undefined,
       );
+      if (archive) {
+        book.archiveIdentifier = archive.identifier;
+        book.sourceUrl = sourceUrl;
+        book.size = archive.size;
+      }
       stage = "storage";
       await saveBook(book);
       libraryChanged();
@@ -450,10 +460,11 @@ export default function FreeReaderApp() {
       setLibrarySearch("");
       setPanel(null);
       setUrl("");
+      setArchiveUrl("");
       setMessage(`${book.title} was saved for offline reading.`);
       recordTelemetry("import_completed", {
         ...documentProperties(book),
-        source: "url",
+        source,
         duration_seconds: (Date.now() - started) / 1000,
       });
       posthog.capture("import_completed", {
@@ -461,14 +472,14 @@ export default function FreeReaderApp() {
         file_size_bytes: book.size,
         block_count: book.blocks.length,
         chapter_count: book.chapters.length,
-        source: "url",
+        source,
         duration_seconds: (Date.now() - started) / 1000,
       });
     } catch (error) {
       const failure = asImportError(error, stage, fileType);
       setMessage(failure.message);
       const properties = {
-        ...importFailureProperties(failure, { source: "url", fileType, stage }),
+        ...importFailureProperties(failure, { source, fileType, stage }),
         duration_seconds: (Date.now() - started) / 1000,
       };
       setImportErrorMessage(failure.message);
@@ -1259,7 +1270,7 @@ export default function FreeReaderApp() {
             <button disabled={busy} onClick={() => fileInputRef.current?.click()}><span className={styles.importIcon}><ReaderIcon name="upload" /></span><span><strong>Upload File</strong><small>EPUB, PDF, DOCX & more</small></span><ReaderIcon name="plus" /></button>
             <button onClick={() => setPanel("url")}><span className={styles.importIcon}><ReaderIcon name="link" /></span><span><strong>Web Link</strong><small>Turn an article into audio</small></span><ReaderIcon name="plus" /></button>
             <button onClick={() => setPanel("paste")}><span className={styles.importIcon}><ReaderIcon name="text" /></span><span><strong>Insert Text</strong><small>Notes, scripts, or a passage</small></span><ReaderIcon name="plus" /></button>
-            <button onClick={openGutenbergBrowser}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>Explore Project Gutenberg</small></span><ReaderIcon name="arrow" /></button>
+            <button onClick={() => setPanel("freeBooks")}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>Gutenberg & Internet Archive</small></span><ReaderIcon name="arrow" /></button>
           </div>
           <div className={styles.libraryToolbar}>
             <div className={styles.shelfHeading}>
@@ -1331,9 +1342,9 @@ export default function FreeReaderApp() {
                 <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or Markdown</small></span>
                 <i>&gt;</i>
               </button>
-              <button onClick={() => openGutenbergBrowser()}>
+              <button onClick={() => setPanel("freeBooks")}>
                 <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}><ReaderIcon name="book" /></span>
-                <span><strong>Free Books</strong><small>Browse Project Gutenberg</small></span>
+                <span><strong>Free Books</strong><small>Gutenberg & Internet Archive</small></span>
                 <i>&gt;</i>
               </button>
               <button onClick={() => setPanel("url")}>
@@ -1421,11 +1432,41 @@ export default function FreeReaderApp() {
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
           <form className={styles.modal} role="dialog" aria-modal="true" aria-label="Import reading from the web" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importUrl(); }}>
             <span className={styles.kicker}>Import from Web</span><h2>Import reading from the web</h2>
-            <p>Paste an article or document URL. FreeReader downloads supported documents directly and uses the article service when a web page cannot be read in your browser.</p>
+            <p>Paste an article, document, or Internet Archive book URL. FreeReader downloads supported documents directly and uses the article service when a web page cannot be read in your browser.</p>
             <label className={styles.fieldLabel}>Article or document URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
             {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
             <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Import link"}</button></div>
             <div className={styles.modalPrivacy}>Imported content is stored in this browser{session ? " and synced to your account" : " until you sign in to sync it"}.</div>
+          </form>
+        </div>
+      )}
+      {panel === "freeBooks" && (
+        <div className={styles.modalBackdrop} onMouseDown={() => setPanel(null)}>
+          <div className={`${styles.modal} ${styles.addModal}`} role="dialog" aria-modal="true" aria-label="Choose a free book source" onMouseDown={(event) => event.stopPropagation()}>
+            <span className={styles.kicker}>Free Books</span>
+            <h2>Where would you like to look?</h2>
+            <div className={styles.folderChoices}>
+              <button onClick={openGutenbergBrowser}>
+                <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}><ReaderIcon name="book" /></span>
+                <span><strong>Project Gutenberg</strong><small>Browse free EPUB books</small></span><i>&gt;</i>
+              </button>
+              <button onClick={() => setPanel("archive")}>
+                <span className={`${styles.addChoiceIcon} ${styles.archiveChoiceIcon}`}><ReaderIcon name="book" /></span>
+                <span><strong>Internet Archive</strong><small>Import a publicly available book by URL</small></span><i>&gt;</i>
+              </button>
+            </div>
+            <div className={styles.modalActions}><button onClick={() => setPanel(null)}>Cancel</button></div>
+          </div>
+        </div>
+      )}
+      {panel === "archive" && (
+        <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
+          <form className={styles.modal} role="dialog" aria-modal="true" aria-label="Import from Internet Archive" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importUrl(archiveUrl); }}>
+            <span className={styles.kicker}>Internet Archive</span><h2>Import a book</h2>
+            <p>Paste a public Internet Archive book link. FreeReader uses its available text or EPUB, with PDF as a last resort. Books requiring a loan or login cannot be imported.</p>
+            <label className={styles.fieldLabel}>Book URL<input autoFocus type="url" placeholder="https://archive.org/details/BOOK_ID" value={archiveUrl} onChange={(event) => setArchiveUrl(event.target.value)} /></label>
+            {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
+            <div className={styles.modalActions}><button type="button" disabled={busy} onClick={() => setPanel("freeBooks")}>Back</button><button className={styles.primaryAction} disabled={busy || !archiveUrl.trim()}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Add to Library"}</button></div>
           </form>
         </div>
       )}

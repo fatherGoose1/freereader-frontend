@@ -35,7 +35,7 @@ export function looksLikeHtml(text: string): boolean {
     || /<\/?(?:p|div|span|br|h[1-6]|ul|ol|li|blockquote|article|section|body|html)\b/i.test(text.slice(0, 2_000));
 }
 
-function decodeText(buffer: ArrayBuffer, contentType: string): string {
+export function decodeText(buffer: ArrayBuffer, contentType: string): string {
   const bytes = new Uint8Array(buffer);
   const bom = bytes[0] === 0xff && bytes[1] === 0xfe ? "utf-16le"
     : bytes[0] === 0xfe && bytes[1] === 0xff ? "utf-16be"

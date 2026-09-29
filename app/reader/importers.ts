@@ -452,6 +452,25 @@ export async function parseFile(file: File): Promise<ParsedBook> {
   return parseDocument(buffer, file.name, file.type);
 }
 
+// Archive DjVu XML contains one OBJECT per scanned page. Keep its original page
+// number on every chunk rather than flattening it into an unindexed TXT file.
+export function parseArchivePageXml(xml: string, title: string, clean: (text: string) => string): ParsedBook {
+  const document = new DOMParser().parseFromString(xml, "application/xml");
+  if (document.querySelector("parsererror")) {
+    throw new ImportError("The Internet Archive page text is invalid.", "conversion", "invalid_archive_xml", "conversion", "txt");
+  }
+  const builder = new BookBuilder();
+  for (const [index, object] of Array.from(document.getElementsByTagName("OBJECT")).entries()) {
+    const pageName = Array.from(object.getElementsByTagName("PARAM"))
+      .find((param) => param.getAttribute("name")?.toLowerCase() === "page")?.getAttribute("value") ?? "";
+    const page = Number(pageName.match(/(?:^|_)(\d+)(?:\.[^.]+)?$/)?.[1]) || index + 1;
+    const lines = Array.from(object.getElementsByTagName("LINE"))
+      .map((line) => Array.from(line.getElementsByTagName("WORD")).map((word) => word.textContent ?? "").join(" "));
+    builder.plainText(clean(lines.join("\n")), page);
+  }
+  return requireReadableContent({ title, format: "txt", chapters: builder.chapters, blocks: builder.blocks });
+}
+
 function contentUrl(url: URL): URL {
   const transformed = new URL(url.toString());
   const host = transformed.hostname.toLowerCase();

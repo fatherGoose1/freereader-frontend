@@ -30,6 +30,8 @@ export interface LibraryBook {
   format: DocumentFormat;
   sourceName: string;
   sourceIdentifier?: string;
+  sourceUrl?: string;
+  archiveIdentifier?: string;
   parentId?: string;
   size: number;
   createdAt: string;
