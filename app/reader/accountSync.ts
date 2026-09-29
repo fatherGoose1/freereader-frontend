@@ -71,6 +71,10 @@ function syncKey(ownerId: string, kind: AccountSyncRecord["kind"], itemId: strin
   return `${ownerId}:${kind}:${itemId}`;
 }
 
+function isNewer(left: string, right: string): boolean {
+  return Date.parse(left) > Date.parse(right);
+}
+
 async function api<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}/api/v1/freereader/sync${path}`, {
     ...init,
@@ -245,27 +249,29 @@ export async function synchronizeLibrary(
   ownerId: string,
   initialBooks: LibraryBook[],
   initialFolders: LibraryFolder[],
+  activeBookId?: string,
 ): Promise<SyncResult> {
   const manifest = await fetchManifest(token);
   const allRecords = await listAllAccountSyncRecords();
   const records = allRecords.filter((record) => record.ownerId === ownerId);
   const recordsByKey = new Map(records.map((record) => [record.key, record]));
-  const remoteFolders = new Map(manifest.folders.map((folder) => [folder.id, folder]));
+  const localFolders = activeBookId ? [] : initialFolders;
+  const remoteFolders = new Map((activeBookId ? [] : manifest.folders).map((folder) => [folder.id, folder]));
   let folders = [...initialFolders];
   let uploaded = 0;
   let downloaded = 0;
   let localOnly = 0;
 
-  for (const folder of initialFolders) {
+  for (const folder of localFolders) {
     if (allRecords.some((record) => record.kind === "folder" && record.itemId === folder.id && record.ownerId !== ownerId)) {
       continue;
     }
     const remote = remoteFolders.get(folder.id);
-    if (!remote || folder.updatedAt > remote.updatedAt) {
+    if (!remote || isNewer(folder.updatedAt, remote.updatedAt)) {
       const saved = await uploadFolder(token, folder, remote?.revision);
       await saveAccountSyncRecord(syncRecord(ownerId, "folder", saved));
       remoteFolders.delete(folder.id);
-    } else if (remote.updatedAt > folder.updatedAt) {
+    } else if (isNewer(remote.updatedAt, folder.updatedAt)) {
       const updated = { ...folder, name: remote.name, parentId: remote.parentId ?? undefined, updatedAt: remote.updatedAt };
       await saveFolder(updated);
       folders = folders.map((value) => value.id === updated.id ? updated : value);
@@ -289,10 +295,13 @@ export async function synchronizeLibrary(
     folders.push(folder);
   }
 
-  const remoteDocuments = new Map(manifest.documents.map((document) => [document.id, document]));
+  const localBooks = activeBookId ? initialBooks.filter((book) => book.id === activeBookId) : initialBooks;
+  const remoteDocuments = new Map(manifest.documents
+    .filter((document) => !activeBookId || document.id === activeBookId)
+    .map((document) => [document.id, document]));
   const remoteProgress = new Map(manifest.progress.map((progress) => [progress.documentId, progress]));
   let books = [...initialBooks];
-  for (const book of initialBooks) {
+  for (const book of localBooks) {
     if (allRecords.some((record) => record.kind === "document" && record.itemId === book.id && record.ownerId !== ownerId)) {
       localOnly += 1;
       continue;
@@ -322,20 +331,20 @@ export async function synchronizeLibrary(
 
     let resolved = book;
     let resolvedRemote = remote;
-    if (remote.updatedAt > book.updatedAt) {
+    if (isNewer(remote.updatedAt, book.updatedAt)) {
       // Document edits and listening progress have independent timestamps. Keep
       // local progress until it has been compared with the remote progress row.
       resolved = { ...await downloadDocument(token, remote), position: book.position };
       await saveBook(resolved);
       books = books.map((value) => value.id === book.id ? resolved : value);
       downloaded += 1;
-    } else if (book.updatedAt > remote.updatedAt) {
+    } else if (isNewer(book.updatedAt, remote.updatedAt)) {
       resolvedRemote = await uploadDocument(token, book, remote.revision);
       uploaded += 1;
     }
     const progress = remoteProgress.get(book.id);
     const localProgressAt = resolved.position.updatedAt ?? resolved.updatedAt;
-    if (progress && progress.updatedAt > localProgressAt) {
+    if (progress && isNewer(progress.updatedAt, localProgressAt)) {
       resolved = {
         ...resolved,
         position: {
@@ -347,7 +356,7 @@ export async function synchronizeLibrary(
       };
       await saveBook(resolved);
       books = books.map((value) => value.id === book.id ? resolved : value);
-    } else if (!progress || localProgressAt > progress.updatedAt) {
+    } else if (!progress || isNewer(localProgressAt, progress.updatedAt)) {
       await uploadCloudProgress(token, resolved);
     }
     await saveAccountSyncRecord(syncRecord(ownerId, "document", resolvedRemote));

@@ -74,3 +74,49 @@ test("sync uploads a guest book and its reading progress, then preserves newer l
   assert.equal(second.books.find((item) => item.id === id)?.position.offsetSeconds, 42);
   assert.equal(requests.find((request) => request.path.endsWith(`/documents/${id}/progress`))?.body?.offsetSeconds, 42);
 });
+
+test("active-book sync skips other books and does not re-upload equivalent timestamps", async (t) => {
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
+  const activeId = crypto.randomUUID();
+  const otherId = crypto.randomUUID();
+  const createdAt = "2026-09-29T00:00:00.123Z";
+  const remoteCreatedAt = "2026-09-29T00:00:00.123000Z";
+  const activeProgressAt = "2026-09-29T00:00:15.123Z";
+  const remoteProgressAt = "2026-09-29T00:00:15.123000Z";
+  const base: LibraryBook = {
+    id: activeId, title: "Open book", format: "txt", sourceName: "open.txt", size: 15,
+    createdAt, updatedAt: createdAt, chapters: [],
+    blocks: [{ index: 0, text: "Open book text", chapterIndex: 0, isHeading: false }],
+    position: { blockIndex: 0, offsetSeconds: 15, speed: 1, updatedAt: activeProgressAt },
+  };
+  const other: LibraryBook = {
+    ...base, id: otherId, title: "Closed book", updatedAt: "2026-09-29T00:01:00.123Z",
+  };
+  await saveBook(base);
+  await saveBook(other);
+  const requests: string[] = [];
+  let progressAt = remoteCreatedAt;
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    requests.push(`${init?.method ?? "GET"} ${path}`);
+    if (path.endsWith("/manifest")) return Response.json({
+      schemaVersion: 1, documentLimit: 100, maxDocumentBytes: 10485760, folders: [],
+      documents: [activeId, otherId].map((id) => ({ id, updatedAt: remoteCreatedAt, revision: 1 })),
+      progress: [activeId, otherId].map((documentId) => ({ documentId, blockIndex: 0, offsetSeconds: 0,
+        speed: 1, updatedAt: documentId === activeId ? progressAt : remoteCreatedAt, revision: 1 })),
+    });
+    if (path.endsWith(`/documents/${activeId}/progress`) && init?.method === "PUT") {
+      progressAt = remoteProgressAt;
+      return Response.json({ progress: {} });
+    }
+    throw new Error(`Unexpected sync request: ${path}`);
+  });
+
+  await synchronizeLibrary("token", "active-owner", await listBooks(), [], activeId);
+  assert.equal(requests.length, 2);
+  assert.ok(requests[1].endsWith(`/documents/${activeId}/progress`));
+  requests.length = 0;
+  await synchronizeLibrary("token", "active-owner", await listBooks(), [], activeId);
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].endsWith("/manifest"));
+});

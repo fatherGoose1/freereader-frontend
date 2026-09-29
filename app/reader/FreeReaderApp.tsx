@@ -252,7 +252,8 @@ export default function FreeReaderApp() {
       const revision = localRevisionRef.current;
       try {
         const [storedBooks, storedFolders] = await Promise.all([listBooks(), listFolders()]);
-        const result = await synchronizeLibrary(session.access_token, session.user.id, storedBooks, storedFolders);
+        const result = await synchronizeLibrary(session.access_token, session.user.id, storedBooks, storedFolders,
+          localRevision ? selectedRef.current?.id : undefined);
         if (!cancelled) {
           if (revision === localRevisionRef.current) {
             setBooks(result.books);
