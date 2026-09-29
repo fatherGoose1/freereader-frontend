@@ -1177,6 +1177,7 @@ export default function NarrationStudio() {
             )}
           </div>
         </div>
+        <p className={styles.contentRights}>Only generate narration from scripts you own, that are public domain where you live, or that you have permission or a license to narrate. Sharing or selling audio may require additional rights. <Link href="/terms">Content terms</Link></p>
         <div className={styles.settingsFields}>
           <label>Language
             <select value={project.language} onChange={(event) => changeProjectLanguage(event.target.value as SpeechLanguage)}>

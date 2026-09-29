@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { failureCategory, fallbackError } from "../../reader/importErrors";
+import { isPausedArchiveUrl } from "../../reader/pausedSources";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
     if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error();
   } catch {
     return NextResponse.json({ error: "Enter a valid public web address.", code: "invalid_url", error_category: "unsupported" }, { status: 400 });
+  }
+  if (isPausedArchiveUrl(url.toString())) {
+    return NextResponse.json({ error: "Internet Archive imports are temporarily unavailable.", code: "archive_paused", error_category: "unsupported" }, { status: 400 });
   }
   const backend = process.env.KOKO_BACKEND_URL ?? "https://koko-backend-production-c887.up.railway.app";
   const token = process.env.PARRYT_API_TOKEN;

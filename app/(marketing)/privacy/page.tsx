@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalPage
       title="VoiceReader Privacy Policy"
-      updated="September 27, 2026"
+      updated="September 29, 2026"
       intro="VoiceReader is the iOS app, also known as FreeReader on the web. This policy explains the limited information the App and Website handle."
     >
       <h2>1. Who we are</h2>
@@ -27,19 +27,25 @@ export default function PrivacyPolicy() {
       <h2>2. Using VoiceReader or FreeReader without an account</h2>
       <p>
         The VoiceReader iOS App and the anonymous path in FreeReader do not
-        require an account. When you use these paths, the following stays on
-        your device and we cannot recover it:
+        require an account. Your local library is stored on your device;
+        without web sign-in, it is not synced to your account. Locally stored
+        information includes:
       </p>
       <ul>
         <li>your imported documents (EPUBs, PDFs, and text files);</li>
         <li>document text, filenames, titles, or file paths;</li>
-        <li>generated audio and playback positions;</li>
-        <li>advertising identifiers or tracking data.</li>
+        <li>generated audio; and</li>
+        <li>reading progress and playback positions.</li>
       </ul>
       <p>
-        Original imported files, generated audio, and downloaded voice models
-        remain on your device. Anonymous audiobook libraries stay in this browser
-        until its storage is cleared.
+        Original imported files and generated audio remain on your device.
+        Anonymous audiobook libraries stay in this browser until its storage
+        is cleared. The web reader sends text passages to our speech service
+        when generating audio, even without an account. Direct imports from
+        third-party sites contact those sites; when a web page cannot be read
+        directly, its URL is sent to our article-extraction service to retrieve
+        readable text. The source site may receive your IP address and request
+        information under its own privacy policy.
       </p>
 
       <h2>3. Account sign-in and library sync</h2>
@@ -48,7 +54,8 @@ export default function PrivacyPolicy() {
         or use video narration plans. If you sign in, we receive your Google
         account identifier, email address, and basic profile information made
         available by Google. The web reader syncs your parsed documents, folders,
-        and reading progress to your account while you are signed in.
+        and reading progress to your account while you are signed in. Video
+        narration sends script passages to our speech service to generate audio.
       </p>
       <p>Synced audiobook data may include:</p>
       <ul>
@@ -58,15 +65,15 @@ export default function PrivacyPolicy() {
       </ul>
       <p>
         Synced content is stored privately using Supabase and is made
-        available only to authenticated requests for your account. Generated audio
-        and voice models are not synced. To request removal of synced
-        content, contact us through the <a href="/support">support page</a>.
+        available only to authenticated requests for your account. Generated
+        audiobook audio and original source files are not synced. To request
+        removal of synced content, contact us through the <a href="/support">support page</a>.
       </p>
 
       <h2>4. Limited diagnostics we collect</h2>
       <p>
-        The App sends limited, content-free technical diagnostics so we can
-        maintain and improve it. This may include:
+        The App and Website send technical diagnostics and feature-use events
+        so we can maintain and improve them. This may include:
       </p>
       <ul>
         <li>app version and build, and operating-system version;</li>
@@ -77,8 +84,11 @@ export default function PrivacyPolicy() {
         </li>
       </ul>
       <p>
-        Diagnostics never contain your document content, titles, or generated
-        audio. Installation identifiers are not Apple advertising or hardware
+        Diagnostic events are designed not to include document text, titles,
+        filenames, source URLs, or generated audio. They may include document
+        identifiers, import source and format, size, feature usage, and error
+        categories. The Website also uses PostHog for product analytics.
+        Installation identifiers are not Apple advertising or hardware
         identifiers and reset when the App is deleted and reinstalled.
       </p>
 
@@ -97,9 +107,11 @@ export default function PrivacyPolicy() {
       <h2>6. Service providers</h2>
       <p>
         We use Supabase for Google authentication, database hosting, and private
-        object storage. Google processes the sign-in flow under Google&apos;s own
-        privacy terms. These providers process account and synced-content data
-        to operate the service on our behalf.
+        object storage, a speech backend to generate audio from submitted text,
+        an article-extraction service for fallback web imports, and PostHog for
+        website analytics. Google processes the sign-in flow under Google&apos;s
+        own privacy terms. These providers process the data needed to operate
+        their respective features on our behalf.
       </p>
 
       <h2>7. App Store information</h2>
@@ -141,8 +153,7 @@ export default function PrivacyPolicy() {
         New Jersey, United States
       </p>
       <p>
-        Questions about this policy may be submitted through the support link on
-        VoiceReader&apos;s App Store listing.
+        Questions about this policy may be submitted through our <a href="/support">support page</a>.
       </p>
     </LegalPage>
   );

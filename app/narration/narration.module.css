@@ -33,6 +33,8 @@
 .kicker { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .settingsHeading h2 { margin: 5px 0 3px; font-size: 20px; }
 .settingsHeading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.contentRights { margin: 0 28px 18px; padding: 12px 14px; color: var(--muted); background: #f5f7fc; border: 1px solid #e1e7f2; border-radius: 8px; font-size: 12px; line-height: 1.6; }
+.contentRights a { color: #345ab5; text-decoration: underline; }
 .generationActions { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 7px; }
 .settingsFields { display: grid; grid-template-columns: 1fr 1.35fr .8fr; gap: 16px; padding: 0 28px 22px; }
 .settingsFields label, .passageSettings label, .pronunciationForm label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #607087; font-size: 12px; font-weight: 600; }
@@ -236,6 +238,7 @@
   .mode { display: none; }
   .controlbar { width: calc(100% - 24px); margin-top: 16px; }
   .settingsHeading { align-items: flex-start; flex-direction: column; gap: 14px; padding: 20px 18px 16px; }
+  .contentRights { margin: 0 18px 16px; }
   .generationActions { width: 100%; align-items: stretch; }
   .settingsFields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 18px 18px; }
   .settingsFields .voiceField { grid-column: 1 / -1; grid-row: 2; }

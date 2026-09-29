@@ -120,7 +120,7 @@ export default function Home() {
 
       <section className="compatibility" aria-label="Compatible sources and formats">
         <div className="wrap compatibility-row">
-          <p>Bring the reading you already have</p>
+          <p>Bring reading you have the rights to narrate</p>
           <div className="format-list">
             <span className="gutenberg-mark">Project Gutenberg</span>
             {formats.map((format) => <span key={format}>{format}</span>)}
@@ -147,7 +147,7 @@ export default function Home() {
               <div className="format-stack" aria-hidden="true">
                 <span>EPUB</span><span>PDF</span><span>DOCX</span>
               </div>
-              <div><h3>Start with your words</h3><p>Upload a document, find a public-domain book, paste a video script, or bring in a web article.</p></div>
+              <div><h3>Start with your words</h3><p>Upload your own work, find a public-domain book, or bring in a script or article you have permission to narrate.</p></div>
             </article>
             <article className="workflow-card">
               <span className="step">02</span>
@@ -172,7 +172,8 @@ export default function Home() {
             <h2>Your words stay yours.</h2>
             <p>
               Use either workspace without an account. Your library and narration
-              projects are saved in your browser. Audiobook listening is always free.
+              projects are saved in your browser; text is sent to our speech service
+              when you generate audio. Audiobook listening is always free.
             </p>
             <Link className="light-link" href="/privacy">Read the privacy policy <ArrowIcon /></Link>
           </div>

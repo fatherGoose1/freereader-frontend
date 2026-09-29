@@ -74,17 +74,18 @@ export default function Support() {
 
       <h3>Does FreeReader upload my documents?</h3>
       <p>
-        No. Your document text, filenames, titles, file paths, and generated
-        audio remain on your device. The app sends only limited, content-free
-        diagnostics. See the <Link href="/privacy">Privacy Policy</Link> for
-        details.
+        The iOS app processes documents on your device. On the web, original
+        files and generated audiobook audio stay in your browser, but speech
+        generation sends passages to our speech service. Signing in also syncs
+        parsed documents and reading progress to your account. See the{" "}
+        <Link href="/privacy">Privacy Policy</Link> for details.
       </p>
 
       <h3>Can support recover my library or listening progress?</h3>
       <p>
-        No. FreeReader has no accounts or cloud storage, so we cannot view or
-        restore your documents or progress. Deleting the app removes its local
-        data from that device.
+        We cannot recover a guest library if browser or app storage is cleared.
+        Signed-in web readers can sync parsed books and progress to their
+        accounts. Deleting the iOS app removes its local data from that device.
       </p>
 
       <h3>How do I delete my data?</h3>
@@ -98,6 +99,14 @@ export default function Support() {
       <p>
         Review FreeReader&apos;s <Link href="/privacy">Privacy Policy</Link> and{" "}
         <Link href="/terms">Terms of Service</Link>.
+      </p>
+      <h3>How do I report a rights concern?</h3>
+      <p>
+        If you believe content or generated audio made available through
+        FreeReader infringes your rights, email{" "}
+        <a href="mailto:parker@birdseye.gg?subject=FreeReader%20Rights%20Concern">parker@birdseye.gg</a>
+        {" "}with the work, the location of the material, and how we can reach you.
+        We will review the report.
       </p>
 
       <h2>Publisher</h2>

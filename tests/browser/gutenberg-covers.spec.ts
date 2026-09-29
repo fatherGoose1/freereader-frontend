@@ -15,7 +15,6 @@ test("Free Books covers load through the same-origin proxy under COEP", async ({
 
   await page.goto("/reader/audiobooks");
   await page.getByRole("button", { name: /Free Books/ }).first().click();
-  await page.getByRole("dialog", { name: "Choose a free book source" }).getByRole("button", { name: /Project Gutenberg/ }).click();
   const covers = page.locator("main article img");
   await expect.poll(() => covers.count(), { timeout: 30_000 }).toBeGreaterThan(0);
   await expect.poll(async () => covers.first().evaluate((image: HTMLImageElement) => image.naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0);

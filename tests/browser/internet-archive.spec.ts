@@ -1,21 +1,25 @@
 import { expect, test } from "@playwright/test";
 
-test("Free Books offers Archive import and preserves OCR metadata in the library", async ({ page }) => {
-  await page.route("**/api/internet-archive/sample", (route) => route.fulfill({ json: {
-    metadata: { title: "Sample archive book", creator: "Sample author", language: "eng" },
-    files: [{ name: "sample_djvu.txt", size: "100" }, { name: "sample.pdf", size: "1000" }],
-  } }));
-  await page.route("**/api/internet-archive/sample/file?*", (route) => route.fulfill({
-    contentType: "text/plain", body: "An archived read-\ning passage.\n\nA second paragraph.",
-  }));
-
+test("Archive imports are paused across the catalog, web link and proxy routes", async ({ page }) => {
+  let externalRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("archive.org")) externalRequests += 1;
+  });
   await page.goto("/reader/audiobooks");
   await page.getByRole("button", { name: /Free Books/ }).first().click();
-  await page.getByRole("dialog", { name: "Choose a free book source" }).getByRole("button", { name: /Internet Archive/ }).click();
-  await page.getByRole("dialog", { name: "Import from Internet Archive" }).getByRole("textbox", { name: "Book URL" }).fill("https://archive.org/details/sample");
-  await page.getByRole("button", { name: "Add to Library" }).click();
-  await expect(page.getByRole("button", { name: /Sample archive book.*Sample author/ })).toBeVisible();
-  await page.getByRole("button", { name: /Sample archive book.*Sample author/ }).click();
-  await expect(page.getByText("An archived reading passage.")).toBeVisible();
-  await expect(page.getByText("A second paragraph.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Free Books" })).toContainText("Project Gutenberg");
+  await expect(page.getByRole("dialog", { name: "Free Books" })).not.toContainText("Internet Archive");
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: /Web Link/ }).first().click();
+  await page.getByLabel("Article or document URL").fill("https://archive.org/details/sample");
+  await page.getByRole("button", { name: "Import link" }).click();
+  await expect(page.getByRole("alert")).toContainText("Internet Archive imports are temporarily unavailable");
+  expect(externalRequests).toBe(0);
+
+  const metadata = await page.request.get("/api/internet-archive/sample");
+  const file = await page.request.get("/api/internet-archive/sample/file?name=sample.pdf");
+  const fallback = await page.request.post("/api/import-url", { data: { url: "https://archive.org/details/sample" } });
+  expect(metadata.status()).toBe(404);
+  expect(file.status()).toBe(404);
+  expect(fallback.status()).toBe(400);
 });
