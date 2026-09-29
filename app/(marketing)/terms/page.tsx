@@ -16,7 +16,6 @@ export default function Terms() {
       updated="September 5, 2026"
       intro="These terms govern your use of the VoiceReader iPhone app and the FreeReader website, including document imports and generated audio."
     >
-      <p>The content-rights and copyright-complaint provisions below were added on September 29, 2026 and apply from that date forward.</p>
       <aside className="legal-callout">
         <strong>Important notice about generated speech</strong>
         <p>
