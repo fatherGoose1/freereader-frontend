@@ -13,7 +13,7 @@ export default function Terms() {
   return (
     <LegalPage
       title="VoiceReader Terms of Use and EULA"
-      updated="September 29, 2026"
+      updated="September 5, 2026"
       intro="These terms govern your use of the VoiceReader iPhone app and the FreeReader website, including document imports and generated audio."
     >
       <aside className="legal-callout">

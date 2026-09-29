@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalPage
       title="VoiceReader Privacy Policy"
-      updated="September 29, 2026"
+      updated="September 5, 2026"
       intro="VoiceReader is the iOS app, also known as FreeReader on the web. This policy explains the limited information the App and Website handle."
     >
       <h2>1. Who we are</h2>
