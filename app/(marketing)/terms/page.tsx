@@ -16,6 +16,7 @@ export default function Terms() {
       updated="September 5, 2026"
       intro="These terms govern your use of the VoiceReader iPhone app and the FreeReader website, including document imports and generated audio."
     >
+      <p>The content-rights and copyright-complaint provisions below were added on September 29, 2026 and apply from that date forward.</p>
       <aside className="legal-callout">
         <strong>Important notice about generated speech</strong>
         <p>
@@ -130,33 +131,64 @@ export default function Terms() {
         if storage is cleared.
       </p>
       <p>
-        You retain any rights you have in content you import. You grant Prism
-        Labs no license to content that never leaves your device.
+        You retain any rights you have in content you import or submit. The
+        limited license for content processed by our services is described in
+        Section 7; content that remains solely on your device is not licensed
+        to us.
       </p>
 
       <h2>7. Rights to source material and generated audio</h2>
       <p>
-        You must have the rights needed to import, store, sync (if signed in),
-        and generate spoken audio from any book, article, document, or script you
-        use with the App or Website. This may be your own work, a work in the
-        public domain where you live, or material for which you have permission
-        or an applicable license. If you share, publish, or sell generated audio,
-        you must also have the rights needed for that use. Do not use the service
-        to create or distribute unauthorized recordings or other infringing
-        versions of someone else&apos;s work.
+        Each time you import, paste, sync, or submit a book, article, document,
+        script, or other material, you represent and warrant that you own or
+        control the necessary rights, or have a lawful basis or all necessary
+        permissions and licenses, to provide that material and authorize its
+        use with the features you choose. This includes the right to have us
+        receive and process text, store and sync parsed content if you sign in,
+        and generate and play spoken audio. You also represent and warrant that
+        your use of the material and any generated audio will comply with
+        applicable law and will not infringe anyone else&apos;s rights or violate
+        applicable third-party terms. You are responsible for the material you
+        import or submit and for your use of generated audio.
       </p>
       <p>
-        Access to a book on Project Gutenberg, a public website, or another
-        catalog does not by itself establish its copyright status in your
-        country or grant permission to narrate, reproduce, sync, or distribute
-        it. Buying or borrowing a copy does not necessarily grant these rights
-        either. You are responsible for checking the status of the particular
-        work, edition, and intended use before importing or generating audio.
-        Third-party content and services may have additional terms. We do not
-        verify or grant rights in third-party material by listing or linking it.
+        These rights may come from your own work, public-domain status in the
+        relevant jurisdiction, permission, or an applicable license. If you
+        share, publish, or sell generated audio, you must also have the rights
+        needed for that use. Access to a book on Project Gutenberg, a public
+        website, or another catalog, or purchase or borrowing of a copy, does
+        not by itself establish its copyright status or grant narration,
+        reproduction, synchronization, or distribution rights. Check the
+        particular work, edition, location, and intended use. We do not verify
+        or grant rights in third-party material by listing or linking it.
+      </p>
+      <p>
+        For material you submit to our servers, you grant Prism Labs a
+        non-exclusive, worldwide, royalty-free license, with the right to use
+        service providers on our behalf, to receive, host, reproduce, convert,
+        transmit, and process that material and generate audio solely to
+        provide and maintain the features you request, including account sync
+        and speech generation. This license lasts only as long as needed to
+        provide those features or meet legal obligations and does not transfer
+        ownership or authorize us to publish or sell your content. You
+        represent and warrant that you have the rights needed to grant this
+        license. See our <Link href="/privacy">Privacy Policy</Link> for how
+        submitted material is handled.
       </p>
 
-      <h2>8. Privacy</h2>
+      <h2>8. Copyright complaints and repeat infringement</h2>
+      <p>
+        We review reports of alleged infringement sent through our{" "}
+        <Link href="/copyright">Copyright &amp; Rights Policy</Link>. Where
+        appropriate, we may remove or disable access to synced content under
+        our control, restrict features, or suspend or terminate an account.
+        We may terminate accounts of users who repeatedly infringe others&apos;
+        rights in appropriate circumstances. We cannot remove content stored
+        solely on a user&apos;s device. If you believe a report concerns material
+        you are authorized to use, the policy explains how to respond.
+      </p>
+
+      <h2>9. Privacy</h2>
       <p>
         Our <Link href="/privacy">Privacy Policy</Link> explains how the App and
         Website handle information and is incorporated into these Terms.
@@ -166,14 +198,14 @@ export default function Terms() {
         that policy.
       </p>
 
-      <h2>9. Website</h2>
+      <h2>10. Website</h2>
       <p>
         The Website provides the web version of VoiceReader under the FreeReader
         name. We do not guarantee compatibility or availability in any country.
         We may suspend or discontinue the Website without liability.
       </p>
 
-      <h2>10. Ownership and feedback</h2>
+      <h2>11. Ownership and feedback</h2>
       <p>
         The App and Website, including their software, models, design, text,
         graphics, trademarks, and other materials, are owned by Prism Labs or
@@ -183,7 +215,7 @@ export default function Terms() {
         compensation, but you are not required to provide feedback.
       </p>
 
-      <h2>11. Updates, compatibility, and availability</h2>
+      <h2>12. Updates, compatibility, and availability</h2>
       <p>
         VoiceReader may require a compatible device, operating-system version,
         and sufficient local resources. We may add, change, suspend, or remove
@@ -193,7 +225,7 @@ export default function Terms() {
         version.
       </p>
 
-      <h2>12. Apple-specific terms</h2>
+      <h2>13. Apple-specific terms</h2>
       <p>
         You and Prism Labs acknowledge that these Terms are between you and
         Prism Labs, not Apple Inc. (&quot;Apple&quot;), and Prism Labs, not
@@ -240,7 +272,7 @@ export default function Terms() {
         Apple-specific provisions against you as a third-party beneficiary.
       </p>
 
-      <h2>13. Disclaimer of warranties</h2>
+      <h2>14. Disclaimer of warranties</h2>
       <p>
         TO THE MAXIMUM EXTENT PERMITTED BY LAW, VOICEREADER, FREEREADER, AND ALL
         GENERATED AUDIO ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE.&quot; PRISM
@@ -256,7 +288,7 @@ export default function Terms() {
         that cannot lawfully be waived.
       </p>
 
-      <h2>14. Limitation of liability</h2>
+      <h2>15. Limitation of liability</h2>
       <p>
         TO THE MAXIMUM EXTENT PERMITTED BY LAW, PRISM LABS AND ITS MEMBERS,
         MANAGERS, EMPLOYEES, CONTRACTORS, LICENSORS, AND AFFILIATES WILL NOT BE
@@ -268,13 +300,13 @@ export default function Terms() {
       <p>
         To the maximum extent permitted by law, the total liability of Prism
         Labs for all claims arising out of or relating to the App or Website will
-        not exceed 50 U.S. dollars, because the App and Website are provided free
-        of charge.
+        not exceed the greater of 50 U.S. dollars or the amount you paid us for
+        the App or Website in the 12 months before the claim.
         These limitations apply regardless of the legal theory and even if a
         remedy fails of its essential purpose.
       </p>
 
-      <h2>15. Indemnification</h2>
+      <h2>16. Indemnification</h2>
       <p>
         To the extent permitted by law, you agree to defend, indemnify, and hold
         harmless Prism Labs and its affiliates from claims, losses, and
@@ -284,16 +316,18 @@ export default function Terms() {
         to the extent a claim results from Prism Labs&apos; own unlawful conduct.
       </p>
 
-      <h2>16. Termination</h2>
+      <h2>17. Termination</h2>
       <p>
         These Terms remain effective until terminated. You may terminate them by
         stopping use of and deleting the App. Your license terminates
-        automatically if you materially violate these Terms. Provisions that by
-        their nature should survive termination will survive, including
+        automatically if you materially violate these Terms. We may restrict,
+        suspend, or terminate access to the Website for violations of these
+        Terms, including repeated infringement, where appropriate. Provisions
+        that by their nature should survive termination will survive, including
         ownership, disclaimers, liability limits, and dispute provisions.
       </p>
 
-      <h2>17. Governing law and disputes</h2>
+      <h2>18. Governing law and disputes</h2>
       <p>
         These Terms are governed by the laws of the State of New Jersey, United
         States, without regard to conflict-of-law principles. Subject to any
@@ -303,7 +337,7 @@ export default function Terms() {
         Contracts for the International Sale of Goods does not apply.
       </p>
 
-      <h2>18. General terms</h2>
+      <h2>19. General terms</h2>
       <p>
         These Terms and the Privacy Policy are the entire agreement between you
         and Prism Labs regarding the App and Website. If any provision is
@@ -314,7 +348,7 @@ export default function Terms() {
         financing, or sale of assets.
       </p>
 
-      <h2>19. Changes to these terms</h2>
+      <h2>20. Changes to these terms</h2>
       <p>
         We may update these Terms as the App, Website, or applicable law changes.
         We will post the revised Terms and update the effective date. If a
@@ -323,7 +357,7 @@ export default function Terms() {
         constitutes acceptance of the updated Terms.
       </p>
 
-      <h2>20. Contact</h2>
+      <h2>21. Contact</h2>
       <p>
         Prism Labs LLC
         <br />

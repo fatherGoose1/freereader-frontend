@@ -102,11 +102,9 @@ export default function Support() {
       </p>
       <h3>How do I report a rights concern?</h3>
       <p>
-        If you believe content or generated audio made available through
-        FreeReader infringes your rights, email{" "}
-        <a href="mailto:parker@birdseye.gg?subject=FreeReader%20Rights%20Concern">parker@birdseye.gg</a>
-        {" "}with the work, the location of the material, and how we can reach you.
-        We will review the report.
+        If you believe material available through FreeReader infringes your
+        rights, see our <Link href="/copyright">Copyright &amp; Rights Policy</Link>
+        {" "}for what to include in a report and how we respond.
       </p>
 
       <h2>Publisher</h2>
