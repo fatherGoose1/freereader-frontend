@@ -106,3 +106,10 @@ export function voiceDisplayName(voice: NarratorVoice | string): string | undefi
   if (isQwenVoice(voice)) return QWEN_VOICES.find(([id]) => id === voice)?.[1];
   return narratorVoices().find(([value]) => value === voice)?.[1];
 }
+
+// Premium Qwen voices are cached as a single bundled sample per voice, so the
+// picker can play them instantly without calling the narration endpoint.
+export function voicePreviewPath(voice: NarratorVoice | string, language: string): string {
+  if (isQwenVoice(voice) || language === "en") return `/voice-previews/${voice}.m4a`;
+  return `/voice-previews/${language}/${voice}.m4a`;
+}

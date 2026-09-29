@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { builtInVoiceProfiles, POPULAR_VOICE_IDS, searchVoiceProfiles } from "./voiceCatalog";
 import { voiceForLanguage } from "../reader/speech";
+import { voicePreviewPath } from "../reader/voices";
 
 test("English lists three popular voices with sound tags", () => {
   const profiles = builtInVoiceProfiles("en");
@@ -22,4 +23,11 @@ test("search surfaces the strongest tag match and respects language availability
   const spanish = builtInVoiceProfiles("es");
   assert.equal(spanish.length, 10);
   assert.ok(!spanish.some((profile) => profile.id === "af_heart"));
+});
+
+test("premium voices resolve to a cached bundled preview sample", () => {
+  assert.equal(voicePreviewPath("qwen_ryan", "en"), "/voice-previews/qwen_ryan.m4a");
+  assert.equal(voicePreviewPath("qwen_vivian", "zh"), "/voice-previews/qwen_vivian.m4a");
+  assert.equal(voicePreviewPath("af_heart", "en"), "/voice-previews/af_heart.m4a");
+  assert.equal(voicePreviewPath("M3", "fr"), "/voice-previews/fr/M3.m4a");
 });

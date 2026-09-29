@@ -6,7 +6,7 @@ import BrandMark from "../components/BrandMark";
 import { useEffect, useId, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import { clonedVoiceId, isClonedVoice, isQwenVoice, QWEN_LANGUAGES, QWEN_VOICES, type NarratorVoice } from "../reader/voices";
+import { clonedVoiceId, isClonedVoice, isQwenVoice, QWEN_LANGUAGES, QWEN_VOICES, voicePreviewPath, type NarratorVoice } from "../reader/voices";
 import { detectSpeechLanguage, voiceForLanguage, voicesForLanguage } from "../reader/speech";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { currentAccessToken, initAuthToken } from "../reader/authToken";
@@ -971,9 +971,7 @@ export default function NarrationStudio() {
       URL.revokeObjectURL(audioUrl.current);
       audioUrl.current = null;
     }
-    audio.src = language === "en"
-      ? `/voice-previews/${voice}.m4a`
-      : `/voice-previews/${language}/${voice}.m4a`;
+    audio.src = voicePreviewPath(voice, language);
     voicePreviewRef.current = true;
     setVoicePreviewPlaying(true);
     setPreviewingVoiceId(voice);
@@ -1239,7 +1237,9 @@ export default function NarrationStudio() {
           </div>
           <div className={styles.voiceGrid}>{QWEN_VOICES.map(([id, name]) =>
             <VoiceCard key={id} profile={{ id, name, tags: ["Qwen3-TTS", "expressive"] }} selected={currentPickerVoice === id}
-              previewing={false} premium locked={!hasVoicePlan || !qwenAvailable} onSelect={() => selectVoice(id)} />)}</div>
+              previewing={voicePreviewPlaying && previewingVoiceId === id} premium locked={!hasVoicePlan || !qwenAvailable}
+              onSelect={() => selectVoice(id)}
+              onPreview={() => voicePreviewPlaying && previewingVoiceId === id ? stopPlayback() : void previewVoice(id, pickerLanguage)} />)}</div>
           {!qwenAvailable && <p className={styles.voicePremiumNote}>Premium voices are not available for {languageName(pickerLanguage)}. Choose a supported language to use them.</p>}
           {!hasVoicePlan && <p className={styles.voicePremiumNote}>Unlock these voices and delivery instructions with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>}
         </section>
