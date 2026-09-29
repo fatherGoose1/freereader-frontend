@@ -30,6 +30,7 @@ import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
 import { supabaseClient } from "./supabase";
 import { synchronizeLibrary } from "./accountSync";
+import { linkInstallation } from "./usage";
 import type { Session } from "@supabase/supabase-js";
 
 type Panel = "voice" | "url" | "gutenberg" | "folder" | "add" | "paste" | null;
@@ -237,6 +238,7 @@ export default function FreeReaderApp() {
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);
       setAuthReady(true);
+      if (next) void linkInstallation(next.access_token).catch(() => undefined);
     });
     return () => data.subscription.unsubscribe();
   }, []);
