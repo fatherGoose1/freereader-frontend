@@ -1197,7 +1197,7 @@ export default function FreeReaderApp() {
               </div></div>
             )}
             <small>{narrationLanguage === "en"
-              ? "English narration offers Kokoro and Supertonic voices. Speaking Rate changes how the server generates the audio."
+              ? "Speaking Rate changes how the audio is generated."
               : "Higher quality takes longer to generate. Changes apply to new passages."}</small>
           </div>
           </div>

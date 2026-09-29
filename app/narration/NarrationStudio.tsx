@@ -1231,12 +1231,12 @@ export default function NarrationStudio() {
         {voicePickerPassage && <button type="button" className={styles.inheritVoice} onClick={() => selectVoice(null)}>
           Use project voice <span>{voiceName(voiceForLanguage(project.defaultVoice, pickerLanguage), pickerLanguage)}{!voicePickerPassage.voiceId ? " · Current" : ""}</span>
         </button>}
-        <section className={styles.voicePremiumSection} aria-label="Premium Qwen voices">
+        <section className={styles.voicePremiumSection} aria-label="Premium voices">
           <div className={styles.voicePremiumHeading}>
-            <div><span className={styles.kicker}>★ Premium · Qwen3-TTS</span><h3>Expressive voices</h3><p>Choose a premium voice to direct the feeling of each passage.</p></div>
+            <div><span className={styles.kicker}>★ Premium</span><h3>Expressive voices</h3><p>Choose a premium voice to direct the feeling of each passage.</p></div>
           </div>
           <div className={styles.voiceGrid}>{QWEN_VOICES.map(([id, name]) =>
-            <VoiceCard key={id} profile={{ id, name, tags: ["Qwen3-TTS", "expressive"] }} selected={currentPickerVoice === id}
+            <VoiceCard key={id} profile={{ id, name, tags: ["expressive", "emotional"] }} selected={currentPickerVoice === id}
               previewing={voicePreviewPlaying && previewingVoiceId === id} premium locked={!hasVoicePlan || !qwenAvailable}
               onSelect={() => selectVoice(id)}
               onPreview={() => voicePreviewPlaying && previewingVoiceId === id ? stopPlayback() : void previewVoice(id, pickerLanguage)} />)}</div>
@@ -1420,8 +1420,8 @@ export default function NarrationStudio() {
                         onChange={(event) => configureSegment(segment.id, { instruct: event.target.value })} />
                       <small>Describe the emotion or delivery for this passage. Regenerate to hear changes.</small>
                     </label>}
-                    {hasVoicePlan && selectedQwenVoice && <label className={styles.deliveryInstruction}>Delivery instruction · premium voice
-                      <input type="text" maxLength={200} value={segment.instruct ?? ""} placeholder="e.g. Speak calmly, with a hint of sadness"
+                    {hasVoicePlan && selectedQwenVoice && <label className={styles.deliveryInstruction}>Delivery instruction
+                      <input type="text" maxLength={200} value={segment.instruct ?? ""} placeholder="e.g. happy, angry"
                         onChange={(event) => configureSegment(segment.id, { instruct: event.target.value })} />
                       <small>Set the feeling for this passage. Changing it requires new audio.</small>
                     </label>}
