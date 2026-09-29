@@ -33,26 +33,26 @@ test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
     assert.equal(headers.Authorization, "Bearer tts-key");
     assert.equal(headers["X-FreeReader-User-Token"], "signed-in-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
-      text: "Hello there.", voice_id: "darwin_voice-1", user_id: "user-1", language: "en", speed: 0.9,
+      text: "Hello there.", voice_id: "voice-1", user_id: "user-1", language: "en", speed: 0.9,
     });
     return new Response(new Uint8Array([1, 2, 3]), {
       headers: {
         "Content-Type": "audio/mp4",
         "X-Audio-Duration": "1.5",
         "X-Generation-Seconds": "0.8",
-        "X-TTS-Model": "darwin-tts-1.7b-cross",
+        "X-TTS-Model": "qwen3-tts-12hz-0.6b-base",
       },
     });
   });
   const response = await cloneSpeech(new Request("http://localhost/api/clone-tts", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer signed-in-token" },
-    body: JSON.stringify({ text: "Hello there.", voiceId: "darwin_voice-1", userId: "user-1", language: "en", speed: 0.9 }),
+    body: JSON.stringify({ text: "Hello there.", voiceId: "voice-1", userId: "user-1", language: "en", speed: 0.9 }),
   }));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "audio/mp4");
   assert.equal(response.headers.get("X-Audio-Duration"), "1.5");
-  assert.equal(response.headers.get("X-TTS-Model"), "darwin-tts-1.7b-cross");
+  assert.equal(response.headers.get("X-TTS-Model"), "qwen3-tts-12hz-0.6b-base");
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2, 3]);
   assert.equal(fetch.mock.callCount(), 1);
 });
@@ -76,8 +76,8 @@ test("voice cloning forwards the reference clip to the backend voices/clone endp
       user_id: "user-1", audio: "AAAA", name: "Narrator", language: "en", ref_text: "Hello.",
     });
     return new Response(JSON.stringify({
-      voice_id: "darwin_voice-1", user_id: "user-1", ref_text: "Hello.",
-      duration_seconds: 12.3, model: "zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer", revision: "abc",
+      voice_id: "voice-1", user_id: "user-1", ref_text: "Hello.",
+      duration_seconds: 12.3, model: "Qwen/Qwen3-TTS-12Hz-0.6B-Base", revision: "abc",
       created_at: "2026-09-25T00:00:00.000Z",
     }), { headers: { "Content-Type": "application/json" } });
   });
@@ -87,7 +87,7 @@ test("voice cloning forwards the reference clip to the backend voices/clone endp
     body: JSON.stringify({ userId: "user-1", name: "Narrator", language: "en", refText: "Hello.", audio: "AAAA" }),
   }));
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as { voice_id: string }).voice_id, "darwin_voice-1");
+  assert.equal((await response.json() as { voice_id: string }).voice_id, "voice-1");
   assert.equal(fetch.mock.callCount(), 1);
 });
 

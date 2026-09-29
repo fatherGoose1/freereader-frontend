@@ -1245,7 +1245,7 @@ export default function NarrationStudio() {
         </section>
         <section className={styles.voicePremiumSection} aria-label="Premium cloned voices">
           <div className={styles.voicePremiumHeading}>
-            <div><span className={styles.kicker}>Pro & Premium · Darwin-TTS</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
+            <div><span className={styles.kicker}>Pro & Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
             {hasVoicePlan ? <button type="button" className={styles.addCloneButton} disabled={clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
               : <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
           </div>

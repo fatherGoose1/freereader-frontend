@@ -56,8 +56,7 @@ const tiers: Tier[] = [
       "Up to 10 hours of video narration each month",
       "Voice cloning — narrate in your own or a custom voice",
       "Expressive Qwen voices with per-passage delivery instructions",
-      "Save up to 3 Darwin-TTS cloned voices",
-      "1 hour of premium voice generation each month (built-in or cloned)",
+      "1 hour of premium voice generation each month (Qwen or cloned)",
       "Everything in the Free tier",
       "More room to revise and regenerate your scripts",
     ],
@@ -72,7 +71,7 @@ const tiers: Tier[] = [
     summary: "More time with your favorite voices for power users and teams.",
     features: [
       "Up to 20 hours of video narration each month",
-      "5 hours of premium voice generation each month (built-in or cloned)",
+      "5 hours of premium voice generation each month (Qwen or cloned)",
       "Everything in the Pro tier",
     ],
     cta: { label: "Get Premium", href: "/reader" },
@@ -138,7 +137,7 @@ export default async function Pricing() {
       <p className="pricing-note">
         Audio generation is measured by the length of the narration you create.
         These monthly allowances apply only to the video Narration Studio.
-        Built-in premium and cloned-voice audio share the premium voice allowance:
+        Built-in Qwen and cloned-voice audio share the premium voice allowance:
         1 hour on Pro or 5 hours on Premium, included in each plan&apos;s narration hours.
         Sign in with Google to subscribe.
       </p>

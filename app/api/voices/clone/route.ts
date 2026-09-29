@@ -3,8 +3,8 @@ import { callBackend, freereaderBackendConfig } from "../../freereaderBackend";
 
 export const runtime = "nodejs";
 
-// Conditions a reference clip into a reusable Darwin-TTS clone through the Koko
-// backend. The backend owns the separate Modal endpoint and its credentials.
+// Conditions a reference clip into a reusable Qwen3-TTS clone through the Koko
+// backend. The backend owns the Modal endpoint and its credentials.
 export async function POST(request: Request) {
   const config = freereaderBackendConfig();
   if (!config) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
