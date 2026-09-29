@@ -81,6 +81,12 @@ test("new cloned voices route to VoxCPM2 while existing clones retain their mode
   assert.equal((await router.route("clone:legacy-voice", "en")).model, "qwen3-tts-clone-v1");
 });
 
+test("cloned-voice delivery reaches the remote narration client", async () => {
+  const { router, calls } = setup(false);
+  await router.synthesize("Hello", "clone:vox2_voice-1", 12, undefined, false, 1, "en", undefined, "youtube_narration", "Speak warmly");
+  assert.deepEqual(calls, ["remote:Hello:en:clone:vox2_voice-1:12:Speak warmly"]);
+});
+
 for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: non-English uses the server Supertonic voice and steps`, async () => {
     const { calls, speakFrench } = setup(mobile);

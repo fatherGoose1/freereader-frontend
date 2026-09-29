@@ -60,7 +60,7 @@ export class RemoteSpeechClient {
       const requestedVoice = options?.voice;
       if (requestedVoice && isClonedVoice(requestedVoice)) {
         return await this.synthesizeClone(items, speechSpeed, status, requestedVoice,
-          options?.language, controller.signal, generationStartedAt);
+          options?.language, controller.signal, generationStartedAt, options?.instruct);
       }
       if (requestedVoice && isQwenVoice(requestedVoice)) {
         if (items.length !== 1 || options?.source !== "youtube_narration") throw new Error("Premium voices are available for video narration only.");
@@ -143,7 +143,8 @@ export class RemoteSpeechClient {
   // Cloned voices are conditioned on the GPU once; each generation only sends the
   // persisted voice id, never the original reference audio.
   private async synthesizeClone(items: BatchItem[], speechSpeed: number, status: TtsStatus | undefined,
-    voiceRef: string, language: string | undefined, signal: AbortSignal, generationStartedAt: number): Promise<SpeechResult[]> {
+    voiceRef: string, language: string | undefined, signal: AbortSignal, generationStartedAt: number,
+    instruct?: string): Promise<SpeechResult[]> {
     const record = findClonedVoice(clonedVoiceId(voiceRef));
     if (!record) throw new Error("This cloned voice is not available in this browser. Create it again from Clone voice.");
     const parts: SpeechResult[] = [];
@@ -161,6 +162,7 @@ export class RemoteSpeechClient {
           voiceName: record.name,
           language,
           speed: speechSpeed,
+          ...(instruct?.trim() ? { instruct: instruct.trim() } : {}),
         }),
         signal,
       });

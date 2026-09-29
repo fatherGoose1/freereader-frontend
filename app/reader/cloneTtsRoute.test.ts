@@ -34,6 +34,7 @@ test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
     assert.equal(headers["X-FreeReader-User-Token"], "signed-in-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
       text: "Hello there.", voice_id: "vox2_voice-1", user_id: "user-1", language: "en", speed: 0.9,
+      instruct: "Speak softly, with a hint of sadness",
     });
     return new Response(new Uint8Array([1, 2, 3]), {
       headers: {
@@ -47,7 +48,8 @@ test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
   const response = await cloneSpeech(new Request("http://localhost/api/clone-tts", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer signed-in-token" },
-    body: JSON.stringify({ text: "Hello there.", voiceId: "vox2_voice-1", userId: "user-1", language: "en", speed: 0.9 }),
+    body: JSON.stringify({ text: "Hello there.", voiceId: "vox2_voice-1", userId: "user-1", language: "en", speed: 0.9,
+      instruct: "  Speak softly, with a hint of sadness  " }),
   }));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "audio/mp4");

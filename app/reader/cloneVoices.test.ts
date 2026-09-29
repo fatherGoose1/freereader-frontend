@@ -3,6 +3,7 @@ import test from "node:test";
 import { clonedVoiceId, clonedVoiceRef, isClonedVoice } from "./voices";
 import { voiceForLanguage } from "./speech";
 import { findClonedVoice, listClonedVoices, removeClonedVoice, replaceClonedVoices, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "./cloneVoices";
+import { RemoteSpeechClient } from "./remoteSpeech";
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -80,4 +81,21 @@ test("removing a clone and reading corrupt storage are safe", () => {
   assert.deepEqual(listClonedVoices(), []);
   storage.setItem("freereaderClonedVoices", JSON.stringify([{ id: 1 }, { id: "ok", userId: "u", name: "n", createdAt: "t", durationSeconds: 1 }]));
   assert.equal(listClonedVoices().length, 1);
+});
+
+test("clone narration sends delivery instructions separately from spoken text", async (t) => {
+  useMemoryWindow();
+  saveClonedVoice(record("vox2_voice-1"));
+  let payload: Record<string, unknown> | undefined;
+  t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    payload = JSON.parse(String(init?.body));
+    return new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "audio/mp4", "X-Audio-Duration": "1.5" } });
+  });
+
+  await new RemoteSpeechClient().synthesize("Hello there", 1, false, undefined,
+    { voice: "clone:vox2_voice-1", language: "en", steps: 12, instruct: "Speak warmly" });
+
+  assert.equal(payload?.text, "Hello there.");
+  assert.equal(payload?.instruct, "Speak warmly");
+  assert.equal(payload?.voiceId, "vox2_voice-1");
 });

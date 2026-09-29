@@ -6,7 +6,7 @@ import BrandMark from "../components/BrandMark";
 import { useEffect, useId, useRef, useState } from "react";
 import { synthesize } from "../reader/narration";
 import { getAudio, listNarrationProjects, saveAudio, saveNarrationProject } from "../reader/storage";
-import { isClonedVoice, isQwenVoice, type NarratorVoice } from "../reader/voices";
+import { clonedVoiceId, isClonedVoice, isQwenVoice, type NarratorVoice } from "../reader/voices";
 import { detectSpeechLanguage, voiceForLanguage, voicesForLanguage } from "../reader/speech";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { currentAccessToken, initAuthToken } from "../reader/authToken";
@@ -56,6 +56,10 @@ function languageName(language: SpeechLanguage): string {
   return SPEECH_LANGUAGES.find(([code]) => code === language)?.[1] ?? language;
 }
 
+function isVoxClone(voice: NarratorVoice): boolean {
+  return isClonedVoice(voice) && clonedVoiceId(voice).startsWith("vox2_");
+}
+
 function inputKey(segment: NarrationSegment, project: NarrationProject): string {
   const language = passageLanguage(segment, project);
   const voice = voiceForLanguage(segment.voiceId ?? project.defaultVoice, language);
@@ -65,7 +69,7 @@ function inputKey(segment: NarrationSegment, project: NarrationProject): string 
     language,
     voice,
     speed: segment.speedOverride ?? project.globalSpeed,
-    ...(isQwenVoice(voice) && { instruct: segment.instruct?.trim() ?? "" }),
+    ...((isQwenVoice(voice) || isVoxClone(voice)) && { instruct: segment.instruct?.trim() ?? "" }),
   });
 }
 
@@ -287,6 +291,7 @@ export default function NarrationStudio() {
   const totalDuration = playable.reduce((sum, segment, index) => sum + (segment.audio?.duration ?? 0) + (index < playable.length - 1 ? segment.pauseAfterMs / 1000 : 0), 0);
   const generationPercent = generationProgress ? Math.round(generationProgress.completed / generationProgress.total * 100) : 0;
   const hasVoicePlan = usage?.plan === "pro" || usage?.plan === "premium";
+  const selectedVoice = selected && voiceForLanguage(selected.voiceId ?? project.defaultVoice, passageLanguage(selected, project));
   const profileName = session?.user.email?.split("@")[0] ?? "Sign in";
   const voicePickerPassage = voicePicker?.passageId ? project.segments.find((segment) => segment.id === voicePicker.passageId) ?? null : null;
   const pickerLanguage = voicePickerPassage ? passageLanguage(voicePickerPassage, project) : project.language;
@@ -721,7 +726,7 @@ export default function NarrationStudio() {
       const result = await synthesize(
         spokenText(segment, currentProject.pronunciations), voice, 12,
         (message) => setGenerationMessage(message), false, speed, language, undefined, "youtube_narration",
-        isQwenVoice(voice) && hasVoicePlan ? segment.instruct?.trim() : undefined,
+        (isQwenVoice(voice) || isVoxClone(voice)) && hasVoicePlan ? segment.instruct?.trim() : undefined,
       );
       const latestProject = projectRef.current;
       const latest = latestProject.segments.find((item) => item.id === id);
@@ -1257,7 +1262,7 @@ export default function NarrationStudio() {
         </>}
       </StudioDialog>}
 
-      {cloneOpen && <StudioDialog title="Clone a voice" description={hasVoicePlan ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Pro or Premium to create and use a cloned voice."} onClose={closeClone}>
+      {cloneOpen && <StudioDialog title="Clone a voice" description={hasVoicePlan ? `For a closer match, use 10–${MAX_CLONE_SECONDS} seconds of clean, single-speaker speech (minimum ${MIN_CLONE_SECONDS} seconds). We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Pro or Premium to create and use a cloned voice."} onClose={closeClone}>
         {!hasVoicePlan ? <div className={styles.premiumGate}>
           <strong>Voice cloning is included with Pro and Premium</strong>
           <p>Pro includes 1 hour of premium voice generation each month; Premium includes 5 hours.</p>
@@ -1397,6 +1402,11 @@ export default function NarrationStudio() {
                         {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
                       </select>
                     </label>
+                    {hasVoicePlan && selectedVoice && isVoxClone(selectedVoice) && <label className={styles.deliveryInstruction}>Delivery instruction · cloned voice
+                      <input type="text" maxLength={200} value={segment.instruct ?? ""} placeholder="e.g. Speak softly, with a hint of sadness"
+                        onChange={(event) => configureSegment(segment.id, { instruct: event.target.value })} />
+                      <small>Describe the emotion or delivery for this passage. Regenerate to hear changes.</small>
+                    </label>}
                     <fieldset className={styles.pauseControls}>
                       <legend>Pause after</legend>
                       <div className={styles.pausePresets}>

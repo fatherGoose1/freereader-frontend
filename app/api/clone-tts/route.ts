@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   if (!userToken) return NextResponse.json({ error: "premium_required" }, { status: 403 });
 
   const body = await request.json().catch(() => null) as {
-    text?: unknown; voiceId?: unknown; userId?: unknown; language?: unknown; speed?: unknown; voiceName?: unknown;
+    text?: unknown; voiceId?: unknown; userId?: unknown; language?: unknown; speed?: unknown; voiceName?: unknown; instruct?: unknown;
   } | null;
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   const voiceId = typeof body?.voiceId === "string" ? body.voiceId.trim() : "";
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
   if (typeof body?.language === "string" && body.language) upstreamBody.language = body.language;
   if (typeof body?.speed === "number" && Number.isFinite(body.speed)) upstreamBody.speed = body.speed;
   if (typeof body?.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);
+  if (typeof body?.instruct === "string" && body.instruct.trim()) upstreamBody.instruct = body.instruct.trim();
 
   let response: Response;
   try {
