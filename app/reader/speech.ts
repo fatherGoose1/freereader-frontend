@@ -2,8 +2,6 @@ import {
   englishVoices,
   isClonedVoice,
   isKokoroVoice,
-  isQwenVoice,
-  QWEN_LANGUAGES,
   isSupertonicVoice,
   supertonicVoices,
   type NarratorVoice,
@@ -39,7 +37,6 @@ export function voicesForLanguage(language: SpeechLanguage): readonly (readonly 
 export function voiceForLanguage(voice: NarratorVoice, language: SpeechLanguage): NarratorVoice {
   // Cloned voices are language-agnostic; never remap them to a built-in default.
   if (isClonedVoice(voice)) return voice;
-  if (isQwenVoice(voice) && QWEN_LANGUAGES.has(language)) return voice;
   if (language === "en") return isKokoroVoice(voice) || isSupertonicVoice(voice) ? voice : "af_heart";
   return isSupertonicVoice(voice) ? voice : "M3";
 }

@@ -33,26 +33,26 @@ test("clone speech proxies to the backend speech/clone endpoint", async (t) => {
     assert.equal(headers.Authorization, "Bearer tts-key");
     assert.equal(headers["X-FreeReader-User-Token"], "signed-in-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
-      text: "Hello there.", voice_id: "voice-1", user_id: "user-1", language: "en", speed: 0.9,
+      text: "Hello there.", voice_id: "vox2_voice-1", user_id: "user-1", language: "en", speed: 0.9,
     });
     return new Response(new Uint8Array([1, 2, 3]), {
       headers: {
         "Content-Type": "audio/mp4",
         "X-Audio-Duration": "1.5",
         "X-Generation-Seconds": "0.8",
-        "X-TTS-Model": "qwen3-tts-12hz-0.6b-base",
+        "X-TTS-Model": "voxcpm2-2b",
       },
     });
   });
   const response = await cloneSpeech(new Request("http://localhost/api/clone-tts", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer signed-in-token" },
-    body: JSON.stringify({ text: "Hello there.", voiceId: "voice-1", userId: "user-1", language: "en", speed: 0.9 }),
+    body: JSON.stringify({ text: "Hello there.", voiceId: "vox2_voice-1", userId: "user-1", language: "en", speed: 0.9 }),
   }));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "audio/mp4");
   assert.equal(response.headers.get("X-Audio-Duration"), "1.5");
-  assert.equal(response.headers.get("X-TTS-Model"), "qwen3-tts-12hz-0.6b-base");
+  assert.equal(response.headers.get("X-TTS-Model"), "voxcpm2-2b");
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2, 3]);
   assert.equal(fetch.mock.callCount(), 1);
 });
@@ -73,21 +73,21 @@ test("voice cloning forwards the reference clip to the backend voices/clone endp
     assert.equal(String(input), "https://backend.example/api/v1/freereader/voices/clone");
     assert.equal((init?.headers as Record<string, string>)["X-FreeReader-User-Token"], "signed-in-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
-      user_id: "user-1", audio: "AAAA", voice_id: "voice-1", name: "Narrator", language: "en", ref_text: "Hello.",
+      user_id: "user-1", audio: "AAAA", name: "Narrator", language: "en", ref_text: "Hello.",
     });
     return new Response(JSON.stringify({
-      voice_id: "voice-1", user_id: "user-1", ref_text: "Hello.", x_vector_only_mode: false,
-      duration_seconds: 12.3, model: "Qwen/Qwen3-TTS-12Hz-0.6B-Base", revision: "abc",
+      voice_id: "vox2_voice-1", user_id: "user-1", ref_text: "Hello.",
+      duration_seconds: 12.3, model: "openbmb/VoxCPM2", revision: "abc",
       created_at: "2026-09-25T00:00:00.000Z",
     }), { headers: { "Content-Type": "application/json" } });
   });
   const response = await createClone(new Request("http://localhost/api/voices/clone", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer signed-in-token" },
-    body: JSON.stringify({ userId: "user-1", voiceId: "voice-1", name: "Narrator", language: "en", refText: "Hello.", audio: "AAAA" }),
+    body: JSON.stringify({ userId: "user-1", name: "Narrator", language: "en", refText: "Hello.", audio: "AAAA" }),
   }));
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as { voice_id: string }).voice_id, "voice-1");
+  assert.equal((await response.json() as { voice_id: string }).voice_id, "vox2_voice-1");
   assert.equal(fetch.mock.callCount(), 1);
 });
 

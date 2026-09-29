@@ -1,5 +1,5 @@
 // Client-side preparation for voice cloning: decode any recorded/uploaded clip,
-// cut it to the 25 second maximum the Modal endpoint accepts, and hand back a
+// cut it to the 25 second maximum the VoxCPM2 endpoint accepts, and hand back a
 // WAV payload the API route can forward.
 
 export const MAX_CLONE_SECONDS = 25;

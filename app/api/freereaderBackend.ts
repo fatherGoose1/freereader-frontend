@@ -1,5 +1,5 @@
 // Server-only helper for talking to the Koko backend, which owns the Modal
-// Qwen3-TTS credentials. The browser never receives a Modal token or URL.
+// Modal TTS credentials stay on the backend; the browser never receives a token or URL.
 
 export interface FreeReaderBackendConfig {
   url: string;

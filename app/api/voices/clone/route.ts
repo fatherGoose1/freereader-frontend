@@ -3,8 +3,8 @@ import { callBackend, freereaderBackendConfig } from "../../freereaderBackend";
 
 export const runtime = "nodejs";
 
-// Conditions a reference clip into a reusable clone through the Koko backend,
-// which stores the Qwen3-TTS conditioning on the Modal volume.
+// Conditions a reference clip into a reusable VoxCPM2 clone through the Koko
+// backend. The backend owns the separate Modal endpoint and its credentials.
 export async function POST(request: Request) {
   const config = freereaderBackendConfig();
   if (!config) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });

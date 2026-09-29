@@ -3,7 +3,7 @@ import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
-import { isClonedVoice, isQwenVoice, isSupertonicVoice } from "./voices";
+import { clonedVoiceId, isClonedVoice, isQwenVoice, isSupertonicVoice } from "./voices";
 import type { TelemetrySource } from "./telemetry";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
@@ -32,9 +32,10 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
-    // User clones are served by the Qwen3-TTS Modal endpoint in any language.
+    // New clones use VoxCPM2; existing Qwen clones retain their original cache key.
     if (isClonedVoice(voice)) {
-      return { model: "qwen3-tts-clone-v1", voice, provider: "Server", mobile: this.mobile };
+      const model = clonedVoiceId(voice).startsWith("vox2_") ? "voxcpm2-clone-v1" : "qwen3-tts-clone-v1";
+      return { model, voice, provider: "Server", mobile: this.mobile };
     }
     if (isQwenVoice(voice)) {
       return { model: "qwen3-tts-customvoice-v1", voice, provider: "Server", mobile: this.mobile };

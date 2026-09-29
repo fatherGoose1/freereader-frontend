@@ -4,7 +4,7 @@ import { callBackend, freereaderBackendConfig } from "../freereaderBackend";
 export const runtime = "nodejs";
 
 // Generates speech with a persisted user clone through the Koko backend, which
-// calls the Qwen3-TTS Modal app. Mirrors the /api/tts response shape.
+// routes new clones to VoxCPM2 and older clones to their original model.
 export async function POST(request: Request) {
   const config = freereaderBackendConfig();
   if (!config) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
