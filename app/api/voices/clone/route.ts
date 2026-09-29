@@ -3,7 +3,7 @@ import { callBackend, freereaderBackendConfig } from "../../freereaderBackend";
 
 export const runtime = "nodejs";
 
-// Conditions a reference clip into a reusable VoxCPM2 clone through the Koko
+// Conditions a reference clip into a reusable Darwin-TTS clone through the Koko
 // backend. The backend owns the separate Modal endpoint and its credentials.
 export async function POST(request: Request) {
   const config = freereaderBackendConfig();

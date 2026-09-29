@@ -32,9 +32,11 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
-    // New clones use VoxCPM2; existing Qwen clones retain their original cache key.
+    // Preserve distinct cache keys for Darwin, VoxCPM2, and earlier Qwen clones.
     if (isClonedVoice(voice)) {
-      const model = clonedVoiceId(voice).startsWith("vox2_") ? "voxcpm2-clone-v1" : "qwen3-tts-clone-v1";
+      const id = clonedVoiceId(voice);
+      const model = id.startsWith("darwin_") ? "darwin-tts-clone-v1"
+        : id.startsWith("vox2_") ? "voxcpm2-clone-v1" : "qwen3-tts-clone-v1";
       return { model, voice, provider: "Server", mobile: this.mobile };
     }
     if (isQwenVoice(voice)) {

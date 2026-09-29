@@ -10,7 +10,7 @@ test("English lists three popular voices with sound tags", () => {
   assert.ok(profiles.some((profile) => profile.id === "af_heart"));
   assert.ok(profiles.some((profile) => profile.id === "F4"));
   assert.ok(!profiles.some((profile) => profile.id.startsWith("qwen_")));
-  assert.equal(voiceForLanguage("qwen_ryan", "en"), "af_heart");
+  assert.equal(voiceForLanguage("qwen_ryan", "en"), "qwen_ryan");
 });
 
 test("search surfaces the strongest tag match and respects language availability", () => {

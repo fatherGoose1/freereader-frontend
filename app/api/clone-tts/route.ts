@@ -4,7 +4,7 @@ import { callBackend, freereaderBackendConfig } from "../freereaderBackend";
 export const runtime = "nodejs";
 
 // Generates speech with a persisted user clone through the Koko backend, which
-// routes new clones to VoxCPM2 and older clones to their original model.
+// routes clones to their original model (Darwin-TTS, VoxCPM2, or Qwen3-TTS).
 export async function POST(request: Request) {
   const config = freereaderBackendConfig();
   if (!config) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
