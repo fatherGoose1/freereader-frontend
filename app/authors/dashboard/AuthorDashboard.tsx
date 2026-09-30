@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { authorClient, loadDashboard, publishingError } from "../client";
 import { useAuthorSession } from "../useAuthorSession";
-import type { AuthorBook, AuthorProfile, AuthorSeries } from "../model";
+import { publicShareUrl, type AuthorBook, type AuthorProfile, type AuthorSeries } from "../model";
 import AuthorImage from "../AuthorImage";
 import { saveAuthorReturn, takeAuthorReturn } from "../oauthReturn";
 import styles from "../authors.module.css";
@@ -64,8 +64,8 @@ export default function AuthorDashboard() {
   }
 
   async function copy(path: string) {
-    try { await navigator.clipboard.writeText(`${window.location.origin}${path}`); setNotice("Share link copied."); }
-    catch { setNotice(`Copy this share link: ${window.location.origin}${path}`); }
+    try { await navigator.clipboard.writeText(publicShareUrl(path)); setNotice("Share link copied."); }
+    catch { setNotice(`Copy this share link: ${publicShareUrl(path)}`); }
   }
 
   if (!auth.ready) return <p role="status">Loading your account…</p>;
@@ -77,7 +77,7 @@ export default function AuthorDashboard() {
   if (auth.error) return <div className={styles.error} role="alert">{auth.error} <button onClick={auth.retry}>Retry</button></div>;
   if (!auth.enabled || loading) return <p role="status">Loading your author dashboard…</p>;
   return <>
-    <div className={styles.dashboardTitle}><div><span className={styles.eyebrow}>Author dashboard</span><h1>{profile ? `Hello, ${profile.display_name}.` : "Your stories start here."}</h1></div><Link href="/authors" className={styles.primary}>Upload a book</Link></div>
+    <div className={styles.dashboardTitle}><div><span className={styles.eyebrow}>Author dashboard</span><h1>{profile ? `Hello, ${profile.display_name}.` : "Your stories start here."}</h1></div><Link href="/authors/submissions" className={styles.primary}>Submit a book</Link></div>
     <div className={styles.actions}>
       <Link className={styles.secondary} href="/authors/profile">Edit author profile</Link>
       {profile && <><Link href={`/authors/${profile.slug}`}>View public profile</Link><button onClick={() => void copy(`/authors/${profile.slug}`)}>Copy profile link</button></>}
@@ -86,7 +86,7 @@ export default function AuthorDashboard() {
     {error && <p className={styles.error} role="alert">{error} <button onClick={() => setRevision((value) => value + 1)}>Reload</button></p>}
     {notice && <p className={styles.authNotice} role="status">{notice}</p>}
     <h2>Your books</h2>
-    {!books.length && <section className={styles.card}><p>Publish your first book and get a shareable read-aloud link in minutes.</p><Link className={styles.primary} href="/authors">Publish your first book</Link></section>}
+    {!books.length && <section className={styles.card}><p>Publish your first book and get a shareable read-aloud link in minutes.</p><Link className={styles.primary} href="/authors/submissions">Submit your first book</Link></section>}
     <div className={styles.bookList}>{books.map((book) => {
       const bookSeries = series.find((item) => item.id === book.series_id);
       return <article className={styles.bookCard} key={book.id}>

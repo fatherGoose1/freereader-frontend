@@ -1,4 +1,5 @@
 import type { SpeechLanguage } from "./speech";
+import type { NarratorVoice } from "./voices";
 
 export type DocumentFormat = "epub" | "pdf" | "txt" | "docx" | "html" | "md";
 
@@ -27,6 +28,7 @@ export interface LibraryBook {
   title: string;
   author?: string;
   language?: SpeechLanguage;
+  preferredVoice?: NarratorVoice;
   format: DocumentFormat;
   sourceName: string;
   sourceIdentifier?: string;

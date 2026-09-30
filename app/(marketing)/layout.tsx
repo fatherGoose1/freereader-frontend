@@ -17,7 +17,7 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
             <Link href="/#trust">Privacy</Link>
             <Link href="/support">Support</Link>
           </div>
-          <Link className="author-cta" href="/authors">Publish a book</Link>
+          <Link className="author-cta" href="/authors/submissions">Publish a book</Link>
         </nav>
       </header>
       {children}
@@ -28,7 +28,7 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
             <p>Text to speech for the books you read and the videos you create.</p>
           </div>
           <div className="footer-links">
-            <div><strong>Product</strong><Link href="/reader/audiobooks">Audiobook reader</Link><Link href="/narration">Video narration</Link><Link href="/authors">Author publishing</Link><Link href="/pricing">Pricing</Link><Link href="/#languages-heading">Languages</Link></div>
+            <div><strong>Product</strong><Link href="/reader/audiobooks">Audiobook reader</Link><Link href="/narration">Video narration</Link><Link href="/authors/submissions">Author publishing</Link><Link href="/pricing">Pricing</Link><Link href="/#languages-heading">Languages</Link></div>
             <div><strong>Company</strong><Link href="/support">Support</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link><Link href="/copyright">Copyright &amp; rights</Link></div>
           </div>
         </div>

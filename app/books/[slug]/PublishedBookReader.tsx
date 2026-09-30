@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import FreeReaderApp from "../../reader/FreeReaderApp";
 import { listBooks, saveBook } from "../../reader/storage";
 import type { LibraryBook } from "../../reader/types";
-import { assetUrl, toReaderBook, type AuthorBookWithDocument } from "../../authors/model";
+import { assetUrl, publicShareUrl, toReaderBook, type AuthorBookWithDocument } from "../../authors/model";
 import styles from "../../authors/authors.module.css";
 
 export default function PublishedBookReader({ slug, authorSlug, description }: { slug: string; authorSlug?: string; description: string }) {
@@ -32,7 +32,8 @@ export default function PublishedBookReader({ slug, authorSlug, description }: {
       // A replaced manuscript may have fewer blocks; keep the cursor in bounds.
       ready.position = { ...ready.position, blockIndex: Math.max(0, Math.min(ready.position.blockIndex, ready.blocks.length - 1)) };
       if (cancelled) return;
-      await saveBook(ready).catch(() => undefined);
+      try { await saveBook(ready); }
+      catch { throw new Error("Could not add this book to your library. Allow browser storage and try again."); }
       if (!cancelled) setBook(ready);
     };
     void load().catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Could not load this book."); });
@@ -41,12 +42,12 @@ export default function PublishedBookReader({ slug, authorSlug, description }: {
 
   if (error) return <section className={styles.main}><h1>Could not open this book</h1><p role="alert">{error}</p><button onClick={() => setAttempt((value) => value + 1)}>Try again</button>{authorSlug && <Link href={`/authors/${authorSlug}`}>Visit the author</Link>}</section>;
   if (!book) return <p className={styles.main} role="status">Opening your book…</p>;
-  return <>
+  return <div className={styles.sharedBook}>
     <div className={styles.signedIn} style={{ padding: "12px 24px", background: "#e9efff" }}>
       <span>{authorSlug ? <Link href={`/authors/${authorSlug}`}>More by {book.author}</Link> : book.author} · Free to read & listen</span>
-      <button onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopied(true); } catch { setCopied(false); } }}>{copied ? "Link copied" : "Share book"}</button>
+      <button onClick={async () => { try { await navigator.clipboard.writeText(publicShareUrl(`/books/${slug}`)); setCopied(true); } catch { setCopied(false); } }}>{copied ? "Link copied" : "Share book"}</button>
     </div>
     {description && <details style={{ padding: "12px 24px" }}><summary>About this book</summary><p>{description}</p></details>}
-    <FreeReaderApp initialBook={book} />
-  </>;
+    <div className={styles.readerViewport}><FreeReaderApp initialBook={book} /></div>
+  </div>;
 }

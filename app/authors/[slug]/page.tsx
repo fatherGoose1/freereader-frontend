@@ -24,7 +24,7 @@ export default async function AuthorProfilePage({ params }: { params: Promise<{ 
   return <>
     <section className={styles.profileHero}>
       {profile.image_path && <img src={assetUrl(profile.image_path)} alt={profile.display_name} />}
-      <span className={styles.eyebrow}>Independent author</span><h1>{profile.display_name}</h1>
+      <h1>{profile.display_name}</h1>
       {profile.bio && <p>{profile.bio}</p>}
       <div className={styles.actions}>{links.map((link, index) => <a className={styles.secondary} href={link.url} key={index} target="_blank" rel="noopener noreferrer">{link.label}</a>)}</div>
       <p>Read or listen for free, right in your browser.</p>

@@ -1,4 +1,5 @@
 import type { LibraryBook, ParsedBook } from "../reader/types";
+import type { NarratorVoice } from "../reader/voices";
 
 export type AuthorLink = { label: string; url: string };
 export type AuthorProfile = {
@@ -10,16 +11,24 @@ export type PublishedDocument = Omit<ParsedBook, "cover"> & { sourceName: string
 export type AuthorBook = {
   id: string; user_id: string; slug: string; title: string; description: string;
   author_name: string; cover_path: string | null; series_id: string | null;
-  series_order: number | null; status: "draft" | "published";
+  series_order: number | null; status: "draft" | "published"; default_voice: NarratorVoice;
   created_at: string; updated_at: string;
 };
 export type AuthorBookWithDocument = AuthorBook & { document: PublishedDocument };
-export const BOOK_COLUMNS = "id,user_id,slug,title,description,author_name,cover_path,series_id,series_order,status,created_at,updated_at";
+export const BOOK_COLUMNS = "id,user_id,slug,title,description,author_name,cover_path,series_id,series_order,status,default_voice,created_at,updated_at";
 export const PROFILE_COLUMNS = "user_id,slug,display_name,bio,image_path,links";
 
 export function slugify(value: string): string {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80).replace(/-$/, "");
+}
+
+export function bookSlug(title: string, id: string): string {
+  return `${slugify(title) || "book"}-${id.slice(0, 8)}`;
+}
+
+export function publicShareUrl(path: string): string {
+  return `https://freereader.io${path}`;
 }
 
 export function validateLinks(links: AuthorLink[]): AuthorLink[] {
@@ -44,6 +53,8 @@ export function groupAuthorBooks(books: AuthorBook[], series: AuthorSeries[]) {
 export function toReaderBook(book: AuthorBookWithDocument, cover?: Blob, existing?: LibraryBook): LibraryBook {
   return {
     ...book.document, id: book.id, title: book.title, author: book.author_name, cover,
+    language: existing?.language ?? book.document.language,
+    preferredVoice: existing?.preferredVoice ?? book.default_voice ?? "af_heart",
     sourceIdentifier: `author-book:${book.id}`, sourceUrl: `/books/${book.slug}`,
     createdAt: existing?.createdAt ?? book.created_at, updatedAt: book.updated_at,
     position: existing?.position ?? { blockIndex: 0, offsetSeconds: 0, speed: 1 },

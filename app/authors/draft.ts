@@ -2,20 +2,24 @@ import type { AuthorLink, PublishedDocument } from "./model";
 
 export type PublishingDraft = {
   id: string; ownerId?: string; slug?: string;
+  step?: "profile" | "book";
   displayName: string; profileSlug: string; bio: string; links: AuthorLink[];
   profileImage?: Blob; profileImagePath?: string | null;
   title: string; description: string; authorName: string;
   cover?: Blob; coverPath?: string | null;
   seriesId: string; seriesName: string; seriesOrder: string;
+  defaultVoice?: import("../reader/voices").NarratorVoice;
+  voiceLanguage?: import("../reader/speech").SpeechLanguage;
+  rightsCertified?: boolean;
   sourceMode: "file" | "text"; file?: File; rawText: string;
   document?: PublishedDocument;
 };
 
 export function emptyDraft(): PublishingDraft {
   return {
-    id: crypto.randomUUID(), displayName: "", profileSlug: "", bio: "", links: [],
+    id: crypto.randomUUID(), step: "profile", displayName: "", profileSlug: "", bio: "", links: [],
     title: "", description: "", authorName: "", seriesId: "", seriesName: "", seriesOrder: "1",
-    sourceMode: "file", rawText: "",
+    sourceMode: "file", rawText: "", defaultVoice: "af_heart", rightsCertified: false,
   };
 }
 

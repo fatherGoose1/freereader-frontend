@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { clearDraft, emptyDraft, loadDraft, saveDraft } from "./draft";
-import { groupAuthorBooks, toReaderBook, type AuthorBook, type AuthorBookWithDocument } from "./model";
+import { bookSlug, groupAuthorBooks, publicShareUrl, toReaderBook, type AuthorBook, type AuthorBookWithDocument } from "./model";
 
 test("an author draft survives a fresh read with its original file, profile image, cover and metadata", async () => {
   const key = `draft:${crypto.randomUUID()}`;
@@ -11,7 +11,7 @@ test("an author draft survives a fresh read with its original file, profile imag
   const profileImage = new Blob(["profile bytes"], { type: "image/webp" });
   try {
     await saveDraft(key, { ...emptyDraft(), title: "The Story", displayName: "Robin",
-      file, cover, profileImage, rawText: "My notes", seriesOrder: "2",
+      file, cover, profileImage, rawText: "My notes", seriesOrder: "2", defaultVoice: "af_river", rightsCertified: true,
     });
     const restored = await loadDraft(key);
     assert.equal(restored?.file?.name, "story.txt");
@@ -21,6 +21,8 @@ test("an author draft survives a fresh read with its original file, profile imag
     assert.equal(await restored.profileImage?.text(), "profile bytes");
     assert.equal(restored.title, "The Story");
     assert.equal(restored.seriesOrder, "2");
+    assert.equal(restored.defaultVoice, "af_river");
+    assert.equal(restored.rightsCertified, true);
     // A final pre-redirect write cannot be overwritten by an older autosave.
     const previous = saveDraft(key, { ...restored, title: "Old" });
     const latest = saveDraft(key, { ...restored, title: "New" });
@@ -33,7 +35,7 @@ test("an author draft survives a fresh read with its original file, profile imag
 test("series are grouped in explicit order and public books retain reader progress when updated", () => {
   const book = (id: string, seriesId: string | null, order: number | null): AuthorBook => ({
     id, user_id: "owner", slug: `slug-${id}`, title: `Title ${id}`, author_name: "Robin", description: "",
-    cover_path: null, series_id: seriesId, series_order: order, status: "published",
+    cover_path: null, series_id: seriesId, series_order: order, status: "published", default_voice: "af_river",
     created_at: "2026-01-01T00:00:00Z", updated_at: "2026-02-01T00:00:00Z",
   });
   const one = book("one", "series", 1);
@@ -49,8 +51,17 @@ test("series are grouped in explicit order and public books retain reader progre
   assert.equal(imported.title, "Title one");
   assert.equal(imported.sourceIdentifier, "author-book:one");
   assert.equal(imported.sourceUrl, "/books/slug-one");
+  assert.equal(imported.preferredVoice, "af_river");
   const continued = toReaderBook(published, undefined, { ...imported,
+    preferredVoice: "F4",
     position: { blockIndex: 3, offsetSeconds: 5, speed: 1.2 },
   });
   assert.deepEqual(continued.position, { blockIndex: 3, offsetSeconds: 5, speed: 1.2 });
+  assert.equal(continued.preferredVoice, "F4");
+});
+
+test("new book URLs use the first eight UUID characters while published URLs stay stable", () => {
+  assert.equal(bookSlug("The River Story", "1234abcd-5678-4aaa-8bbb-000000000000"), "the-river-story-1234abcd");
+  assert.equal(bookSlug("", "1234abcd-5678-4aaa-8bbb-000000000000"), "book-1234abcd");
+  assert.equal(publicShareUrl("/books/the-river-story-1234abcd"), "https://freereader.io/books/the-river-story-1234abcd");
 });

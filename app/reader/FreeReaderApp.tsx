@@ -187,7 +187,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<number | undefined>();
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
-  const [voice, setVoice] = useState<NarratorVoice>("af_heart");
+  const [voice, setVoice] = useState<NarratorVoice>(initialBook?.preferredVoice ?? "af_heart");
   const [steps, setSteps] = useState(12);
   const [speechRate, setSpeechRate] = useState(0.9);
   const [playing, setPlaying] = useState(false);
@@ -996,6 +996,11 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   }
 
   function openBook(book: LibraryBook) {
+    if (book.sourceIdentifier?.startsWith("author-book:")
+      && /^\/books\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(book.sourceUrl ?? "")) {
+      window.location.assign(book.sourceUrl!);
+      return;
+    }
     resetPlayback();
     setPanel(null);
     setMessage("Press Listen to hear this passage. Your place is saved automatically.");
@@ -1004,7 +1009,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const ready = book.language ? book : { ...book, language, updatedAt: new Date().toISOString() };
     selectedRef.current = ready;
     setSelected(ready);
-    setVoice((current) => voiceForLanguage(current, language));
+    setVoice((current) => voiceForLanguage(book.preferredVoice ?? current, language));
     if (!book.language) {
       setBooks((current) => current.map((value) => value.id === book.id ? ready : value));
       saveBook(ready).then(libraryChanged).catch(() => undefined);
@@ -1023,10 +1028,21 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     if (!selected) return;
     resetPlayback();
     audioPrimed.current = false;
-    setVoice((current) => voiceForLanguage(current, language));
-    const updated = { ...selected, language, updatedAt: new Date().toISOString() };
+    const nextVoice = voiceForLanguage(voice, language);
+    setVoice(nextVoice);
+    const updated = { ...selected, language, preferredVoice: nextVoice, updatedAt: new Date().toISOString() };
     updateBook(updated);
     posthog.capture("voice_settings_changed", { setting: "language", value: language });
+  }
+
+  function changeNarratorVoice(value: NarratorVoice) {
+    const selected = selectedRef.current;
+    if (!selected) return;
+    resetPlayback();
+    audioPrimed.current = false;
+    setVoice(value);
+    updateBook({ ...selected, preferredVoice: value, updatedAt: new Date().toISOString() });
+    posthog.capture("voice_settings_changed", { setting: "voice", value });
   }
 
   function openGutenbergBrowser() {
@@ -1083,14 +1099,21 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
     const pageIndex = Math.max(0, pageStarts.indexOf(page.start));
     return (
-      <main className={`${styles.appShell} ${styles.readingShell}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
+      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
           resetPlayback();
         }} />
         <div className={styles.readerTop} inert={panel === "voice"}>
-          <button className={styles.textButton} onClick={() => { resetPlayback(); selectedRef.current = null; setSelected(null); setPanel(null); setMessage("Your reading position has been saved."); }}><ReaderIcon name="back" /> Library</button>
+          <button className={styles.textButton} onClick={() => {
+            resetPlayback();
+            if (initialBook) { window.location.assign("/reader/audiobooks"); return; }
+            selectedRef.current = null;
+            setSelected(null);
+            setPanel(null);
+            setMessage("Your reading position has been saved.");
+          }}><ReaderIcon name="back" /> {initialBook ? "Back to library" : "Library"}</button>
           <div className={styles.readerTitle}><strong>{selected.title}</strong><span>{chapter?.title ?? "Beginning"}</span></div>
           <div className={styles.readerTools}>
             {selected.chapters.length > 0 && (
@@ -1179,7 +1202,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               </select>
             </label>
             <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
-              <select value={narrationVoice} onChange={(event) => { resetPlayback(); audioPrimed.current = false; setVoice(event.target.value as NarratorVoice); posthog.capture("voice_settings_changed", { setting: "voice", value: event.target.value }); }}>
+              <select value={narrationVoice} onChange={(event) => changeNarratorVoice(event.target.value as NarratorVoice)}>
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>

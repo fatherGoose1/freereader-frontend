@@ -142,6 +142,7 @@
 
 /* Reading canvas and navigation */
 .readingShell { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.readingShell.embeddedReader { min-height: 0; height: 100%; }
 .readingShell .readerTop { flex: none; }
 .readingShell .accountNotice, .readingShell .syncBar { flex: none; }
 .readingShell .readerGrid { flex: 1; min-height: 0; overflow-y: auto; align-items: start; padding-bottom: 24px; }
