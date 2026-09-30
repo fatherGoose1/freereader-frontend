@@ -75,7 +75,7 @@ test("Google session restores the book and unlocks publishing without submitting
   await expect(voices.getByRole("button", { name: "Preview River" })).toBeVisible();
   await voices.getByRole("button", { name: "River", exact: true }).click();
   await voices.getByRole("button", { name: "Close voice picker" }).click();
-  await expect(page.getByText("Starts with River.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Readers can change the voice at any time.")).toBeVisible();
   await page.locator('input[type="file"][accept*=".epub"]').setInputFiles({ name: "river.txt", mimeType: "text/plain", buffer: Buffer.from(prose) });
   await expect(page.getByRole("button", { name: "Publish & get share link" })).toBeDisabled();
   await expect(page.getByRole("status").filter({ hasText: "Draft saved in this browser." })).toBeVisible();

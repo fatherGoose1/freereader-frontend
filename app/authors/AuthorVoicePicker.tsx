@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "../reader/speech";
-import { voiceDisplayName, voicePreviewPath, type NarratorVoice } from "../reader/voices";
+import { voicePreviewPath, type NarratorVoice } from "../reader/voices";
 import styles from "./authors.module.css";
 
 export default function AuthorVoicePicker({ voice, language, onChange }: {
@@ -48,7 +48,7 @@ export default function AuthorVoicePicker({ voice, language, onChange }: {
   return <section className={styles.voicePicker} aria-label="Default reading voice">
     <audio ref={audioRef} onEnded={() => setPreviewing(null)} />
     <strong>Default reading voice</strong>
-    <p>Starts with {voiceDisplayName(voice) ?? "Heart"}. Readers can change the voice at any time.</p>
+    <p>Readers can change the voice at any time.</p>
     <button type="button" className={styles.secondary} onClick={() => setOpen(true)}>Choose a voice</button>
     {open && <div className={styles.voiceBackdrop} onMouseDown={close}>
       <div className={styles.voiceDialog} role="dialog" aria-modal="true" aria-label="Choose a voice" onMouseDown={(event) => event.stopPropagation()}>
