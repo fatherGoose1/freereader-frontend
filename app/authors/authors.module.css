@@ -9,6 +9,7 @@
 .hero { max-width: 730px; margin: 0 auto 32px; text-align: center; }
 .eyebrow { color: #365bd6; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; font-weight: 750; }
 .shell h1 { font-size: clamp(30px, 5vw, 50px); line-height: 1.12; letter-spacing: -.035em; margin: 16px 0; }
+.shell h2 { font-size: 22px; line-height: 1.25; letter-spacing: -.02em; margin: 0 0 16px; }
 .hero p, .success > p { color: #536075; font-size: 18px; line-height: 1.65; }
 .steps { display: flex; justify-content: center; gap: 36px; padding-left: 24px; color: #536075; font-size: 13px; margin-top: 24px; }
 .form { display: grid; gap: 24px; }
