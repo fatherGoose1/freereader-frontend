@@ -33,6 +33,7 @@ import { supabaseClient } from "./supabase";
 import { synchronizeLibrary } from "./accountSync";
 import { linkInstallation } from "./usage";
 import type { Session } from "@supabase/supabase-js";
+import { takeAuthorReturn } from "../authors/oauthReturn";
 
 type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
@@ -155,7 +156,7 @@ function folderPath(folder: LibraryFolder, folders: LibraryFolder[]): string {
   return names.join(" / ");
 }
 
-export default function FreeReaderApp() {
+export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBook } = {}) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -165,9 +166,9 @@ export default function FreeReaderApp() {
   const [textSize, setTextSize] = useState(20);
   const [organizingBook, setOrganizingBook] = useState<LibraryBook | null>(null);
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<LibraryBook | null>(null);
+  const [selected, setSelected] = useState<LibraryBook | null>(initialBook ?? null);
   // Async media events must use the latest cursor, including changes before React renders.
-  const selectedRef = useRef<LibraryBook | null>(null);
+  const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
@@ -237,6 +238,10 @@ export default function FreeReaderApp() {
     const supabase = supabaseClient();
     if (!supabase) { setAuthReady(true); return; }
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (next) {
+        const authorReturn = takeAuthorReturn();
+        if (authorReturn) { window.location.replace(authorReturn); return; }
+      }
       setSession(next);
       setAuthReady(true);
       if (next) void linkInstallation(next.access_token).catch(() => undefined);
@@ -296,7 +301,7 @@ export default function FreeReaderApp() {
     else setSyncStatus("idle");
   }
 
-  const accountNotice = authReady && !session && (
+  const accountNotice = !initialBook && authReady && !session && (
     <section className={styles.accountNotice} aria-label="Save your library">
       <div><strong>Keep your library and progress</strong><p>Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.</p></div>
       <button type="button" onClick={() => void signIn()}>Sign in with Google</button>

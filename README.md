@@ -28,7 +28,24 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
 NEXT_PUBLIC_KOKO_BACKEND_URL=http://localhost:5001
 ```
 
-Google OAuth uses a redirect back to `/reader`. IndexedDB remains authoritative and makes both anonymous and signed-in reading local-first. Document content uploads only after an import or metadata change; progress uploads at most every 30 seconds plus pause and background checkpoints. A versioned manifest and per-item revisions reserve conflict-detection semantics for future iOS support. Current reconciliation uses latest content and progress timestamps, while optimistic revisions reject stale document writes.
+Reader Google OAuth redirects back to `/reader/audiobooks`; author publishing uses that same existing callback and then returns to the original author form. IndexedDB remains authoritative and makes both anonymous and signed-in reading local-first. Document content uploads only after an import or metadata change; progress uploads at most every 30 seconds plus pause and background checkpoints. A versioned manifest and per-item revisions reserve conflict-detection semantics for future iOS support. Current reconciliation uses latest content and progress timestamps, while optimistic revisions reject stale document writes.
+
+## Author publishing
+
+The additive author workspace is at `/authors`, with management at `/authors/dashboard`.
+It uses the existing Supabase client and Google account identity, not a separate login system.
+
+The Koko backend's Railway start command runs `flask db upgrade` before serving requests. Its `20260930_0016` Alembic migration automatically creates the author schema in the **same Supabase project** used for existing FreeReader accounts. It adds `is_author boolean not null default false` to FreeReader's existing `freereader_accounts` account table, keyed by each Google user's Supabase ID, and creates separate `author_profiles`, `author_series`, and `author_books` tables. Supabase owns `auth.users` and Storage policies, so the backend creates a private image bucket through its existing service-role credentials on first upload and authorizes image reads through its own endpoint. No manual SQL, Supabase redirect changes, or new frontend environment variables are needed. Deploy the backend commit before the frontend commit so publishing is available when the UI goes live.
+
+Entering an author route while signed in calls `enroll_author`, which verifies a Google identity and marks that existing user as an author. An anonymous visitor can fill out the form, but publishing, profile changes, image uploads, and draft submission require Google sign-in and are enforced by database row-level security. Regular reader sign-ins do not enroll authors.
+
+The form persists text, metadata, original selected files, and cover/profile images in a separate browser IndexedDB database. It explicitly finishes saving before OAuth navigation, restores the same form on return, hides the sign-in prompt, and enables the submit buttons. Submission is never automatic. Local drafts are cleared only after a successful save. Browser storage must be available to preserve progress across the redirect.
+
+Books use the same local EPUB, PDF, TXT, DOCX, HTML, Markdown, and pasted-text parsers as the reader. Publishing stores extracted chapters/blocks (up to 10 MiB of JSON), not original source files or generated audio. Selected input files retain the reader's 100 MB limit. Profile and cover images accept JPG, PNG, and WebP up to 5 MiB. Scanned PDFs need OCR before upload.
+
+Published books open directly in the existing reader at `/books/<permanent-slug>`, without requiring readers to sign in. Titles and manuscript replacements do not change that URL. Profiles at `/authors/<slug>` show published books grouped by series, sorted by explicit, unique positive book order. The dashboard supports metadata and profile editing, series assignment/order/name changes, publish/unpublish, and copying share links. Unpublishing hides the book and cover from new anonymous requests; publishing again restores the same URL. Readers who already imported a book retain their local copy.
+
+Public book/profile data uses the anonymous Supabase key with RLS; the backend checks visibility before serving images. Private drafts are visible only to their owner. The external Koko sync and speech APIs remain unchanged.
 
 ## iOS parser parity
 

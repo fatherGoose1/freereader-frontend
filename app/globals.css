@@ -81,6 +81,7 @@ button, textarea, input, select { font: inherit; }
   transition: color .2s ease;
 }
 .links a:hover { color: var(--ink); }
+.author-cta { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; color: var(--forest); text-decoration: none; white-space: nowrap; }
 
 .reader-app-route { min-height: 100vh; }
 
