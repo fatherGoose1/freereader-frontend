@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "../reader/speech";
 import { voicePreviewPath, type NarratorVoice } from "../reader/voices";
+import ReaderIcon from "../reader/ReaderIcon";
 import styles from "./authors.module.css";
 
 export default function AuthorVoicePicker({ voice, language, onChange }: {
@@ -63,9 +64,9 @@ export default function AuthorVoicePicker({ voice, language, onChange }: {
           </select>
         </label>
         <div className={styles.voiceOptions} role="group" aria-label="Available voices">
-          {voicesForLanguage(language ?? "en").map(([value, name]) => <div className={styles.voiceOption} key={value}>
+          {voicesForLanguage(language ?? "en").map(([value, name]) => <div className={styles.voiceOption} key={value} data-selected={voice === value || undefined}>
             <button type="button" aria-pressed={voice === value} onClick={() => onChange(value, language)}>{name}</button>
-            <button type="button" onClick={() => void preview(value)} aria-label={`${previewing === value ? "Stop" : "Preview"} ${name}`}>{previewing === value ? "Stop" : "Play"}</button>
+            <button type="button" className={styles.voicePlayButton} onClick={() => void preview(value)} aria-label={`${previewing === value ? "Stop" : "Preview"} ${name}`} title={`${previewing === value ? "Stop" : "Play"} ${name}`}><ReaderIcon name={previewing === value ? "pause" : "play"} /></button>
           </div>)}
         </div>
         {error && <p className={styles.error} role="alert">{error}</p>}

@@ -106,12 +106,12 @@ test("Google session restores the book and unlocks publishing without submitting
   await expect(page.getByRole("heading", { name: "Your story. Ready to listen." })).toBeVisible();
   expect(saved).toHaveLength(2);
   expect(saved[0].slug).toBe(saved[1].slug);
-  expect(saved[0].slug).toMatch(/^the-river-story-[a-f0-9]{8}$/);
+  expect(saved[0].slug).toMatch(/^[a-f0-9]{8}$/);
   expect(saved[0]).toMatchObject({ title: "The River Story", author_name: "Robin Writer", status: "published", default_voice: "af_river",
     document: { format: "txt", sourceName: "river.txt" },
   });
   expect(Date.parse(String(saved[0].rights_certified_at))).toBeGreaterThan(0);
-  await expect(page.getByRole("link", { name: /^https:\/\/freereader\.io\/books\/the-river-story-[a-f0-9]{8}$/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^https:\/\/www\.freereader\.io\/books\/[a-f0-9]{8}$/ })).toBeVisible();
 });
 
 test("books added from public links reopen on their public page from the reader library", async ({ page }) => {

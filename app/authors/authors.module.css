@@ -52,10 +52,13 @@
 .voiceDialogHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .voiceDialogHeader h2 { margin: 0; font-size: 23px; }
 .voiceDialog label { display: grid; gap: 8px; font-size: 13px; font-weight: 650; }
-.voiceOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 20px; }
-.voiceOption { display: flex; gap: 6px; }
-.voiceOption button:first-child { flex: 1; min-width: 0; text-align: left; }
-.voiceOption button[aria-pressed=true] { color: #294bbe; background: #e9efff; border-color: #8ba7ff; }
+.voiceOptions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 20px; }
+.voiceOption { display: flex; align-items: center; gap: 2px; min-width: 0; padding: 3px; background: #fff; border: 1px solid #dbe2f0; border-radius: 99px; }
+.voiceOption[data-selected] { background: #e9efff; border-color: #8ba7ff; }
+.voiceOption > button:first-child { flex: 1; min-width: 0; overflow: hidden; padding: 8px 12px; color: #202633; background: transparent; border: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.voiceOption[data-selected] > button:first-child { color: #294bbe; }
+.voiceOption button.voicePlayButton { display: grid; width: 34px; height: 34px; flex: none; padding: 0; place-items: center; color: #365bd6; background: #eef2fc; border: 0; border-radius: 50%; }
+.voiceOption button.voicePlayButton:hover { background: #dfe7fb; }
 .submitBar { text-align: center; }
 .stepActions { display: flex; justify-content: flex-end; }
 .stepBack { display: flex; align-items: center; gap: 16px; color: #536075; font-size: 14px; }
@@ -104,5 +107,4 @@
   .bookActions { width: 100%; }
   .seriesRow { flex-wrap: wrap; }
   .voiceDialog { padding: 18px; }
-  .voiceOptions { grid-template-columns: 1fr; }
 }

@@ -185,7 +185,7 @@ export default function PublishingStudio({ bookId, profileOnly = false }: { book
       if (seriesId && (!Number.isInteger(order) || order! <= 0)) throw new Error("Set a positive whole-number book order for this series.");
       const coverPath = cover ? await uploadAuthorImage(cover, userId) : draft.coverPath ?? null;
       // Generate once, then persist before the write so retries keep the same URL.
-      const slug = draft.slug || bookSlug(draft.title, draft.id);
+      const slug = draft.slug || bookSlug(draft.id);
       let prepared = { ...draft, ownerId: userId, slug, document, profileSlug, profileImagePath: imagePath,
         profileImage: undefined, coverPath, cover: undefined, file: undefined, rawText: "",
       };
@@ -203,7 +203,7 @@ export default function PublishingStudio({ bookId, profileOnly = false }: { book
         if (bookId || attempt === 2 || bookError.code !== "23505"
           || !/author_books_slug_key|Key \(slug\)/i.test(`${bookError.message} ${bookError.details}`)) throw bookError;
         const id = crypto.randomUUID();
-        prepared = { ...prepared, id, slug: bookSlug(draft.title, id) };
+        prepared = { ...prepared, id, slug: bookSlug(id) };
         await saveDraft(key, prepared);
         setDraft(prepared);
       }

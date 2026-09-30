@@ -61,7 +61,6 @@ test("series are grouped in explicit order and public books retain reader progre
 });
 
 test("new book URLs use the first eight UUID characters while published URLs stay stable", () => {
-  assert.equal(bookSlug("The River Story", "1234abcd-5678-4aaa-8bbb-000000000000"), "the-river-story-1234abcd");
-  assert.equal(bookSlug("", "1234abcd-5678-4aaa-8bbb-000000000000"), "book-1234abcd");
-  assert.equal(publicShareUrl("/books/the-river-story-1234abcd"), "https://freereader.io/books/the-river-story-1234abcd");
+  assert.equal(bookSlug("1234abcd-5678-4aaa-8bbb-000000000000"), "1234abcd");
+  assert.equal(publicShareUrl("/books/1234abcd"), "https://www.freereader.io/books/1234abcd");
 });

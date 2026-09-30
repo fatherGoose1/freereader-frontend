@@ -23,12 +23,12 @@ export function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80).replace(/-$/, "");
 }
 
-export function bookSlug(title: string, id: string): string {
-  return `${slugify(title) || "book"}-${id.slice(0, 8)}`;
+export function bookSlug(id: string): string {
+  return id.slice(0, 8);
 }
 
 export function publicShareUrl(path: string): string {
-  return `https://freereader.io${path}`;
+  return `https://www.freereader.io${path}`;
 }
 
 export function validateLinks(links: AuthorLink[]): AuthorLink[] {
