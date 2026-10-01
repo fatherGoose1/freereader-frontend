@@ -8,6 +8,11 @@ test("landing demo lists supported languages and routes non-English speech", asy
   }));
   await page.goto("/");
 
+  const appStoreLinks = page.getByRole("link", { name: "Download VoiceReader on the App Store" });
+  await expect(appStoreLinks).toHaveCount(2);
+  await expect(appStoreLinks.first()).toHaveAttribute("href", "https://apps.apple.com/app/voicereader-text-to-speech/id6808351587");
+  await expect(page.getByRole("link", { name: "Create a voiceover" })).toHaveCount(0);
+
   const menu = page.locator(".hero-demo-language-popover");
   const languagesButton = page.getByRole("button", { name: "Supported Languages" });
   await expect(menu).toBeHidden();
@@ -29,7 +34,6 @@ test("landing demo lists supported languages and routes non-English speech", asy
     text: "Bonjour l'ami",
     speed: 1,
     detectLanguage: true,
-    voice: "M3",
     steps: 12,
   });
 });

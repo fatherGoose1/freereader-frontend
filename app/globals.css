@@ -179,8 +179,13 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .secondary-link { display: inline-flex; align-items: center; gap: 9px; min-height: 54px; padding: 14px 19px; color: var(--forest); background: #fff; border: 1px solid var(--line); border-radius: 9px; font-size: 15px; font-weight: 700; text-decoration: none; }
 .secondary-link:hover { background: #f1f4fc; border-color: #b9c8ef; }
 .secondary-link svg { width: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.secondary-link .platform-icon { width: 22px; height: 17px; flex: none; stroke: none; }
-.platform-icons { display: inline-flex; align-items: center; gap: 4px; }
+.app-store-button { display: inline-flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px 17px; color: #fff; background: #202633; border: 1px solid #202633; border-radius: 9px; text-align: left; text-decoration: none; }
+.app-store-button:hover { background: #343e50; }
+.app-store-button:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 3px; }
+.app-store-button svg { width: 27px; height: 27px; flex: none; }
+.app-store-button span { display: flex; flex-direction: column; line-height: 1.1; }
+.app-store-button small { font-size: 10px; font-weight: 500; }
+.app-store-button strong { font-size: 18px; font-weight: 650; }
 .hero-assurances {
   display: flex;
   flex-wrap: wrap;
