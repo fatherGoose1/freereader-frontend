@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: "%s — FreeReader",
   },
   description:
-    "Turn books, documents, and articles into audiobooks, or create and export video voiceovers from scripts. Start free with FreeReader's text-to-speech tools in 31 languages.",
+    "Turn books, documents, and articles into audiobooks, or create and export video voiceovers from scripts. Start free with FreeReader's text-to-speech tools in 32 languages.",
   icons: { icon: "/icon.svg?v=3" },
   manifest: "/manifest.webmanifest",
 };

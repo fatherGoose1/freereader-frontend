@@ -10,10 +10,10 @@ The existing marketing site remains at `/`; the local-first web reader is at `/r
 - HTML and web articles: DOMParser and Mozilla Readability
 - Markdown: a local parser mirroring the iOS app's readable-markdown rules
 - Metadata, extracted blocks, reading position, and per-account sync revisions: IndexedDB
-- Supertonic models: optional OPFS cache; generated WAV chunks: OPFS with byte-based IndexedDB fallback
-- English speech: always streamed from the Coco backend (`/api/tts` -> Kokoro-7M-Distill FP32, compressed AAC) on desktop and mobile; no English model runs on device
-- Supertonic speech: on-device SIMD WASM, full FP32 on desktop, for the non-English languages; mobile blocks non-English narration with an English-only warning
+- Speech: always streamed from the Coco backend (`/api/tts`, compressed AAC) on desktop and mobile; no speech model runs on device
+- Kokoro 82M covers its trained languages (English, Spanish, French, Hindi, Italian, Japanese, Portuguese, and Mandarin Chinese) with per-language voices; Supertonic 3 covers the remaining supported languages
 - Playback: play the first passage, then generate ahead while playback continues (30-second target, capped at four passages)
+- Audiobook speaking speed: 0.5–3.0× in Voice Settings, 1× by default; generated audio plays at its recorded rate without a separate playback-speed control
 - Offline app shell: service worker and web app manifest
 
 Without an account, EPUBs, PDFs, document text, and audio are never uploaded. A web user can optionally sign in with Google through Supabase; FreeReader then gzip-compresses parsed document text and covers for private Supabase Storage and separately syncs small metadata and reading-position records through the Koko backend. Original source files, generated audio, and voice models do not sync. Accounts are limited to 100 documents and each compressed cloud document is limited to 10 MiB.
@@ -80,14 +80,14 @@ npm run build
 
 ## Browser speech routing
 
-| Device | English | Non-English |
+| Device | Kokoro languages | Supertonic languages |
 | --- | --- | --- |
-| Desktop | Coco backend `POST /api/v1/freereader/speech` (Kokoro-7M-Distill FP32, compressed AAC) | Supertonic 3 FP32, ~398 MB, on-device WASM |
-| Mobile | Coco backend `POST /api/v1/freereader/speech` (Kokoro-7M-Distill FP32, compressed AAC) | Unsupported: blocked with an "English only on mobile" warning |
+| Desktop | Coco backend `POST /api/v1/freereader/speech` (Kokoro-82M FP32, compressed AAC) | Coco backend (Supertonic 3 FP32, compressed AAC) |
+| Mobile | Coco backend `POST /api/v1/freereader/speech` (Kokoro-82M FP32, compressed AAC) | Coco backend (Supertonic 3 FP32, compressed AAC) |
 
-English is always synthesized by the backend; on-device Kokoro has been retired. `narration.ts` owns routing: English returns a `Server` route through `remoteSpeech.ts` and the same-origin `/api/tts` proxy (which holds the backend token), while non-English returns a local WASM route. On mobile, non-English is rejected before any model loads; the reader shows a warning banner and disables Listen. Desktop non-English keeps the existing Supertonic path with transparent fallback. Audio cache keys include the engine, variant, voice, and settings.
+All speech is synthesized by the backend; on-device speech has been retired. `narration.ts` owns routing: Kokoro's trained languages (English, Spanish, French, Hindi, Italian, Japanese, Portuguese, and Mandarin Chinese) use a `Server` Kokoro route through `remoteSpeech.ts` and the same-origin `/api/tts` proxy, while the remaining languages use the backend Supertonic route. Non-English Kokoro voice previews are generated on demand by `/api/voice-preview`; Supertonic and English previews remain bundled. Audio cache keys include the engine, variant, voice, and settings.
 
-The backend model is pinned to `oddadmix/Kokoro-7M-Distill` FP32 with the required `af_msa` style pack, and returns mono AAC in fragmented MP4. Desktop and mobile no longer download any English Kokoro model.
+The Kokoro backend model is pinned to `hexgrad/Kokoro-82M` FP32 and returns mono AAC in fragmented MP4; Supertonic additionally receives a pitch-preserving tempo correction outside its native 0.7–2.0× range so the reader's 0.5–3.0× speaking speed works for every voice.
 
 Generation starts on playback demand. Once the first passage plays, both device classes prefetch a bounded window (30-second target, at most four following passages). Pause/navigation invalidates the look-ahead loop; an already-running passage may finish. Entire documents are not generated upfront.
 

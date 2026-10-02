@@ -36,7 +36,7 @@ for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: English uses the backend speech service`, async () => {
     const { calls, speakEnglish } = setup(mobile);
     const result = await speakEnglish();
-    assert.equal(result.route.model, "kokoro-7m-fp32-server-v1");
+    assert.equal(result.route.model, "kokoro-82m-fp32-server-v1");
     assert.equal(result.route.provider, "Server");
     assert.deepEqual(calls, ["remote:Hello:en:af_heart:4"]);
   });

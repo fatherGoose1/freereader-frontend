@@ -40,7 +40,7 @@ export default function Home() {
             </div>
             <div className="hero-assurances" aria-label="FreeReader product highlights">
               <span><CheckIcon /> Start free</span>
-              <span><CheckIcon /> 31 languages</span>
+              <span><CheckIcon /> 32 languages</span>
               <span><CheckIcon /> Audiobooks need no account</span>
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function Home() {
               <div className="wave-graphic" aria-hidden="true">
                 {[18, 34, 52, 28, 66, 44, 24, 58, 36, 20, 48, 30].map((height, index) => <i key={index} style={{ height }} />)}
               </div>
-              <div><h3>Find the right voice</h3><p>Choose from 31 languages. Fine-tune speed, pronunciation, and pauses in the narration studio.</p></div>
+              <div><h3>Find the right voice</h3><p>Choose from 32 languages. Fine-tune speed, pronunciation, and pauses in the narration studio.</p></div>
             </article>
             <article className="workflow-card">
               <span className="step">03</span>

@@ -79,6 +79,41 @@ test("page navigation, text sizing, settings and resume preserve the reading pos
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
 });
 
+test("voice settings generate at the chosen 0.5–3.0 speaking speed without player speed or quality controls", async ({ page }) => {
+  const requests: Array<{ speed: number; engine?: string }> = [];
+  await page.route("**/api/tts", (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ status: 503, json: { error: "Try again" } });
+  });
+  await upload(page, "Speaking speeds");
+  await page.getByRole("button", { name: /^html Speaking speeds/ }).click();
+  await expect(page.getByRole("combobox", { name: "Speed" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Voice settings" });
+  await expect(dialog.getByText("Quality")).toHaveCount(0);
+  const slider = dialog.getByRole("slider", { name: "Speaking speed" });
+  await expect(slider).toHaveAttribute("min", "0.5");
+  await expect(slider).toHaveAttribute("max", "3");
+  await expect(slider).toHaveValue("1");
+  await slider.focus();
+  await slider.press("End");
+  await expect(slider).toHaveValue("3");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0].speed).toBe(3);
+
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await dialog.getByLabel("Voice").selectOption("F4");
+  await slider.focus();
+  await slider.press("Home");
+  await expect(slider).toHaveValue("0.5");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({ speed: 0.5, engine: "supertonic" });
+});
+
 test("speech errors are visible and listening can be retried", async ({ page }) => {
   let fail = true;
   const sources: string[] = [];

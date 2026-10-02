@@ -9,7 +9,7 @@ export function GET() {
     .join("\n");
   const body = `# FreeReader
 
-> FreeReader turns EPUBs, PDFs, DOCX, HTML, Markdown, web articles, and Project Gutenberg books into audiobooks, and a YouTube Narration Studio turns scripts into voiceovers. Audiobook listening and generation are free without monthly limits. Video narration has a free tier with 1 hour of audio generation each month, Pro with 10 hours including 1 hour of premium voices, and Premium with 20 hours including 5 hours of premium voices. Pro and Premium both include expressive and cloned voices. 31 languages are supported.
+> FreeReader turns EPUBs, PDFs, DOCX, HTML, Markdown, web articles, and Project Gutenberg books into audiobooks, and a YouTube Narration Studio turns scripts into voiceovers. Audiobook listening and generation are free without monthly limits. Video narration has a free tier with 1 hour of audio generation each month, Pro with 10 hours including 1 hour of premium voices, and Premium with 20 hours including 5 hours of premium voices. Pro and Premium both include expressive and cloned voices. 32 languages are supported.
 
 Last updated: ${updated}
 

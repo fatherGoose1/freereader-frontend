@@ -21,7 +21,10 @@ test("search surfaces the strongest tag match and respects language availability
   assert.equal(searchVoiceProfiles(english, "olivia")[0]?.id, "F4");
   assert.deepEqual(searchVoiceProfiles(english, "unknown sound"), []);
   const spanish = builtInVoiceProfiles("es");
-  assert.equal(spanish.length, 10);
+  assert.equal(spanish.length, 13);
+  assert.ok(spanish.some((profile) => profile.id === "ef_dora"));
+  assert.ok(spanish.some((profile) => profile.id === "M3"));
+  assert.ok(spanish.every((profile) => profile.tags.length >= 3));
   assert.ok(!spanish.some((profile) => profile.id === "af_heart"));
 });
 
@@ -30,4 +33,6 @@ test("premium voices resolve to a cached bundled preview sample", () => {
   assert.equal(voicePreviewPath("qwen_vivian", "zh"), "/voice-previews/qwen_vivian.m4a");
   assert.equal(voicePreviewPath("af_heart", "en"), "/voice-previews/af_heart.m4a");
   assert.equal(voicePreviewPath("M3", "fr"), "/voice-previews/fr/M3.m4a");
+  assert.equal(voicePreviewPath("ff_siwis", "fr"), "/api/voice-preview?language=fr&voice=ff_siwis");
+  assert.equal(voicePreviewPath("zf_xiaobei", "zh"), "/api/voice-preview?language=zh&voice=zf_xiaobei");
 });
