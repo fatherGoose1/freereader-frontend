@@ -19,10 +19,18 @@ test("guests see the storage warning and Google sign-in in the library and reade
   const notice = page.getByRole("region", { name: "Save your library" });
   await expect(notice).toContainText("Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.");
   await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  const bounds = await notice.boundingBox();
+  const viewportWidth = await page.evaluate(() => window.innerWidth);
+  expect(bounds!.width).toBeLessThan(viewportWidth);
+  expect(Math.abs(bounds!.x + bounds!.width / 2 - viewportWidth / 2)).toBeLessThan(2);
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
   await expect(notice).toBeVisible();
   await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
+  await expect(page.getByText("Listen along")).toHaveCount(0);
+  await expect(page.locator('[class*="readerTools"]').getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
+  await expect(page.locator('[class*="playerRow"]').getByRole("button", { name: "Voice", exact: true })).toBeVisible();
 });
 
 test("library entry points, search, sorting, and folders are usable", async ({ page }, testInfo) => {

@@ -171,7 +171,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
+  const [message, setMessage] = useState(initialBook ? "" : "Your books and generated audio stay in this browser.");
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -987,7 +987,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     }
     resetPlayback();
     setPanel(null);
-    setMessage("Press Listen to hear this passage. Your place is saved automatically.");
+    setMessage("");
     audioPrimed.current = false;
     const language = languageForBook(book);
     const ready = book.language ? book : { ...book, language, updatedAt: new Date().toISOString() };
@@ -1111,7 +1111,6 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                 </select>
               </label>
             )}
-            <button className={styles.textButton} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
         </div>
         {accountNotice}
@@ -1160,7 +1159,6 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           <div className={styles.progressMeta}><span>{chapter?.title ?? selected.title}</span><strong>{Math.round(bookProgress * 100)}% of book</strong></div>
           <input className={styles.progressSlider} type="range" min="0" max="1" step="0.001" value={bookProgress} onChange={(event) => seekOverall(Number(event.target.value))} aria-label="Book playback progress" />
           <div className={styles.playerRow}>
-            <div className={styles.playerLabel}><ReaderIcon name="headphones" /><span>Listen along<small>{SPEECH_LANGUAGES.find(([code]) => code === narrationLanguage)?.[1]}</small></span></div>
             <div className={styles.transport}>
               <button className={styles.chapterSkip} onClick={() => moveChapter(-1)} disabled={!selected.chapters.some((item) => item.startBlockIndex < selected.position.blockIndex)} title="Previous chapter" aria-label="Previous chapter"><ReaderIcon name="previous" /></button>
               <button onClick={() => seek(-10)} title="Back 10 seconds"><strong>-10</strong><span>seconds</span></button>
@@ -1168,8 +1166,9 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               <button onClick={() => seek(10)} title="Forward 10 seconds"><strong>+10</strong><span>seconds</span></button>
               <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter" aria-label="Next chapter"><ReaderIcon name="next" /></button>
             </div>
+            <button className={`${styles.textButton} ${styles.playerVoiceButton}`} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
-          <p className={styles.statusLine} role="status">{message}</p>
+          {message && <p className={styles.statusLine} role="status">{message}</p>}
         </div>
         {panel === "voice" && (
           <div className={styles.settingsBackdrop} onMouseDown={() => setPanel(null)}>
