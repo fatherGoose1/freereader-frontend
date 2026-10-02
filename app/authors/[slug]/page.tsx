@@ -27,7 +27,6 @@ export default async function AuthorProfilePage({ params }: { params: Promise<{ 
       <h1>{profile.display_name}</h1>
       {profile.bio && <p>{profile.bio}</p>}
       <div className={styles.actions}>{links.map((link, index) => <a className={styles.secondary} href={link.url} key={index} target="_blank" rel="noopener noreferrer">{link.label}</a>)}</div>
-      <p>Read or listen for free, right in your browser.</p>
     </section>
     {!books.length && <p>This author’s books are coming soon.</p>}
     {groupAuthorBooks(books, series).map((group) => <section key={group.id}>
