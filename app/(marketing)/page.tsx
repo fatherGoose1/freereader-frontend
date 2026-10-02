@@ -28,7 +28,7 @@ export default function Home() {
       <section className="hero-section">
         <div className="hero wrap">
           <div className="hero-copy">
-            <span className="eyebrow hero-eyebrow"><i /> Audiobooks + video voiceovers</span>
+            {/* <span className="eyebrow hero-eyebrow"><i /> Audiobooks + video voiceovers</span> */}
             <h1>Make audiobooks <em>from anything.</em></h1>
             <p className="lead">
               Listen to books, documents, and articles in seconds.
