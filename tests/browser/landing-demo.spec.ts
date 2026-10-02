@@ -23,6 +23,10 @@ test("landing demo lists supported languages and routes non-English speech", asy
   await expect(menu).toBeHidden();
   await languagesButton.click();
   await expect(menu).toBeVisible();
+  // The popover opens below the trigger so the sticky header cannot clip it.
+  const menuBox = await menu.boundingBox();
+  const buttonBox = await languagesButton.boundingBox();
+  expect(menuBox!.y).toBeGreaterThanOrEqual(buttonBox!.y + buttonBox!.height);
   const names = await menu.locator("li").allTextContents();
   expect(names).toHaveLength(32);
   expect(names).toEqual([...names].sort((first, second) => first.localeCompare(second, "en")));

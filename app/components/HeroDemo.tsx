@@ -104,7 +104,7 @@ export default function HeroDemo() {
     <div className="hero-demo">
       <div className="hero-demo-head">
         <span className="hero-demo-dot" aria-hidden="true" />
-        <strong>Hear the difference</strong>
+        <strong>Demo</strong>
         <div className={`hero-demo-language-menu${languagesOpen ? " is-open" : ""}`}>
           <button
             type="button"
