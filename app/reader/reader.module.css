@@ -57,7 +57,7 @@
 .appMark i:nth-child(3) { height: 15px; }
 .appMark i:nth-child(4) { height: 7px; }
 .actions { display: flex; align-items: center; gap: 12px; }
-.accountNotice { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(620px, calc(100% - 32px)); margin: 14px auto 0; padding: 14px 16px; color: #46536b; background: #f5f7fc; border: 1px solid #dfe7f5; border-radius: 12px; box-shadow: 0 8px 24px #24365c12; }
+.accountNotice { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(620px, calc(100% - 32px)); margin: 14px auto 0; padding: 14px 16px; color: #46536b; background: #f5f7fc; border: 1px solid #dfe7f5; border-radius: 12px; box-shadow: 0 0 0 3px #f2ca6650, 0 0 28px #f2ca6680, 0 8px 24px #24365c12; }
 .accountNotice strong { display: block; font-size: 14px; }
 .accountNotice p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; }
 .accountNotice button { flex: none; min-height: 38px; padding: 8px 12px; color: #365bd6; background: #fff; border: 1px solid #c9d7f6; border-radius: 8px; font-size: 12px; font-weight: 650; }
