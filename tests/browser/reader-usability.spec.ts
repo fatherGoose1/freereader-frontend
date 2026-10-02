@@ -2,6 +2,15 @@ import { test, expect, type Page } from "@playwright/test";
 
 const paragraph = "Reading gives us a little time to pause and discover a different perspective. A good book can turn an ordinary afternoon into something memorable. ";
 
+function playableWav(seconds = 20): Buffer {
+  const audio = Buffer.alloc(44 + 24_000 * seconds * 2);
+  audio.write("RIFF", 0); audio.writeUInt32LE(audio.length - 8, 4); audio.write("WAVEfmt ", 8);
+  audio.writeUInt32LE(16, 16); audio.writeUInt16LE(1, 20); audio.writeUInt16LE(1, 22);
+  audio.writeUInt32LE(24_000, 24); audio.writeUInt32LE(48_000, 28); audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34);
+  audio.write("data", 36); audio.writeUInt32LE(audio.length - 44, 40);
+  return audio;
+}
+
 async function upload(page: Page, title: string, chapters = 1) {
   await page.locator('input[type="file"]').setInputFiles({
     name: `${title}.html`, mimeType: "text/html",
@@ -120,6 +129,60 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toMatchObject({ speed: 0.5, engine: "supertonic" });
+});
+
+test("changing voice during first generation starts the new voice without another Listen click", async ({ page }) => {
+  const requests: Array<{ voice: string }> = [];
+  let releaseFirst: (() => void) | undefined;
+  await page.route("**/api/tts", async (route) => {
+    requests.push(route.request().postDataJSON());
+    if (requests.length === 1) {
+      await new Promise<void>((resolve) => { releaseFirst = resolve; });
+    }
+    try {
+      await route.fulfill({ contentType: "audio/wav", headers: { "X-Audio-Duration": "20" }, body: playableWav() });
+    } catch { /* The old request was cancelled. */ }
+  });
+  try {
+    await upload(page, "Change voice while generating");
+    await page.getByRole("button", { name: /^html Change voice while generating/ }).click();
+    await page.getByRole("button", { name: "Listen", exact: true }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    await page.getByRole("button", { name: "Voice", exact: true }).click();
+    await page.getByRole("dialog", { name: "Voice settings" }).getByLabel("Voice").selectOption("af_river");
+    await expect.poll(() => requests.some((request) => request.voice === "af_river")).toBe(true);
+    await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  } finally {
+    releaseFirst?.();
+  }
+});
+
+test("changing language, voice, and speed leaves current audio playing and refreshes look-ahead", async ({ page }) => {
+  const requests: Array<{ voice: string; language?: string; engine?: string; speed: number }> = [];
+  await page.route("**/api/tts", (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ contentType: "audio/wav", headers: { "X-Audio-Duration": "20" }, body: playableWav() });
+  });
+  await upload(page, "Keep playing", 3);
+  await page.getByRole("button", { name: /^html Keep playing/ }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  const originalSource = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Voice settings" });
+  await settings.getByLabel("Language").selectOption("es");
+  await expect.poll(() => requests.some((request) => request.language === "es" && request.voice === "ef_dora" && request.engine === "kokoro")).toBe(true);
+  await settings.getByLabel("Voice").selectOption("em_alex");
+  await expect.poll(() => requests.some((request) => request.voice === "em_alex")).toBe(true);
+  const slider = settings.getByRole("slider", { name: "Speaking speed" });
+  await slider.focus();
+  await slider.press("End");
+  await expect.poll(() => requests.some((request) => request.voice === "em_alex" && request.speed === 3)).toBe(true);
+  await expect(page.locator("audio")).toHaveJSProperty("currentSrc", originalSource);
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  await expect(settings.getByText("~~~")).toHaveCount(0);
 });
 
 test("speech errors are visible and listening can be retried", async ({ page }) => {

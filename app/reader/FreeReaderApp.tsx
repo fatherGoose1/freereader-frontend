@@ -18,7 +18,7 @@ import {
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
-import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
+import { cancelNarration, narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
@@ -190,6 +190,9 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [voice, setVoice] = useState<NarratorVoice>(initialBook?.preferredVoice ?? "af_heart");
   const steps = 12;
   const [speechRate, setSpeechRate] = useState(1);
+  const appliedSpeechRate = useRef(1);
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  const resumeAfterSettings = useRef<{ bookId: string; index: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
@@ -225,6 +228,19 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
       ? current
       : { bookId: selected.id, start });
   }, [selected?.id, selected?.position.blockIndex, pageStarts]);
+
+  useEffect(() => {
+    if (!settingsRevision) return;
+    const resume = resumeAfterSettings.current;
+    if (resume) {
+      resumeAfterSettings.current = null;
+      const book = selectedRef.current;
+      if (book?.id === resume.bookId) void playBlock(book, resume.index, resume.offset);
+      return;
+    }
+    const current = currentAudio();
+    if (current && wantsPlayback.current) void pregenerate(current.book, current.source.index + 1);
+  }, [settingsRevision]);
   const lastPositionSave = useRef(0);
 
   function libraryChanged() {
@@ -1010,23 +1026,45 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   function changeNarrationLanguage(language: SpeechLanguage) {
     const selected = selectedRef.current;
     if (!selected) return;
-    resetPlayback();
-    audioPrimed.current = false;
     const nextVoice = voiceForLanguage(voice, language);
     setVoice(nextVoice);
     const updated = { ...selected, language, preferredVoice: nextVoice, updatedAt: new Date().toISOString() };
     updateBook(updated);
+    continueAfterSettingsChange();
     posthog.capture("voice_settings_changed", { setting: "language", value: language });
   }
 
   function changeNarratorVoice(value: NarratorVoice) {
     const selected = selectedRef.current;
     if (!selected) return;
-    resetPlayback();
-    audioPrimed.current = false;
     setVoice(value);
     updateBook({ ...selected, preferredVoice: value, updatedAt: new Date().toISOString() });
+    continueAfterSettingsChange();
     posthog.capture("voice_settings_changed", { setting: "voice", value });
+  }
+
+  function continueAfterSettingsChange() {
+    if (!wantsPlayback.current) return;
+    const current = currentAudio();
+    generationEpoch.current += 1;
+    cancelNarration();
+    pendingAudio.current.clear();
+    if (!current || current.audio.ended) {
+      const book = selectedRef.current;
+      if (!book) return;
+      resumeAfterSettings.current = { bookId: book.id, index: book.position.blockIndex, offset: book.position.offsetSeconds };
+      resetPlayback();
+      audioPrimed.current = false;
+    }
+    setSettingsRevision((revision) => revision + 1);
+  }
+
+  function commitSpeechRate(rate: number) {
+    if (appliedSpeechRate.current === rate) return;
+    appliedSpeechRate.current = rate;
+    setSpeechRate(rate);
+    continueAfterSettingsChange();
+    posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: rate });
   }
 
   function openGutenbergBrowser() {
@@ -1179,7 +1217,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                 {SPEECH_LANGUAGES.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
-            <label className={styles.settingsRow}><span><i className={styles.waveIcon}>~~~</i> Voice</span>
+            <label className={styles.settingsRow}><span>Voice</span>
               <select value={narrationVoice} onChange={(event) => changeNarratorVoice(event.target.value as NarratorVoice)}>
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
@@ -1187,9 +1225,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
             <div className={styles.speakingRateSetting}>
               <div><label htmlFor="reader-speaking-speed">Speaking speed</label><output htmlFor="reader-speaking-speed">{speechRate.toFixed(1)}×</output></div>
               <input id="reader-speaking-speed" type="range" min="0.5" max="3" step="0.1" value={speechRate}
-                onChange={(event) => { resetPlayback(); audioPrimed.current = false; setSpeechRate(Number(event.target.value)); }}
-                onPointerUp={() => posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: speechRate })}
-                onKeyUp={() => posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: speechRate })} />
+                onChange={(event) => setSpeechRate(Number(event.target.value))}
+                onPointerUp={(event) => commitSpeechRate(Number(event.currentTarget.value))}
+                onKeyUp={(event) => commitSpeechRate(Number(event.currentTarget.value))}
+                onBlur={(event) => commitSpeechRate(Number(event.currentTarget.value))} />
               <div className={styles.speakingRateBounds}><span>0.5×</span><span>3.0×</span></div>
             </div>
             <small>Speaking speed applies to newly generated passages.</small>
