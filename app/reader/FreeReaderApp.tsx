@@ -1044,18 +1044,20 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   }
 
   function continueAfterSettingsChange() {
+    // Settings changed mid-playback: stop the audio that used the old
+    // parameters and immediately regenerate the current passage, then autoplay.
     if (!wantsPlayback.current) return;
+    const book = selectedRef.current;
+    if (!book) return;
     const current = currentAudio();
+    const index = current ? current.source.index : book.position.blockIndex;
+    const offset = current ? current.audio.currentTime : book.position.offsetSeconds;
     generationEpoch.current += 1;
     cancelNarration();
     pendingAudio.current.clear();
-    if (!current || current.audio.ended) {
-      const book = selectedRef.current;
-      if (!book) return;
-      resumeAfterSettings.current = { bookId: book.id, index: book.position.blockIndex, offset: book.position.offsetSeconds };
-      resetPlayback();
-      audioPrimed.current = false;
-    }
+    resumeAfterSettings.current = { bookId: book.id, index, offset };
+    resetPlayback();
+    audioPrimed.current = false;
     setSettingsRevision((revision) => revision + 1);
   }
 
