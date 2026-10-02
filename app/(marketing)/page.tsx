@@ -29,10 +29,10 @@ export default function Home() {
         <div className="hero wrap">
           <div className="hero-copy">
             <span className="eyebrow hero-eyebrow"><i /> Audiobooks + video voiceovers</span>
-            <h1>Text to speech for <em>stories and screens.</em></h1>
+            <h1>Make audiobooks <em>from anything.</em></h1>
             <p className="lead">
-              Listen to books, documents, and articles in a dedicated audiobook reader.
-              Or turn your video script into a voiceover you can edit, preview, and export.
+              Listen to books, documents, and articles in seconds.
+              Natural voices, no signup required, always free.
             </p>
             <div className="hero-actions">
               <Link className="button audiobook-cta" href="/reader/audiobooks">Open audiobook reader <ArrowIcon /><span className="always-free-badge">Always free</span></Link>
@@ -41,11 +41,10 @@ export default function Home() {
             <div className="hero-assurances" aria-label="FreeReader product highlights">
               <span><CheckIcon /> Start free</span>
               <span><CheckIcon /> 32 languages</span>
-              <span><CheckIcon /> Audiobooks need no account</span>
+              <span><CheckIcon /> No signup required</span>
             </div>
           </div>
           <div className="hero-shot" aria-label="FreeReader live speech demo">
-            <div className="demo-caption"><span>Try the voice engine</span><strong>Live preview</strong></div>
             <HeroDemo />
           </div>
         </div>
