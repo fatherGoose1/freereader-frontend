@@ -148,6 +148,10 @@ export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage) {
   return getRouter().route(voice, language);
 }
 
+export function cancelNarration() {
+  router?.stop();
+}
+
 export function synthesize(text: string, voice: NarratorVoice = "af_heart", steps = 8, status?: TtsStatus,
   isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook", instruct?: string) {
   return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded, source, instruct);

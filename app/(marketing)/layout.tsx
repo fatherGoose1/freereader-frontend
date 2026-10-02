@@ -13,7 +13,6 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
           <div className="links">
             <Link href="/#how">Explore tools</Link>
             <Link href="/narration">Video narration</Link>
-            <Link href="/pricing">Pricing</Link>
             <Link href="/#trust">Privacy</Link>
             <Link href="/support">Support</Link>
           </div>
