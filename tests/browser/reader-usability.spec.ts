@@ -158,28 +158,30 @@ test("changing voice during first generation starts the new voice without anothe
   }
 });
 
-test("changing language, voice, and speed leaves current audio playing and refreshes look-ahead", async ({ page }) => {
+test("changing language, voice, and speed restarts the current passage automatically with the new settings", async ({ page }) => {
   const requests: Array<{ voice: string; language?: string; engine?: string; speed: number }> = [];
   await page.route("**/api/tts", (route) => {
     requests.push(route.request().postDataJSON());
     return route.fulfill({ contentType: "audio/wav", headers: { "X-Audio-Duration": "20" }, body: playableWav() });
   });
-  await upload(page, "Keep playing", 3);
-  await page.getByRole("button", { name: /^html Keep playing/ }).click();
+  await upload(page, "Restart settings", 3);
+  await page.getByRole("button", { name: /^html Restart settings/ }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   const originalSource = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Voice settings" });
   await settings.getByLabel("Language").selectOption("es");
+  // The old audio must stop and the current passage must regenerate and resume by itself.
   await expect.poll(() => requests.some((request) => request.language === "es" && request.voice === "ef_dora" && request.engine === "kokoro")).toBe(true);
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement, previous) => audio.currentSrc && audio.currentSrc !== previous, originalSource)).toBe(true);
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   await settings.getByLabel("Voice").selectOption("em_alex");
   await expect.poll(() => requests.some((request) => request.voice === "em_alex")).toBe(true);
   const slider = settings.getByRole("slider", { name: "Speaking speed" });
   await slider.focus();
   await slider.press("End");
   await expect.poll(() => requests.some((request) => request.voice === "em_alex" && request.speed === 3)).toBe(true);
-  await expect(page.locator("audio")).toHaveJSProperty("currentSrc", originalSource);
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   await expect(settings.getByText("~~~")).toHaveCount(0);
