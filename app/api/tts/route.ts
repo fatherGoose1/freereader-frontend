@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (!single && !texts?.length) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-  if (body.engine !== undefined && body.engine !== "supertonic") {
+  if (body.engine !== undefined && body.engine !== "supertonic" && body.engine !== "kokoro") {
     return NextResponse.json({ error: "invalid_engine" }, { status: 400 });
   }
   const upstreamBody: Record<string, unknown> = texts
@@ -27,14 +27,14 @@ export async function POST(request: Request) {
   // A Supertonic voice would be invalid if the text is detected as English (Kokoro).
   if (body.detectLanguage === true) {
     upstreamBody.detect_language = true;
-    if (body.engine === "supertonic" && typeof body.voice === "string") upstreamBody.voice = body.voice;
+    if (body.engine && typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   } else {
     if (typeof body.language === "string" && (body.language !== "en" || body.engine === "supertonic")) upstreamBody.language = body.language;
     if (typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }
-  if (body.engine === "supertonic") upstreamBody.engine = "supertonic";
+  if (body.engine) upstreamBody.engine = body.engine;
   if (typeof body.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);
   const backend = process.env.KOKO_BACKEND_URL
     ?? "https://koko-backend-production-c887.up.railway.app";

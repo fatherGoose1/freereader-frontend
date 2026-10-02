@@ -19,10 +19,18 @@ test("guests see the storage warning and Google sign-in in the library and reade
   const notice = page.getByRole("region", { name: "Save your library" });
   await expect(notice).toContainText("Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.");
   await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  const bounds = await notice.boundingBox();
+  const viewportWidth = await page.evaluate(() => window.innerWidth);
+  expect(bounds!.width).toBeLessThan(viewportWidth);
+  expect(Math.abs(bounds!.x + bounds!.width / 2 - viewportWidth / 2)).toBeLessThan(2);
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
   await expect(notice).toBeVisible();
   await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
+  await expect(page.getByText("Listen along")).toHaveCount(0);
+  await expect(page.locator('[class*="readerTools"]').getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
+  await expect(page.locator('[class*="playerRow"]').getByRole("button", { name: "Voice", exact: true })).toBeVisible();
 });
 
 test("library entry points, search, sorting, and folders are usable", async ({ page }, testInfo) => {
@@ -77,6 +85,41 @@ test("page navigation, text sizing, settings and resume preserve the reading pos
   await expect(page.locator('article [aria-current="true"]')).toHaveText(position!);
   await expect(pages).toContainText("Page 2 of");
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
+});
+
+test("voice settings generate at the chosen 0.5–3.0 speaking speed without player speed or quality controls", async ({ page }) => {
+  const requests: Array<{ speed: number; engine?: string }> = [];
+  await page.route("**/api/tts", (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ status: 503, json: { error: "Try again" } });
+  });
+  await upload(page, "Speaking speeds");
+  await page.getByRole("button", { name: /^html Speaking speeds/ }).click();
+  await expect(page.getByRole("combobox", { name: "Speed" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Voice settings" });
+  await expect(dialog.getByText("Quality")).toHaveCount(0);
+  const slider = dialog.getByRole("slider", { name: "Speaking speed" });
+  await expect(slider).toHaveAttribute("min", "0.5");
+  await expect(slider).toHaveAttribute("max", "3");
+  await expect(slider).toHaveValue("1");
+  await slider.focus();
+  await slider.press("End");
+  await expect(slider).toHaveValue("3");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0].speed).toBe(3);
+
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await dialog.getByLabel("Voice").selectOption("F4");
+  await slider.focus();
+  await slider.press("Home");
+  await expect(slider).toHaveValue("0.5");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({ speed: 0.5, engine: "supertonic" });
 });
 
 test("speech errors are visible and listening can be retried", async ({ page }) => {

@@ -1,5 +1,5 @@
 export const SPEECH_LANGUAGES = [
-  ["en", "English"], ["ko", "Korean"], ["ja", "Japanese"], ["ar", "Arabic"],
+  ["en", "English"], ["ko", "Korean"], ["ja", "Japanese"], ["zh", "Chinese (Mandarin)"], ["ar", "Arabic"],
   ["bg", "Bulgarian"], ["cs", "Czech"], ["da", "Danish"], ["de", "German"],
   ["el", "Greek"], ["es", "Spanish"], ["et", "Estonian"], ["fi", "Finnish"],
   ["fr", "French"], ["hi", "Hindi"], ["hr", "Croatian"], ["hu", "Hungarian"],

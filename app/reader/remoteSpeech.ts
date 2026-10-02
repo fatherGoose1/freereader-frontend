@@ -9,7 +9,7 @@ import { findClonedVoice } from "./cloneVoices";
 import type { SpeechResult } from "./mobileSpeech";
 
 type BatchItem = { text: string; isHeading: boolean };
-type SpeechOptions = { language: string; voice: string; steps: number; engine?: "supertonic"; source?: TelemetrySource; instruct?: string };
+type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic"; source?: TelemetrySource; instruct?: string };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (payload?.error === "usage_limit_reached") {
@@ -78,11 +78,11 @@ export class RemoteSpeechClient {
           Number(response.headers.get("X-Generation-Seconds")), generationStartedAt)];
       }
       const language = options?.language;
-      const supertonic = options?.engine === "supertonic" || (language !== undefined && language !== "en");
+      const supertonic = options?.engine === "supertonic" || (options?.engine !== "kokoro" && language !== undefined && language !== "en");
       const body: Record<string, unknown> = {
         texts: items.map((item) => supertonic
           ? normalizeForSupertonic(item.text, item.isHeading, language)
-          : normalizeForSpeech(item.text, item.isHeading)),
+          : normalizeForSpeech(item.text, item.isHeading, language)),
         speed: speechSpeed,
       };
       if (options) {
@@ -110,6 +110,9 @@ export class RemoteSpeechClient {
       }
       const reportedModel = response.headers.get("X-TTS-Model");
       if (options?.engine === "supertonic" && reportedModel && !reportedModel.toLowerCase().includes("supertonic")) {
+        throw new Error("This speech server does not support the selected voice yet. Update the speech service and try again.");
+      }
+      if (options?.engine === "kokoro" && reportedModel && !reportedModel.toLowerCase().includes("kokoro")) {
         throw new Error("This speech server does not support the selected voice yet. Update the speech service and try again.");
       }
       const generationSeconds = Number(response.headers.get("X-Generation-Seconds"));

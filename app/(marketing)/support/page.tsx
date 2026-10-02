@@ -68,7 +68,7 @@ export default function Support() {
 
       <h3>Which languages are supported?</h3>
       <p>
-        FreeReader supports 31 languages. Available voices may vary by language
+        FreeReader supports 32 languages. Available voices may vary by language
         and iOS version.
       </p>
 

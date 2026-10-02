@@ -40,7 +40,7 @@ const tiers: Tier[] = [
     features: [
       "1 hour of video narration each month",
       "Script editing and WAV voiceover export",
-      "Built-in voices across 31 languages",
+      "Built-in voices across 32 languages",
       "Pronunciation, pace, and pause control by passage",
       "Projects saved privately in this browser",
       "Free Google sign-in, no card required",

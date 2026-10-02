@@ -8,7 +8,7 @@ export type VoiceProfile = {
   tags: readonly string[];
 };
 
-const VOICE_TAGS: Record<KokoroVoice | Voice, readonly string[]> = {
+const VOICE_TAGS: Partial<Record<KokoroVoice | Voice, readonly string[]>> = {
   af_heart: ["warm", "natural", "expressive"],
   af_alloy: ["composed", "clear", "balanced"],
   af_aoede: ["airy", "lyrical", "gentle"],
@@ -55,7 +55,7 @@ export function builtInVoiceProfiles(language: SpeechLanguage): VoiceProfile[] {
   return voicesForLanguage(language).map(([id, name]) => ({
     id,
     name,
-    tags: VOICE_TAGS[id as KokoroVoice | Voice],
+    tags: VOICE_TAGS[id as KokoroVoice | Voice] ?? ["natural", "narration", "clear"],
   }));
 }
 

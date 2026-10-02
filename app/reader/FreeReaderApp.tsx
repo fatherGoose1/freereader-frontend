@@ -22,7 +22,7 @@ import { narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
-import { isKokoroVoice, isSupertonicVoice, type NarratorVoice } from "./voices";
+import { isKokoroVoice, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
 import posthog from "posthog-js";
@@ -171,7 +171,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Your books and generated audio stay in this browser.");
+  const [message, setMessage] = useState(initialBook ? "" : "Your books and generated audio stay in this browser.");
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -188,8 +188,8 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [category, setCategory] = useState<number | undefined>();
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
   const [voice, setVoice] = useState<NarratorVoice>(initialBook?.preferredVoice ?? "af_heart");
-  const [steps, setSteps] = useState(12);
-  const [speechRate, setSpeechRate] = useState(0.9);
+  const steps = 12;
+  const [speechRate, setSpeechRate] = useState(1);
   const [playing, setPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
@@ -212,8 +212,6 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   useEffect(() => { setImportErrorMessage(""); }, [panel]);
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
-  // English spans both engines; other languages use Supertonic only.
-  const usesSupertonic = narrationLanguage !== "en" || isSupertonicVoice(narrationVoice);
   const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
 
   useEffect(() => {
@@ -614,7 +612,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const now = new Date().toISOString();
     return {
       ...book,
-      position: { ...book.position, blockIndex, offsetSeconds, updatedAt: now },
+      position: { ...book.position, blockIndex, offsetSeconds, speed: 1, updatedAt: now },
     };
   }
 
@@ -725,12 +723,12 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
       try {
         const { blob, duration } = await ensureAudio(book, index, isCurrent);
         if (!isCurrent()) return;
-        if (duration > 0) bufferedSeconds += duration / book.position.speed;
+        if (duration > 0) bufferedSeconds += duration;
         else if (blob.type === "audio/wav") {
           const wav = new DataView(await blob.slice(0, 44).arrayBuffer());
-          bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true) / book.position.speed;
+          bufferedSeconds += (blob.size - 44) / wav.getUint32(28, true);
         } else {
-          bufferedSeconds += book.blocks[index].text.split(/\s+/).length / 2.5 / book.position.speed;
+          bufferedSeconds += book.blocks[index].text.split(/\s+/).length / 2.5 / speechRate;
         }
         if (bufferedSeconds >= 30) return;
       } catch { return; }
@@ -799,7 +797,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           : Math.min(offset, Math.max(0, audio.duration - 0.05));
       };
       audio.src = source.url;
-      audio.playbackRate = selectedRef.current!.position.speed;
+      audio.playbackRate = 1;
       await audio.play();
       if (!isCurrent()) return;
       const playbackStartedAt = performance.timeOrigin + performance.now();
@@ -820,13 +818,13 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           document_id: book.id,
           block_index: index,
           offset_seconds: offset,
-          speed: book.position.speed,
+          speed: 1,
         });
         posthog.capture("playback_started", {
           file_type: book.format,
           block_count: book.blocks.length,
           chapter_count: book.chapters.length,
-          speed: book.position.speed,
+          speed: 1,
         });
       }
       if (!playableBooks.current.has(book.id)) {
@@ -905,20 +903,6 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     } else if (target < 0 && book.position.blockIndex > 0) {
       void playBlock(book, book.position.blockIndex - 1, Math.abs(target), true);
     } else audio.currentTime = Math.max(0, Math.min(audio.duration, target));
-  }
-
-  function changeSpeed(speed: number) {
-    const selected = selectedRef.current;
-    if (!selected) return;
-    if (audioRef.current) audioRef.current.playbackRate = speed;
-    const updated = {
-      ...selected,
-      position: { ...selected.position, speed, updatedAt: new Date().toISOString() },
-    };
-    updateBook(updated);
-    if (wantsPlayback.current && currentAudio() && !audioRef.current?.paused) {
-      void pregenerate(selectedRef.current!, selected.position.blockIndex + 1);
-    }
   }
 
   function seekOverall(progress: number) {
@@ -1003,7 +987,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     }
     resetPlayback();
     setPanel(null);
-    setMessage("Press Listen to hear this passage. Your place is saved automatically.");
+    setMessage("");
     audioPrimed.current = false;
     const language = languageForBook(book);
     const ready = book.language ? book : { ...book, language, updatedAt: new Date().toISOString() };
@@ -1127,7 +1111,6 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                 </select>
               </label>
             )}
-            <button className={styles.textButton} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
         </div>
         {accountNotice}
@@ -1176,7 +1159,6 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           <div className={styles.progressMeta}><span>{chapter?.title ?? selected.title}</span><strong>{Math.round(bookProgress * 100)}% of book</strong></div>
           <input className={styles.progressSlider} type="range" min="0" max="1" step="0.001" value={bookProgress} onChange={(event) => seekOverall(Number(event.target.value))} aria-label="Book playback progress" />
           <div className={styles.playerRow}>
-            <div className={styles.playerLabel}><ReaderIcon name="headphones" /><span>Listen along<small>{SPEECH_LANGUAGES.find(([code]) => code === narrationLanguage)?.[1]}</small></span></div>
             <div className={styles.transport}>
               <button className={styles.chapterSkip} onClick={() => moveChapter(-1)} disabled={!selected.chapters.some((item) => item.startBlockIndex < selected.position.blockIndex)} title="Previous chapter" aria-label="Previous chapter"><ReaderIcon name="previous" /></button>
               <button onClick={() => seek(-10)} title="Back 10 seconds"><strong>-10</strong><span>seconds</span></button>
@@ -1184,13 +1166,9 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               <button onClick={() => seek(10)} title="Forward 10 seconds"><strong>+10</strong><span>seconds</span></button>
               <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter" aria-label="Next chapter"><ReaderIcon name="next" /></button>
             </div>
-            <label className={styles.speed}>Speed
-              <select value={selected.position.speed} onChange={(event) => changeSpeed(Number(event.target.value))}>
-                {[0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => <option key={value} value={value}>{value}x</option>)}
-              </select>
-            </label>
+            <button className={`${styles.textButton} ${styles.playerVoiceButton}`} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
-          <p className={styles.statusLine} role="status">{message}</p>
+          {message && <p className={styles.statusLine} role="status">{message}</p>}
         </div>
         {panel === "voice" && (
           <div className={styles.settingsBackdrop} onMouseDown={() => setPanel(null)}>
@@ -1206,21 +1184,15 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
-            <div className={styles.qualitySetting}><span>Speaking Rate</span><div>
-              {[[0.8, "0.8x"], [0.9, "0.9x"], [1, "1x"], [1.1, "1.1x"], [1.2, "1.2x"]].map(([value, label]) => (
-                <button key={value} className={speechRate === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); audioPrimed.current = false; setSpeechRate(Number(value)); posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: Number(value) }); }}>{label}</button>
-              ))}
-            </div></div>
-            {usesSupertonic && (
-              <div className={styles.qualitySetting}><span>Quality</span><div>
-                {[[5, "Low"], [8, "Medium"], [12, "High"]].map(([value, label]) => (
-                  <button key={value} className={steps === value ? styles.qualityActive : ""} onClick={() => { resetPlayback(); setSteps(Number(value)); posthog.capture("voice_settings_changed", { setting: "quality_steps", value: Number(value) }); }}>{label}</button>
-                ))}
-              </div></div>
-            )}
-            <small>{narrationLanguage === "en"
-              ? "Speaking Rate changes how the audio is generated."
-              : "Higher quality takes longer to generate. Changes apply to new passages."}</small>
+            <div className={styles.speakingRateSetting}>
+              <div><label htmlFor="reader-speaking-speed">Speaking speed</label><output htmlFor="reader-speaking-speed">{speechRate.toFixed(1)}×</output></div>
+              <input id="reader-speaking-speed" type="range" min="0.5" max="3" step="0.1" value={speechRate}
+                onChange={(event) => { resetPlayback(); audioPrimed.current = false; setSpeechRate(Number(event.target.value)); }}
+                onPointerUp={() => posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: speechRate })}
+                onKeyUp={() => posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: speechRate })} />
+              <div className={styles.speakingRateBounds}><span>0.5×</span><span>3.0×</span></div>
+            </div>
+            <small>Speaking speed applies to newly generated passages.</small>
           </div>
           </div>
         )}
