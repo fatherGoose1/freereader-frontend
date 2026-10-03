@@ -50,32 +50,6 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section paths-section" id="how" aria-labelledby="paths-heading">
-        <div className="wrap">
-          <div className="section-heading paths-heading">
-            <span className="eyebrow">Choose your workspace</span>
-            <h2 id="paths-heading">Listen to a book. Narrate a video.</h2>
-            <p>From long-form reading to finished voiceovers, FreeReader gives you the right tools for the job.</p>
-          </div>
-          <div className="paths-grid">
-            <article className="path-card">
-              <span className="path-icon" aria-hidden="true">Aa</span>
-              <span className="kicker">For readers</span>
-              <h3>Your own audiobook library</h3>
-              <p>Import EPUBs, PDFs, articles, or pasted text. Follow along on the page, move between chapters, and pick up right where you left off.</p>
-              <Link href="/reader/audiobooks">Open audiobook reader <ArrowIcon /></Link>
-            </article>
-            <article className="path-card">
-              <span className="path-icon" aria-hidden="true">▶</span>
-              <span className="kicker">For video creators</span>
-              <h3>A voiceover studio for scripts</h3>
-              <p>Paste a script, set voices and pacing by passage, fix pronunciations, then download a WAV voiceover for your video.</p>
-              <Link href="/narration">Open narration studio <ArrowIcon /></Link>
-            </article>
-          </div>
-        </div>
-      </section>
-
       <section className="compatibility" aria-label="Compatible sources and formats">
         <div className="wrap compatibility-row">
           <p>Bring reading you have the rights to narrate</p>
@@ -87,7 +61,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section workflow">
+      <section className="section workflow" id="how">
         <div className="wrap">
           <div className="section-heading split-heading">
             <div>
@@ -118,35 +92,6 @@ export default function Home() {
               <span className="step">03</span>
               <div className="progress-graphic" aria-hidden="true"><i /><span>Generating audio</span><strong>62%</strong></div>
               <div><h3>Listen or export</h3><p>Keep your place in an audiobook, or preview and export a finished voiceover as WAV.</p></div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="section trust-section" id="trust">
-        <div className="wrap trust-grid">
-          <div className="trust-copy">
-            <span className="eyebrow light">Privacy, plainly stated</span>
-            <h2>Your words stay yours.</h2>
-            <p>
-              Use either workspace without an account. Your library and narration
-              projects are saved in your browser; text is sent to our speech service
-              when you generate audio. Audiobook listening is always free.
-            </p>
-            <Link className="light-link" href="/privacy">Read the privacy policy <ArrowIcon /></Link>
-          </div>
-          <div className="trust-details">
-            <article>
-              <span className="trust-icon">01</span>
-              <div><h3>Local by default</h3><p>Your imported library, narration projects, and generated audio are stored in your browser.</p></div>
-            </article>
-            <article>
-              <span className="trust-icon">02</span>
-              <div><h3>Your library, your choice</h3><p>Books, folders, and reading progress stay in this browser unless you sign in to sync them to your account.</p></div>
-            </article>
-            <article>
-              <span className="trust-icon">03</span>
-              <div><h3>No advertising profile</h3><p>No ads, advertising identifiers, or sale of diagnostics. Our policies explain exactly what is handled.</p></div>
             </article>
           </div>
         </div>
