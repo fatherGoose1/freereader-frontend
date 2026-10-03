@@ -1,0 +1,27 @@
+.launcher { position: fixed; z-index: 90; right: 20px; bottom: max(20px, env(safe-area-inset-bottom)); display: grid; width: 48px; height: 48px; place-items: center; color: #fff; background: #365bd6; border: 0; border-radius: 50%; box-shadow: 0 8px 28px #24365c40; font-size: 26px; font-weight: 700; line-height: 1; cursor: pointer; }
+.launcher:hover { background: #294bbe; }
+.launcher:focus-visible, .dialog :is(input, textarea, button):focus-visible { outline: 3px solid #8ba7ff; outline-offset: 2px; }
+.backdrop { position: fixed; z-index: 100; inset: 0; background: #17253e38; }
+.dialog { position: absolute; right: 20px; bottom: 82px; width: min(380px, calc(100% - 32px)); max-height: calc(100dvh - 100px); overflow-y: auto; padding: 22px; color: #202633; background: #fff; border: 1px solid #e2e6ee; border-radius: 16px; box-shadow: 0 16px 48px #17253e30; font-family: var(--sans); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.header h2 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: -.02em; }
+.header button { width: 36px; height: 36px; flex: none; padding: 0; color: #697386; background: #f5f7fb; border: 0; border-radius: 8px; font-size: 24px; cursor: pointer; }
+.dialog form { display: grid; gap: 9px; }
+.dialog label { font-size: 13px; font-weight: 650; }
+.dialog input, .dialog textarea { width: 100%; padding: 11px 12px; color: #202633; background: #fcfdff; border: 1px solid #dbe2f0; border-radius: 8px; font: inherit; font-size: 15px; }
+.dialog textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
+.dialog form label:not(:first-child) { margin-top: 10px; }
+.submit { min-height: 42px; margin-top: 10px; padding: 10px 16px; color: #fff; background: #365bd6; border: 0; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
+.submit:disabled { opacity: .6; cursor: wait; }
+.error { margin: 4px 0 0; color: #a43a43; font-size: 13px; }
+.success strong { display: block; font-size: 16px; }
+.success p { margin: 6px 0 0; color: #697386; font-size: 14px; }
+:global(body:has(.reader-app-route [class*="readingShell"])) .launcher { bottom: 160px; }
+:global(body:has(.reader-app-route [class*="readingShell"])) .dialog { bottom: 220px; }
+@media (max-width: 600px) {
+  .launcher { right: 14px; }
+  .backdrop { background: #fff; }
+  .dialog { position: fixed; inset: 0; width: 100%; height: 100dvh; max-height: none; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); border: 0; border-radius: 0; box-shadow: none; }
+  :global(body:has(.reader-app-route [class*="readingShell"])) .launcher { bottom: 245px; }
+  :global(body:has(.reader-app-route [class*="readingShell"])) .dialog { bottom: auto; }
+}
