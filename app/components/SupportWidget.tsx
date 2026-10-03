@@ -58,6 +58,12 @@ export default function SupportWidget() {
   }
 
   return <>
+    <a className={styles.coffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Buy me a coffee" title="Buy me a coffee">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" />
+        <path d="M17 9h2a2 2 0 0 1 0 4h-2M8 3v2m5-2v2M3 21h15" />
+      </svg>
+    </a>
     <button ref={launcher} type="button" className={styles.launcher} aria-label="Contact support" aria-expanded={open} aria-controls="support-dialog" onClick={() => setOpen(true)}>?</button>
     {open && <div className={styles.backdrop} onMouseDown={close}>
       <section ref={dialog} id="support-dialog" role="dialog" aria-modal="true" aria-labelledby="support-title" className={styles.dialog} onMouseDown={(event) => event.stopPropagation()}>
