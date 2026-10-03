@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { POST } from "../api/support-requests/route";
 
-test("support proxy forwards only the message and email with the server token", async (t) => {
+test("support proxy forwards the source pathname, message, and email with the server token", async (t) => {
   const oldToken = process.env.FREEREADER_TTS_API_TOKEN;
   const oldBackend = process.env.KOKO_BACKEND_URL;
   process.env.FREEREADER_TTS_API_TOKEN = "test-server-token";
@@ -17,13 +17,13 @@ test("support proxy forwards only the message and email with the server token", 
     assert.equal(String(input), "https://backend.example/api/v1/freereader/support-requests");
     assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer test-server-token");
     assert.deepEqual(JSON.parse(String(init?.body)), {
-      email: "reader@example.com", message: "I need help with this book.",
+      email: "reader@example.com", message: "I need help with this book.", source_path: "/reader/audiobooks",
     });
     return Response.json({ received: true }, { status: 201 });
   });
   const response = await POST(new Request("http://localhost/api/support-requests", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "reader@example.com", message: "I need help with this book.", extra: "discard me" }),
+    body: JSON.stringify({ email: "reader@example.com", message: "I need help with this book.", source_path: "/reader/audiobooks", extra: "discard me" }),
   }));
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { received: true });

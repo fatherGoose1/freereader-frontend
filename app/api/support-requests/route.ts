@@ -6,8 +6,9 @@ export async function POST(request: Request) {
   if (Number(request.headers.get("Content-Length")) > 8 * 1024) {
     return Response.json({ error: "request_too_large" }, { status: 413 });
   }
-  const payload = await request.json().catch(() => null) as { email?: unknown; message?: unknown } | null;
+  const payload = await request.json().catch(() => null) as { email?: unknown; message?: unknown; source_path?: unknown } | null;
   if (!payload || typeof payload.email !== "string" || typeof payload.message !== "string"
+      || (payload.source_path !== undefined && typeof payload.source_path !== "string")
       || JSON.stringify(payload).length > 8 * 1024) {
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   try {
     const response = await callBackend(config, "/api/v1/freereader/support-requests", {
       email: payload.email, message: payload.message,
+      ...(payload.source_path !== undefined ? { source_path: payload.source_path } : {}),
     }, 10_000);
     if (response.status === 201) return Response.json({ received: true }, { status: 201 });
     if (response.status === 400 || response.status === 413) {

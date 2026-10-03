@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("support is available without signing in and preserves an unsent message", async ({ page }) => {
-  const submissions: Array<{ email: string; message: string }> = [];
+  const submissions: Array<{ email: string; message: string; source_path: string }> = [];
   await page.route("**/api/support-requests", (route) => {
     submissions.push(route.request().postDataJSON());
     return route.fulfill({ status: 201, json: { received: true } });
@@ -20,11 +20,16 @@ test("support is available without signing in and preserves an unsent message", 
   await expect(dialog.getByLabel("How can we help?")).toHaveValue("I need help with an audiobook.");
   await dialog.getByRole("button", { name: "Send request" }).click();
   await expect(dialog).toContainText("Request received.");
-  expect(submissions).toEqual([{ email: "reader@example.com", message: "I need help with an audiobook." }]);
+  expect(submissions).toEqual([{ email: "reader@example.com", message: "I need help with an audiobook.", source_path: "/" }]);
   await dialog.getByRole("button", { name: "Close support" }).click();
 
   await page.goto("/reader/audiobooks");
-  await expect(page.getByRole("button", { name: "Contact support" })).toBeVisible();
+  await page.getByRole("button", { name: "Contact support" }).click();
+  await page.getByRole("dialog", { name: "Contact support" }).getByLabel("Email address").fill("reader@example.com");
+  await page.getByRole("dialog", { name: "Contact support" }).getByLabel("How can we help?").fill("Reader playback stopped working.");
+  await page.getByRole("dialog", { name: "Contact support" }).getByRole("button", { name: "Send request" }).click();
+  await expect.poll(() => submissions.length).toBe(2);
+  expect(submissions[1]).toEqual({ email: "reader@example.com", message: "Reader playback stopped working.", source_path: "/reader/audiobooks" });
 });
 
 test("support dialog fills the mobile viewport", async ({ page, isMobile }) => {

@@ -2,7 +2,7 @@
 
 The existing marketing site remains at `/`; the local-first web reader is at `/reader`.
 
-The floating `?` button across the site accepts an email address and support message. Submissions go through the same-origin `/api/support-requests` proxy to the backend's private `freereader_support_requests` inbox; visitors do not need an account.
+The floating `?` button across the site accepts an email address and support message. Submissions include the current page pathname (without query parameters) and go through the same-origin `/api/support-requests` proxy to the backend's private `freereader_support_requests` inbox; visitors do not need an account.
 
 ## Local architecture
 

@@ -48,7 +48,7 @@ export default function SupportWidget() {
     try {
       const response = await fetch("/api/support-requests", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), message: message.trim() }),
+        body: JSON.stringify({ email: email.trim(), message: message.trim(), source_path: window.location.pathname }),
       });
       if (!response.ok) throw new Error(response.status === 400 ? "Check your email and message, then try again." : "Could not send your request. Please try again.");
       setSubmitted(true);
