@@ -2,6 +2,8 @@ import Link from "next/link";
 import BrandMark from "../components/BrandMark";
 
 export default function MarketingLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const coffeeUsername = process.env.NEXT_PUBLIC_BUY_ME_A_COFFEE_USERNAME?.trim();
+
   return (
     <>
       <header className="site-header">
@@ -25,6 +27,15 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
           <div className="footer-brand">
             <Link className="brand" href="/"><BrandMark /><span>FreeReader</span></Link>
             <p>Text to speech for the books you read and the videos you create.</p>
+            {coffeeUsername && (
+              <a className="coffee-button" href={`https://www.buymeacoffee.com/${encodeURIComponent(coffeeUsername)}`} target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" />
+                  <path d="M17 9h2a2 2 0 0 1 0 4h-2M8 3v2m5-2v2M3 21h15" />
+                </svg>
+                Buy me a coffee
+              </a>
+            )}
           </div>
           <div className="footer-links">
             <div><strong>Product</strong><Link href="/reader/audiobooks">Audiobook reader</Link><Link href="/narration">Video narration</Link><Link href="/authors/submissions">Author publishing</Link><Link href="/pricing">Pricing</Link><Link href="/#languages-heading">Languages</Link></div>
