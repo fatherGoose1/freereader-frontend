@@ -1287,7 +1287,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
             <div>
               <h1>Your library</h1>
             </div>
-            <span className={styles.storageBadge}><span className={styles.localDot} />Free listening · {session ? "Account sync" : "Saved on this device"}</span>
+            <span className={styles.storageBadge}><span className={styles.localDot} />Listening for free</span>
           </div>
           {!activeFolderId && !search && continueBook && (
             <section className={styles.continueCard} aria-label="Continue reading">
@@ -1358,8 +1358,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           ) : childFolders.length === 0 ? (
             <div className={styles.emptyLibrary}>
               <div className={styles.emptyIllustration} aria-hidden="true"><ReaderIcon name="book" /><span><ReaderIcon name="headphones" /></span></div>
-              <h2>{activeFolder ? "Make room for a new chapter" : "Your next great read belongs here"}</h2>
-              <p>Add a book, article, or your own text.<br />Read along on screen or press play and listen.</p>
+              <h2>Add a book, article, or your own text</h2>
               <button className={styles.primaryAction} disabled={busy} onClick={() => fileInputRef.current?.click()}><ReaderIcon name="upload" /> Add your first file</button>
               <small>EPUB · PDF · TXT · DOCX · HTML · Markdown</small>
             </div>
