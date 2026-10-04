@@ -61,54 +61,38 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section workflow" id="how">
-        <div className="wrap">
-          <div className="section-heading split-heading">
-            <div>
-              <span className="eyebrow">How FreeReader works</span>
-              <h2>From words to audio,<br />on your terms.</h2>
+      <section className="section audiobook-story" id="how" aria-labelledby="audiobook-story-heading">
+        <div className="wrap audiobook-story-layout">
+          <div className="audiobook-story-copy">
+            <span className="eyebrow">The audiobook reader</span>
+            <h2 id="audiobook-story-heading">Turn the page.<br />Or press play.</h2>
+            <p className="audiobook-story-intro">Some days you want to sit and read. Other days, you want to take the story with you. FreeReader lets you do both.</p>
+            <div className="audiobook-story-moments">
+              <div><span className="audiobook-story-number">01</span><div><h3>Bring something to read</h3><p>Pick a free classic, add a book or document, or open an article you want to hear.</p></div></div>
+              <div><span className="audiobook-story-number">02</span><div><h3>Listen your way</h3><p>Choose a voice, set the pace, and follow the words on screen as you listen.</p></div></div>
+              <div><span className="audiobook-story-number">03</span><div><h3>Come back where you left off</h3><p>Pause when life interrupts. Your place is waiting when you return.</p></div></div>
             </div>
-            <p>
-              Bring your reading or your script. Shape the sound, then listen in
-              the app or take your finished narration into your video.
-            </p>
+            <Link className="text-link audiobook-story-link" href="/reader/audiobooks">Open the audiobook reader <ArrowIcon /></Link>
           </div>
-          <div className="workflow-grid">
-            <article className="workflow-card featured-card">
-              <span className="step">01</span>
-              <div className="format-stack" aria-hidden="true">
-                <span>EPUB</span><span>PDF</span><span>DOCX</span>
+          <div className="audiobook-story-visual" aria-hidden="true">
+            <div className="audiobook-story-book">
+              <div className="audiobook-story-book-top"><span>FreeReader</span><span>CHAPTER 04</span></div>
+              <div className="audiobook-story-page">
+                <span className="audiobook-story-page-label">A little more time</span>
+                <p>The afternoon light moved slowly across the floor.</p>
+                <p className="audiobook-story-active">Outside, the city went on. Inside, there was time for one more page.</p>
+                <p>And then, without quite noticing when it happened, the story carried her somewhere else.</p>
               </div>
-              <div><h3>Start with your words</h3><p>Upload your own work, find a public-domain book, or bring in a script or article you have permission to narrate.</p></div>
-            </article>
-            <article className="workflow-card">
-              <span className="step">02</span>
-              <div className="wave-graphic" aria-hidden="true">
-                {[18, 34, 52, 28, 66, 44, 24, 58, 36, 20, 48, 30].map((height, index) => <i key={index} style={{ height }} />)}
+              <div className="audiobook-story-player">
+                <div className="audiobook-story-player-head"><span>Now listening</span><span>1× speed</span></div>
+                <div className="audiobook-story-player-controls">
+                  <span className="audiobook-story-play"><svg viewBox="0 0 20 20"><path d="m7 4 9 6-9 6V4Z" fill="currentColor" /></svg></span>
+                  <span className="audiobook-story-track"><i /></span>
+                  <span className="audiobook-story-time">12:38</span>
+                </div>
               </div>
-              <div><h3>Find the right voice</h3><p>Choose from 32 languages. Fine-tune speed, pronunciation, and pauses in the narration studio.</p></div>
-            </article>
-            <article className="workflow-card">
-              <span className="step">03</span>
-              <div className="progress-graphic" aria-hidden="true"><i /><span>Generating audio</span><strong>62%</strong></div>
-              <div><h3>Listen or export</h3><p>Keep your place in an audiobook, or preview and export a finished voiceover as WAV.</p></div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="section engineering">
-        <div className="wrap">
-          <div className="section-heading center-heading">
-            <span className="eyebrow">Built for the whole workflow</span>
-            <h2>More than a play button.</h2>
-            <p>Tools for listening all the way through and getting every line right.</p>
-          </div>
-          <div className="feature-grid">
-            <article><span className="feature-icon">Aa</span><h3>Readable and listenable</h3><p>Follow the text on screen and jump to any passage when you want to listen from there.</p></article>
-            <article><span className="feature-icon">↗</span><h3>Script-level control</h3><p>Split, reorder, and regenerate individual passages without remaking the whole voiceover.</p></article>
-            <article><span className="feature-icon">◎</span><h3>Precise playback</h3><p>Chapter navigation, ten-second skips, progress seeking, and adjustable speed are always close.</p></article>
-            <article><span className="feature-icon">✓</span><h3>Audio you can use</h3><p>Return to your place in a book or download a voiceover ready for your video editor.</p></article>
+            </div>
+            <span className="audiobook-story-note">A story that moves with you.</span>
           </div>
         </div>
       </section>
