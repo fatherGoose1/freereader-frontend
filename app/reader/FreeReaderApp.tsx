@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { browseGutenberg, downloadGutenbergBook } from "./gutenberg";
+import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
 import { parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
 import { asImportError, failureCategory, importFailureProperties, ImportError, type ImportFileType, type ImportStage } from "./importErrors";
@@ -95,10 +95,10 @@ function BookCover({ book, index }: { book: LibraryBook; index: number }) {
     : <span className={`${styles.cover} ${styles[`cover${index % 4}`]}`}><small>{book.format}</small></span>;
 }
 
-function GutenbergCover({ book }: { book: GutenbergBook }) {
+function GutenbergCover({ book, preview = false }: { book: GutenbergBook; preview?: boolean }) {
   const [failed, setFailed] = useState(false);
-  if (!book.coverUrl || failed) return <span className={styles.miniCover}>PG</span>;
-  return <img src={book.coverUrl} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+  if (!book.coverUrl || failed) return <span className={preview ? styles.previewCover : styles.miniCover}>PG</span>;
+  return <img className={preview ? styles.previewCover : undefined} src={book.coverUrl} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 }
 
 function readingProgress(book: LibraryBook, fractionWithinBlock = 0): number {
@@ -191,6 +191,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
   const [featuredBooks, setFeaturedBooks] = useState<FeaturedBook[]>([]);
   const [previewBook, setPreviewBook] = useState<FeaturedBook | null>(null);
+  const [previewGutenberg, setPreviewGutenberg] = useState<GutenbergBook | null>(null);
+  const [gutenbergPreviewDetails, setGutenbergPreviewDetails] = useState<GutenbergDetails | null>(null);
+  const [gutenbergPreviewLoading, setGutenbergPreviewLoading] = useState(false);
+  const [gutenbergPreviewError, setGutenbergPreviewError] = useState("");
   const [previewExcerpt, setPreviewExcerpt] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [voice, setVoice] = useState<NarratorVoice>(initialBook?.preferredVoice ?? "af_heart");
@@ -235,6 +239,18 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
       .finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
     return () => controller.abort();
   }, [previewBook]);
+  useEffect(() => {
+    if (!previewGutenberg) return;
+    const controller = new AbortController();
+    setGutenbergPreviewDetails(null);
+    setGutenbergPreviewError("");
+    setGutenbergPreviewLoading(true);
+    void gutenbergDetails(previewGutenberg, controller.signal)
+      .then((details) => { if (!controller.signal.aborted) setGutenbergPreviewDetails(details); })
+      .catch((error) => { if (!controller.signal.aborted) setGutenbergPreviewError(error instanceof Error ? error.message : "Book details are unavailable."); })
+      .finally(() => { if (!controller.signal.aborted) setGutenbergPreviewLoading(false); });
+    return () => controller.abort();
+  }, [previewGutenberg]);
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
   const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
@@ -406,7 +422,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     };
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); if (previous?.isConnected) previous.focus(); };
-  }, [panel, organizingBook, busy, previewBook]);
+  }, [panel, organizingBook, busy, previewBook, previewGutenberg]);
 
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
@@ -1096,6 +1112,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     posthog.capture("gutenberg_browse_opened");
     setPanel("gutenberg");
     setPreviewBook(null);
+    setPreviewGutenberg(null);
     void fetch("/api/authors/books", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load author books.");
@@ -1526,6 +1543,22 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                   : <p>Preview unavailable. You can still add this book to read it.</p>}
               </section>
               <div className={styles.modalActions}><button onClick={() => setPreviewBook(null)}>Back</button><button className={styles.primaryAction} onClick={() => addFeaturedBook(previewBook)}>Add</button></div>
+            </> : previewGutenberg ? <>
+              <button className={styles.previewBack} onClick={() => setPreviewGutenberg(null)}><ReaderIcon name="back" /> Free Books</button>
+              <div className={styles.bookPreview}>
+                <GutenbergCover book={previewGutenberg} preview />
+                <div><span className={styles.kicker}>eBook #{previewGutenberg.id}</span><h2>{gutenbergPreviewDetails?.title ?? previewGutenberg.title}</h2>
+                  <p>by {gutenbergPreviewDetails?.authors.join(", ") || previewGutenberg.author || "Project Gutenberg"}</p>
+                  {gutenbergPreviewDetails && <small>{[gutenbergPreviewDetails.languages.join(", "), gutenbergPreviewDetails.epubSize ? `EPUB · ${formatBytes(gutenbergPreviewDetails.epubSize)}` : "EPUB"].filter(Boolean).join(" · ")}</small>}
+                </div>
+              </div>
+              {gutenbergPreviewLoading && <p role="status">Loading book details…</p>}
+              {gutenbergPreviewError && <p role="alert">{gutenbergPreviewError} You can still try adding this book.</p>}
+              {gutenbergPreviewDetails?.summary && <section className={styles.previewExcerpt} aria-label="About this book"><h3>About</h3><p>{gutenbergPreviewDetails.summary}</p></section>}
+              {!!gutenbergPreviewDetails?.subjects.length && <section className={styles.previewSection} aria-label="Shelves"><h3>Shelves</h3><div className={styles.previewSubjects}>{gutenbergPreviewDetails.subjects.slice(0, 8).map((subject) => <span key={subject}>{subject}</span>)}</div></section>}
+              {gutenbergPreviewDetails?.rights && <section className={styles.previewSection} aria-label="Rights"><h3>Rights</h3><p>{gutenbergPreviewDetails.rights}</p></section>}
+              <p className={styles.catalogRights}>Public-domain status may differ where you live. <Link href="/terms">Content rights</Link></p>
+              <div className={styles.modalActions}><button onClick={() => setPreviewGutenberg(null)}>Back</button><button className={styles.primaryAction} disabled={busy} onClick={() => void importGutenberg(previewGutenberg)}>{importingBookId === previewGutenberg.id ? "Adding" : "Add"}</button></div>
             </> : <>
               <h2>Free Books</h2>
               <p className={styles.catalogRights}>Only add books you may lawfully narrate. Availability on Project Gutenberg does not guarantee audio or distribution rights in your location. <Link href="/terms">Content rights</Link></p>
@@ -1549,8 +1582,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                 ))}
                 {gutenberg.map((book) => (
                   <article key={book.id}>
-                    <GutenbergCover book={book} />
-                    <div><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small></div>
+                    <button className={styles.catalogPreviewButton} onClick={() => setPreviewGutenberg(book)} aria-label={`Preview ${book.title}`}>
+                      <GutenbergCover book={book} />
+                      <span className={styles.catalogBookInfo}><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small><small>eBook #{book.id}</small></span>
+                    </button>
                     <button disabled={busy} onClick={() => importGutenberg(book)}>
                       {importingBookId === book.id && <span className={styles.addSpinner} aria-label="Adding book" />}
                       {importingBookId === book.id ? "Adding" : "Add"}

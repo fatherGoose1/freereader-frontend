@@ -1,5 +1,10 @@
 import type { GutenbergBook } from "./types";
 
+export type GutenbergDetails = {
+  title: string; authors: string[]; languages: string[];
+  summary?: string; subjects: string[]; rights?: string; epubSize?: number;
+};
+
 const GUTENBERG = "https://www.gutenberg.org";
 
 function safeUrl(value: string, base = GUTENBERG): string | undefined {
@@ -15,6 +20,23 @@ function safeUrl(value: string, base = GUTENBERG): string | undefined {
 
 function elementText(element: Element, name: string): string {
   return element.getElementsByTagNameNS("*", name)[0]?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+// getElementsByTagNameNS("*", ...) misses prefixed nodes in some DOM
+// implementations (for example linkedom's dcterms:language), so match every
+// descendant by its local name instead.
+function descendants(root: Element | Document, name: string): Element[] {
+  const found: Element[] = [];
+  const start = (root as Document).documentElement ?? root;
+  const walk = (element: Element) => {
+    for (const child of Array.from(element.children ?? [])) {
+      const localName = child.localName ?? child.nodeName;
+      if (localName === name || localName.split(":").pop() === name) found.push(child);
+      walk(child);
+    }
+  };
+  walk(start as Element);
+  return found;
 }
 
 export async function browseGutenberg(query = "", bookshelfId?: number): Promise<GutenbergBook[]> {
@@ -40,6 +62,42 @@ export async function browseGutenberg(query = "", bookshelfId?: number): Promise
       coverUrl: `/api/gutenberg/cover/${id}`,
     }];
   });
+}
+
+export async function gutenbergDetails(book: GutenbergBook, signal?: AbortSignal): Promise<GutenbergDetails> {
+  const response = await fetch(book.detailUrl, { signal });
+  if (!response.ok) throw new Error("This Gutenberg book is unavailable.");
+  const xml = new DOMParser().parseFromString(await response.text(), "application/xml");
+  const entries = descendants(xml, "entry");
+  if (!entries.length) throw new Error("Book details are unavailable.");
+  const unique = (values: string[]) => [...new Set(values.filter(Boolean))];
+  const authors = unique(entries.flatMap((entry) => descendants(entry, "author").map((author) => elementText(author, "name"))));
+  const languages = unique(entries.flatMap((entry) => descendants(entry, "language").map((language) => language.textContent?.trim() ?? "")));
+  const subjects = unique(entries.flatMap((entry) => descendants(entry, "category").map((category) => category.getAttribute("term")?.trim() ?? "")));
+  const summary = entries.map((entry) => {
+    const content = descendants(entry, "content")[0];
+    if (!content) return "";
+    const paragraphs = descendants(content, "p");
+    const lines = (paragraphs.length ? paragraphs.map((item) => item.textContent ?? "")
+      : (content.textContent ?? "").split(/\r?\n/)).map((line) => line.replace(/\s+/g, " ").trim());
+    const start = lines.findIndex((line) => /^Summary:/i.test(line));
+    if (start < 0) return "";
+    const values = lines.slice(start);
+    const end = values.findIndex((line) => /^Reading Level:/i.test(line));
+    return (end < 0 ? values : values.slice(0, end))
+      .map((line, index) => index === 0 ? line.replace(/^Summary:\s*/i, "") : line)
+      .filter(Boolean).join(" ").trim();
+  }).find(Boolean);
+  const epubLink = entries.flatMap((entry) => descendants(entry, "link"))
+    .find((link) => link.getAttribute("rel") === "http://opds-spec.org/acquisition"
+      && link.getAttribute("type") === "application/epub+zip");
+  const size = Number(epubLink?.getAttribute("length"));
+  return {
+    title: elementText(entries[0], "title") || book.title,
+    authors, languages, subjects, summary: summary || undefined,
+    rights: entries.map((entry) => elementText(entry, "rights")).find(Boolean),
+    epubSize: Number.isFinite(size) && size > 0 ? size : undefined,
+  };
 }
 
 export async function downloadGutenbergBook(book: GutenbergBook): Promise<File> {

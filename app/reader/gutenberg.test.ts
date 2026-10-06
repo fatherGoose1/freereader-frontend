@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMParser as LinkeDOMParser } from "linkedom";
-import { browseGutenberg } from "./gutenberg";
+import { browseGutenberg, gutenbergDetails } from "./gutenberg";
 
 function installDom(): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "DOMParser");
@@ -56,4 +56,34 @@ test("covers use the same-origin proxy instead of CORS-blocked Gutenberg images"
     // Relative, so the browser requests it from the FreeReader origin under COEP.
     coverUrl: "/api/gutenberg/cover/1342",
   });
+});
+
+const DETAILS = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dcterms="http://purl.org/dc/terms/">
+  <entry>
+    <title>Jane Eyre</title>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">
+      <p>Summary:</p><p>A governess builds an independent life.</p><p>Reading Level:</p><p>Fairly easy.</p>
+    </div></content>
+    <author><name>Brontë, Charlotte</name></author>
+    <dcterms:language>en</dcterms:language>
+    <category term="Love stories"/>
+    <rights>Public domain in the USA.</rights>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" length="607173" href="/ebooks/1260.epub.noimages"/>
+  </entry>
+</feed>`;
+
+test("book previews read the OPDS summary without reading-level boilerplate", async (t) => {
+  const restoreDom = installDom();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, text: async () => DETAILS }) as Response;
+  t.after(() => { restoreDom(); globalThis.fetch = originalFetch; });
+
+  const details = await gutenbergDetails({ id: "1260", title: "Jane Eyre", detailUrl: "https://www.gutenberg.org/ebooks/1260.opds" });
+  assert.equal(details.summary, "A governess builds an independent life.");
+  assert.deepEqual(details.authors, ["Brontë, Charlotte"]);
+  assert.deepEqual(details.languages, ["en"]);
+  assert.deepEqual(details.subjects, ["Love stories"]);
+  assert.equal(details.rights, "Public domain in the USA.");
+  assert.equal(details.epubSize, 607173);
 });

@@ -270,6 +270,11 @@
 .previewExcerpt h3 { margin: 0 0 12px; font-size: 14px; }
 .previewExcerpt p { margin: 0 0 12px; }
 .previewExcerpt p:last-child { margin-bottom: 0; }
+.previewSection { margin: 20px 0; }
+.previewSection h3 { margin: 0 0 8px; font-size: 14px; }
+.previewSection p { margin: 0; color: var(--app-secondary); font-size: 13px; line-height: 1.6; }
+.previewSubjects { display: flex; flex-direction: row; flex-wrap: wrap; gap: 7px; }
+.previewSubjects span { padding: 5px 9px; color: #536584; background: #f3f6fc; border-radius: 99px; font-size: 11px; }
 .addSpinner { display: inline-block; width: 13px; height: 13px; flex: none; border: 2px solid #90a4d4; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 .primaryAction .addSpinner { border-color: #fff; border-top-color: transparent; }
 @keyframes spin { to { transform: rotate(360deg); } }
