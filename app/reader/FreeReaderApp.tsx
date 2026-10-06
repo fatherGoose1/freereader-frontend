@@ -34,6 +34,7 @@ import { synchronizeLibrary } from "./accountSync";
 import { linkInstallation } from "./usage";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
+import { assetUrl } from "../authors/model";
 
 type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
@@ -45,6 +46,7 @@ type PreparedAudio = {
 };
 type PendingAudio = { promise: Promise<PreparedAudio>; request: { isCurrent: () => boolean } };
 type ActiveAudio = { bookId: string; index: number; url: string };
+type FeaturedBook = { id: string; slug: string; title: string; description: string; author_name: string; cover_path: string | null; reads: number };
 
 const gutenbergCategories = [
   [649, "Classics"], [644, "Adventure"], [640, "Mystery"], [639, "Romance"],
@@ -187,6 +189,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<number | undefined>();
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
+  const [featuredBooks, setFeaturedBooks] = useState<FeaturedBook[]>([]);
+  const [previewBook, setPreviewBook] = useState<FeaturedBook | null>(null);
+  const [previewExcerpt, setPreviewExcerpt] = useState<string[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [voice, setVoice] = useState<NarratorVoice>(initialBook?.preferredVoice ?? "af_heart");
   const steps = 12;
   const [speechRate, setSpeechRate] = useState(1);
@@ -213,6 +219,22 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const PAGE_CHAR_LIMIT = 900;
   const [page, setPage] = useState({ bookId: "", start: 0 });
   useEffect(() => { setImportErrorMessage(""); }, [panel]);
+  useEffect(() => {
+    if (!previewBook) return;
+    const controller = new AbortController();
+    setPreviewExcerpt([]);
+    setPreviewLoading(true);
+    void fetch(`/api/authors/books/${encodeURIComponent(previewBook.slug)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Preview unavailable");
+        return response.json() as Promise<{ book: { document: { blocks: { text: string; isHeading: boolean }[] } } }>;
+      })
+      .then(({ book }) => setPreviewExcerpt(book.document.blocks.filter((block) => !block.isHeading && block.text.trim())
+        .slice(0, 3).map((block) => block.text)))
+      .catch(() => { if (!controller.signal.aborted) setPreviewExcerpt([]); })
+      .finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
+    return () => controller.abort();
+  }, [previewBook]);
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
   const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
@@ -384,7 +406,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     };
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); if (previous?.isConnected) previous.focus(); };
-  }, [panel, organizingBook, busy]);
+  }, [panel, organizingBook, busy, previewBook]);
 
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
@@ -1073,7 +1095,19 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     recordTelemetry("gutenberg_browse_opened");
     posthog.capture("gutenberg_browse_opened");
     setPanel("gutenberg");
+    setPreviewBook(null);
+    void fetch("/api/authors/books", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load author books.");
+        return response.json() as Promise<{ books: FeaturedBook[] }>;
+      })
+      .then(({ books }) => setFeaturedBooks(books))
+      .catch(() => setFeaturedBooks([]));
     if (!gutenberg.length) void searchGutenberg("");
+  }
+
+  function addFeaturedBook(book: FeaturedBook) {
+    window.location.assign(`/books/${book.slug}`);
   }
 
   async function createFolder() {
@@ -1305,7 +1339,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
             <button disabled={busy} onClick={() => fileInputRef.current?.click()}><span className={styles.importIcon}><ReaderIcon name="upload" /></span><span><strong>Upload File</strong><small>EPUB, PDF, DOCX & more</small></span><ReaderIcon name="plus" /></button>
             <button onClick={() => setPanel("url")}><span className={styles.importIcon}><ReaderIcon name="link" /></span><span><strong>Web Link</strong><small>Turn an article into audio</small></span><ReaderIcon name="plus" /></button>
             <button onClick={() => setPanel("paste")}><span className={styles.importIcon}><ReaderIcon name="text" /></span><span><strong>Insert Text</strong><small>Notes, scripts, or a passage</small></span><ReaderIcon name="plus" /></button>
-            <button onClick={openGutenbergBrowser}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>Project Gutenberg</small></span><ReaderIcon name="arrow" /></button>
+            <button className={styles.freeBooksButton} onClick={openGutenbergBrowser}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>New Author Works + Public Domain Books</small></span><ReaderIcon name="arrow" /><span className="always-free-badge">New</span></button>
           </div>
           <p className={styles.rightsNotice}><strong>Before you add or narrate:</strong> Use only content you have the rights to narrate, including your own work, public-domain material where you live, or content with permission or a suitable license. A free download or a purchased copy alone does not grant audio or sharing rights. <Link href="/terms">Read the content terms</Link>.</p>
           <div className={styles.libraryToolbar}>
@@ -1379,7 +1413,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               </button>
               <button onClick={openGutenbergBrowser}>
                 <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}><ReaderIcon name="book" /></span>
-                <span><strong>Free Books</strong><small>Project Gutenberg</small></span>
+                <span><strong>Free Books</strong><small>New Author Works + Public Domain Books</small></span>
                 <i>&gt;</i>
               </button>
               <button onClick={() => setPanel("url")}>
@@ -1478,30 +1512,54 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
       {panel === "gutenberg" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
           <div className={`${styles.modal} ${styles.catalog}`} role="dialog" aria-modal="true" aria-label="Free Books" onMouseDown={(event) => event.stopPropagation()}>
-            <div className={styles.catalogHeader}><span>PG</span><div><strong>PROJECT GUTENBERG</strong><p>Browse EPUBs for reading and narration. Public-domain status varies by country and edition; check the rights where you live before importing.</p></div></div>
-            <h2>Free Books</h2>
-            <p className={styles.catalogRights}>Only add books you may lawfully narrate. Availability on Project Gutenberg does not guarantee audio or distribution rights in your location. <Link href="/terms">Content rights</Link></p>
-            <form className={styles.catalogSearch} onSubmit={(event) => { event.preventDefault(); void searchGutenberg(); }}>
-              <input aria-label="Search free books" placeholder="Title or author" value={query} onChange={(event) => setQuery(event.target.value)} />
-              <button disabled={busy}>Search</button>
-            </form>
-            <div className={styles.categoryChips}>
-              <button className={category === undefined && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory(undefined); void searchGutenberg("", undefined); }}>Popular</button>
-              {gutenbergCategories.map(([id, name]) => <button key={id} className={category === id && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory(id); void searchGutenberg("", id); }}>{name}</button>)}
-            </div>
-            <div className={styles.catalogList}>
-              {gutenberg.map((book) => (
-                <article key={book.id}>
-                  <GutenbergCover book={book} />
-                  <div><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small></div>
-                  <button disabled={busy} onClick={() => importGutenberg(book)}>
-                    {importingBookId === book.id && <span className={styles.addSpinner} aria-label="Adding book" />}
-                    {importingBookId === book.id ? "Adding" : "Add"}
-                  </button>
-                </article>
-              ))}
-            </div>
-            <button onClick={() => setPanel(null)}>Close</button>
+            {previewBook ? <>
+              <button className={styles.previewBack} onClick={() => setPreviewBook(null)}><ReaderIcon name="back" /> Free Books</button>
+              <div className={styles.bookPreview}>
+                {previewBook.cover_path ? <img src={assetUrl(previewBook.cover_path)} alt="" /> : <span className={styles.previewCover}>FR</span>}
+                <div><span className={styles.indieBadge}>Indie Author</span><h2>{previewBook.title}</h2><p>by {previewBook.author_name}</p><small>{previewBook.reads} reads</small></div>
+              </div>
+              {previewBook.description && <p className={styles.previewDescription}>{previewBook.description}</p>}
+              <section className={styles.previewExcerpt} aria-label="Opening excerpt">
+                <h3>Opening excerpt</h3>
+                {previewLoading ? <p role="status">Loading preview…</p> : previewExcerpt.length
+                  ? previewExcerpt.map((text, index) => <p key={index}>{text}</p>)
+                  : <p>Preview unavailable. You can still add this book to read it.</p>}
+              </section>
+              <div className={styles.modalActions}><button onClick={() => setPreviewBook(null)}>Back</button><button className={styles.primaryAction} onClick={() => addFeaturedBook(previewBook)}>Add</button></div>
+            </> : <>
+              <h2>Free Books</h2>
+              <p className={styles.catalogRights}>Only add books you may lawfully narrate. Availability on Project Gutenberg does not guarantee audio or distribution rights in your location. <Link href="/terms">Content rights</Link></p>
+              <form className={styles.catalogSearch} onSubmit={(event) => { event.preventDefault(); void searchGutenberg(); }}>
+                <input aria-label="Search free books" placeholder="Title or author" value={query} onChange={(event) => setQuery(event.target.value)} />
+                <button disabled={busy}>Search</button>
+              </form>
+              <div className={styles.categoryChips}>
+                <button className={category === undefined && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory(undefined); void searchGutenberg("", undefined); }}>Popular</button>
+                {gutenbergCategories.map(([id, name]) => <button key={id} className={category === id && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory(id); void searchGutenberg("", id); }}>{name}</button>)}
+              </div>
+              <div className={styles.catalogList}>
+                {category === undefined && featuredBooks.filter((book) => !query.trim() || `${book.title} ${book.author_name}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map((book) => (
+                  <article key={book.id}>
+                    <button className={styles.catalogPreviewButton} onClick={() => setPreviewBook(book)} aria-label={`Preview ${book.title}`}>
+                      {book.cover_path ? <img src={assetUrl(book.cover_path)} alt="" loading="lazy" /> : <span className={styles.miniCover}>FR</span>}
+                      <span className={styles.catalogBookInfo}><strong>{book.title}</strong><small>{book.author_name}</small><span className={styles.catalogBookMeta}><span className={styles.indieBadge}>Indie Author</span>{book.reads} reads</span></span>
+                    </button>
+                    <button onClick={() => addFeaturedBook(book)}>Add</button>
+                  </article>
+                ))}
+                {gutenberg.map((book) => (
+                  <article key={book.id}>
+                    <GutenbergCover book={book} />
+                    <div><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small></div>
+                    <button disabled={busy} onClick={() => importGutenberg(book)}>
+                      {importingBookId === book.id && <span className={styles.addSpinner} aria-label="Adding book" />}
+                      {importingBookId === book.id ? "Adding" : "Add"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+              <button onClick={() => setPanel(null)}>Close</button>
+            </>}
           </div>
         </div>
       )}

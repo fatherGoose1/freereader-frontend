@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import FreeReaderApp from "../../reader/FreeReaderApp";
 import { listBooks, saveBook } from "../../reader/storage";
+import { installationId } from "../../reader/usage";
 import type { LibraryBook } from "../../reader/types";
 import { assetUrl, publicShareUrl, toReaderBook, type AuthorBookWithDocument } from "../../authors/model";
 import styles from "../../authors/authors.module.css";
@@ -34,7 +35,17 @@ export default function PublishedBookReader({ slug, authorSlug, description }: {
       if (cancelled) return;
       try { await saveBook(ready); }
       catch { throw new Error("Could not add this book to your library. Allow browser storage and try again."); }
-      if (!cancelled) setBook(ready);
+      if (!cancelled) {
+        setBook(ready);
+        // The public reader saves on open, including books opened from a profile link.
+        // The database deduplicates by book and installation on repeat visits.
+        try {
+          void fetch(`/api/authors/books/${encodeURIComponent(slug)}/add`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ readerId: installationId() }),
+          }).catch(() => undefined);
+        } catch { /* Reading still works if usage tracking is unavailable. */ }
+      }
     };
     void load().catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Could not load this book."); });
     return () => { cancelled = true; controller.abort(); };

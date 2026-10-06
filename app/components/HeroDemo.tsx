@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { SPEECH_LANGUAGES } from "../languages";
 
 const DEFAULT_TEXT =
-  "It is impossible to live in the past, difficult to live in the present and a waste to live in the future.";
+  '"When you play the game of thrones you win or you die.”\n\n— George R.R. Martin';
 const MAX_LENGTH = 800;
 const SUPERTONIC_STEPS = 12;
 const SORTED_LANGUAGES = [...SPEECH_LANGUAGES]

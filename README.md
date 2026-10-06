@@ -49,6 +49,8 @@ Published books open directly in the existing reader at `/books/<8-character-id>
 
 Public book/profile data uses the anonymous Supabase key with RLS; the backend checks visibility before serving images. Private drafts are visible only to their owner. The external Koko sync and speech APIs remain unchanged.
 
+The reader's Free Books catalog lists published author titles before public-domain results. An author title opens a description and opening-excerpt preview; Add opens the published reader, which saves the book locally. Successful saves record one add per book and browser installation (also for public share links), so repeat openings do not inflate the count. The displayed read count starts at a fixed 10–30 per book and includes these recorded adds. Koko backend Alembic revision `20261006_0020` creates the add ledger and public counting functions in Supabase; deploy that backend migration before the frontend update.
+
 ## iOS parser parity
 
 The web importer follows the iOS `DocumentImporter` block model: whitespace is normalized, plain-text headings use the same Roman numeral/chapter/all-caps rules, headings start chapters, and narration blocks are capped at 250 characters. Long paragraphs use the same preference order and scoring as iOS: sentence and quote boundaries first, then word boundaries, then character fallbacks, while minimizing block count and raggedness.

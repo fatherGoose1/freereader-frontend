@@ -83,6 +83,7 @@
 .importGrid strong { display: block; font-size: 14px; font-weight: 600; }
 .importGrid small { display: block; margin-top: 4px; color: var(--app-secondary); font-size: 11px; }
 .importGrid button > svg { width: 15px; height: 15px; margin-left: auto; color: #a5afbf; }
+.importGrid .freeBooksButton { position: relative; }
 .continueCard { display: flex; align-items: center; gap: 22px; margin-bottom: 24px; padding: 26px; background: #edf1fc; border: 1px solid #dce4fa; border-radius: 14px; }
 .continueInfo { min-width: 0; flex: 1; }
 .continueInfo h2 { margin: 6px 0; overflow: hidden; font-size: 23px; text-overflow: ellipsis; white-space: nowrap; }
@@ -239,10 +240,6 @@
 .organizeActions button { min-height: 44px; padding: 8px 12px; color: var(--app-blue); background: transparent; border: 0; border-radius: 8px; }
 .appShell .destructiveButton { color: #bf434b; }
 .catalog { width: min(700px, 100%); }
-.catalogHeader { display: flex; align-items: center; gap: 16px; margin: -30px -30px 24px; padding: 24px 30px; background: #f2f5fc; border-bottom: 1px solid #e6ebf6; }
-.catalogHeader > span { display: grid; place-items: center; width: 45px; height: 52px; flex: none; color: #667da8; background: #dfe7f6; border-radius: 5px; font-size: 12px; font-weight: 700; }
-.catalogHeader strong { color: #5a6e94; font-size: 11px; letter-spacing: .08em; }
-.catalogHeader p { margin: 5px 0 0; font-size: 12px; }
 .catalogSearch { display: flex; gap: 10px; margin: 20px 0; }
 .catalogSearch input { min-width: 0; }
 .categoryChips { display: flex; gap: 8px; overflow: auto; padding-bottom: 8px; margin-bottom: 14px; }
@@ -255,6 +252,24 @@
 .catalogList strong { font-size: 14px; font-weight: 600; }
 .catalogList small { color: var(--app-secondary); font-size: 12px; }
 .catalogList button { display: inline-flex; align-items: center; gap: 7px; }
+.catalogList .catalogPreviewButton { grid-column: 1 / 3; display: flex; align-items: center; gap: 16px; width: 100%; min-width: 0; padding: 0; color: inherit; background: transparent; border: 0; text-align: left; }
+.catalogPreviewButton:hover strong { color: var(--app-blue); }
+.catalogBookInfo { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.catalogBookMeta { display: flex; align-items: center; gap: 8px; color: var(--app-secondary); font-size: 12px; }
+.indieBadge { padding: 2px 7px; color: #675025; background: #fff1d5; border: 1px solid #edd6a5; border-radius: 99px; font-size: 10px; font-weight: 650; }
+.catalog .previewBack { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px; background: transparent; border: 0; }
+.previewBack svg { width: 17px; }
+.bookPreview { display: flex; align-items: flex-start; gap: 22px; margin: 20px 0; }
+.bookPreview img, .previewCover { display: grid; place-items: center; width: 112px; height: 154px; flex: none; object-fit: cover; color: #fff; background: #869ac0; border-radius: 6px; }
+.bookPreview > div { min-width: 0; }
+.bookPreview h2 { margin: 12px 0 4px; }
+.bookPreview p { margin: 0 0 10px; }
+.bookPreview small { color: var(--app-secondary); }
+.previewDescription { margin: 20px 0; white-space: pre-line; }
+.previewExcerpt { padding: 18px; background: #f5f7fc; border-radius: 10px; }
+.previewExcerpt h3 { margin: 0 0 12px; font-size: 14px; }
+.previewExcerpt p { margin: 0 0 12px; }
+.previewExcerpt p:last-child { margin-bottom: 0; }
 .addSpinner { display: inline-block; width: 13px; height: 13px; flex: none; border: 2px solid #90a4d4; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 .primaryAction .addSpinner { border-color: #fff; border-top-color: transparent; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -354,8 +369,10 @@
   .modal { max-height: calc(100dvh - 24px); padding: 22px; border-radius: 14px; }
   .modal h2 { font-size: 22px; }
   .appShell :is(input:not([type="range"]), textarea) { font-size: 16px; }
-  .catalogHeader { margin: -22px -22px 22px; padding: 20px 22px; }
   .catalogList article { gap: 10px; }
   .catalogList button { padding-inline: 12px; }
+  .catalogList .catalogPreviewButton { gap: 10px; padding: 0; }
+  .bookPreview { gap: 14px; }
+  .bookPreview img, .previewCover { width: 88px; height: 122px; }
   .voicePopover { top: 18px; right: 16px; max-height: calc(100dvh - 36px); }
 }
