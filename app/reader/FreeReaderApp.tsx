@@ -202,6 +202,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [accountNoticeDismissed, setAccountNoticeDismissed] = useState(false);
+  useEffect(() => {
+    try { setAccountNoticeDismissed(localStorage.getItem("freereader-library-reminder-dismissed") === "true"); } catch { /* Storage may be restricted. */ }
+  }, []);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "saved" | "limited" | "error">("idle");
   const [localRevision, setLocalRevision] = useState(0);
   const [syncAttempt, setSyncAttempt] = useState(0);
@@ -378,10 +382,14 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     else setSyncStatus("idle");
   }
 
-  const accountNotice = !initialBook && authReady && !session && (
+  const accountNotice = !initialBook && authReady && !session && !accountNoticeDismissed && (
     <section className={styles.accountNotice} aria-label="Save your library">
       <div><strong>Keep your library and progress</strong><p>Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.</p></div>
       <button type="button" onClick={() => void signIn()}>Sign in with Google</button>
+      <button type="button" className={styles.accountNoticeDismiss} aria-label="Dismiss library reminder" onClick={() => {
+        setAccountNoticeDismissed(true);
+        try { localStorage.setItem("freereader-library-reminder-dismissed", "true"); } catch { /* Dismissal still works in memory. */ }
+      }}>×</button>
     </section>
   );
   const syncBar = session && <div className={styles.syncBar} role="status">
