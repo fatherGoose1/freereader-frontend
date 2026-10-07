@@ -252,7 +252,7 @@ function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps)
     if (viewport.current) viewport.current.scrollTo({ top: 0, left: 0 });
     if (block) onNavigate(block.index);
   }
-  return <div className={styles.reader} aria-label="Native PDF reader">
+  return <div className={`${styles.reader} ${styles.pdfReader}`} aria-label="Native PDF reader">
     <div className={styles.pdfViewport} ref={viewport}>
       {!pdf && <p className={styles.loading} role="status">Opening original PDF…</p>}
       {pdf && <div className={styles.pdfSpread}>
@@ -262,7 +262,7 @@ function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps)
         ))}
       </div>}
     </div>
-    <nav className={styles.navigation} aria-label="Original document pages">
+    <nav className={`${styles.navigation} ${styles.pdfNavigation}`} aria-label="Original document pages">
       <button disabled={!pdf || spreadStart <= 1} onClick={() => turn(spreadStart - pagesPerSpread)}><ReaderIcon name="back" /> Previous</button>
       <span>{spreadEnd > spreadStart ? `Pages ${spreadStart}–${spreadEnd}` : `Page ${spreadStart}`} of {pdf?.numPages ?? "…"}</span>
       <button disabled={!pdf || spreadEnd >= pdf.numPages} onClick={() => turn(spreadStart + pagesPerSpread)}>Next <ReaderIcon name="arrow" /></button>
@@ -289,7 +289,7 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
   const pageElement = useRef<HTMLDivElement>(null);
   const [rendered, setRendered] = useState(0);
   const [rects, setRects] = useState<{ left: number; top: number; width: number; height: number }[]>([]);
-  const ranges = useRef(new Map<number, Range>());
+  const ranges = useRef(new Map<number, Range[]>());
   const active = pdfPageForBlock(book.blocks, book.position.blockIndex) === pageNumber;
 
   useEffect(() => {
@@ -320,11 +320,14 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
       setRendered(0);
       renderTask = page.render({ canvasContext: canvas.current.getContext("2d")!, viewport: view,
         transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
-      const content = await page.getTextContent();
+      const content = await page.getTextContent({ includeMarkedContent: true });
       if (cancelled) return;
       textLayer = new pdfjs.TextLayer({ textContentSource: content, container: layer.current, viewport: view });
       await Promise.all([renderTask.promise, textLayer.render()]);
       if (cancelled) return;
+      for (const index of book.pdfExcludedItems?.[String(pageNumber)] ?? []) {
+        textLayer.textDivs[index]?.setAttribute("data-freereader-omit", "true");
+      }
       ranges.current = matchNativeBlocks(indexNativeText(layer.current, true), book.blocks.filter((block) => pdfPageForBlock(book.blocks, block.index) === pageNumber));
       setRendered((value) => value + 1);
     };
@@ -332,10 +335,10 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
     return () => { cancelled = true; renderTask?.cancel(); textLayer?.cancel(); };
   }, [pdf, width, height, pageNumber, fitHeight, textSize]);
   useEffect(() => {
-    const range = ranges.current.get(book.position.blockIndex);
-    if (!range || !pageElement.current || !scrollViewport.current) { setRects([]); return; }
+    const fragments = ranges.current.get(book.position.blockIndex);
+    if (!fragments || !pageElement.current || !scrollViewport.current) { setRects([]); return; }
     const origin = pageElement.current.getBoundingClientRect();
-    const boxes = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0);
+    const boxes = fragments.flatMap((range) => [...range.getClientRects()]).filter((rect) => rect.width > 0 && rect.height > 0);
     setRects(boxes.map((rect) => ({ left: rect.left - origin.left, top: rect.top - origin.top, width: rect.width, height: rect.height })));
     const first = boxes[0];
     if (first) {
@@ -348,9 +351,9 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
   return <div className={styles.pdfPage} ref={pageElement}>
     <canvas ref={canvas} aria-label={`Original PDF page ${pageNumber}`} />
     <div ref={layer} className={styles.textLayer} onClick={(event) => {
-      for (const [index, range] of ranges.current) {
-        if ([...range.getClientRects()].some((rect) => event.clientX >= rect.left && event.clientX <= rect.right
-          && event.clientY >= rect.top && event.clientY <= rect.bottom)) { onNavigate(index); break; }
+      for (const [index, fragments] of ranges.current) {
+        if (fragments.some((range) => [...range.getClientRects()].some((rect) => event.clientX >= rect.left && event.clientX <= rect.right
+          && event.clientY >= rect.top && event.clientY <= rect.bottom))) { onNavigate(index); break; }
       }
     }} />
     <div className={styles.highlights} aria-label={active ? "Current passage" : undefined} aria-current={active ? "true" : undefined}>

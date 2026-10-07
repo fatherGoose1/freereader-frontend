@@ -17,5 +17,18 @@
 .textLayer > :not([class]), .textLayer :global(.markedContent) span:not([class]) { z-index: 1; }
 .textLayer :global(.markedContent) { display: contents; }
 .textLayer ::selection { background: #7797ef66; }
-.highlights { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; z-index: 3; }
-.highlights span { position: absolute; background: #7797ef59; border-radius: 2px; }
+.highlights { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: .35; z-index: 3; }
+.highlights span { position: absolute; background: #7797ef; border-radius: 2px; }
+.pdfReader .pdfViewport { padding: 12px 84px 12px 132px; }
+.pdfNavigation { position: absolute; z-index: 4; inset: 0; display: block; padding: 0; border: 0; pointer-events: none; }
+.pdfNavigation button { position: absolute; top: 50%; transform: translateY(-50%); background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
+.pdfNavigation button:first-child { left: 12px; }
+.pdfNavigation button:last-child { right: 12px; }
+.pdfNavigation span { position: absolute; bottom: 12px; left: 12px; max-width: 112px; padding: 6px 8px; background: #ffffffdc; border-radius: 8px; line-height: 1.5; }
+@media (max-width: 800px) {
+  .pdfReader .pdfViewport { padding: 8px 48px; }
+  .pdfNavigation button { top: auto; bottom: 8px; width: 36px; min-height: 36px; justify-content: center; padding: 8px; font-size: 0; transform: none; }
+  .pdfNavigation button:first-child { left: 8px; }
+  .pdfNavigation button:last-child { right: 8px; }
+  .pdfNavigation span { bottom: 8px; left: 50%; max-width: calc(100% - 104px); font-size: 10px; white-space: nowrap; transform: translateX(-50%); }
+}

@@ -398,3 +398,18 @@
   .bookPreview img, .previewCover { width: 88px; height: 122px; }
   .voicePopover { top: 18px; right: 16px; max-height: calc(100dvh - 36px); }
 }
+
+/* PDF controls float in the side gutters so pages get the full canvas height. */
+.readingShell .pdfPane { position: relative; background: #edf0f5; }
+.pdfPane .readingToolbar { position: absolute; z-index: 5; inset: 12px; display: block; padding: 0; border: 0; pointer-events: none; }
+.pdfPane .viewToggle { position: absolute; top: 0; left: 0; flex-direction: column; max-width: 112px; background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
+.pdfPane .textSizing { position: absolute; top: 0; right: 0; flex-direction: column; gap: 6px; pointer-events: auto; }
+@media (max-width: 800px) {
+  .pdfPane .readingToolbar { inset: 8px; }
+  .pdfPane .viewToggle { padding: 2px; }
+  .pdfPane .viewToggle button { width: 32px; min-height: 36px; padding: 0; font-size: 0; }
+  .pdfPane .viewToggle button::after { font-size: 10px; font-weight: 600; }
+  .pdfPane .viewToggle button:first-child::after { content: "PDF"; }
+  .pdfPane .viewToggle button:last-child::after { content: "Aa"; }
+  .pdfPane .textSizing button { min-width: 36px; min-height: 36px; }
+}

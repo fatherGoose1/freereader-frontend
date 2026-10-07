@@ -13,7 +13,7 @@ export function indexNativeText(root: Node, separateNodes = false): NativeTextIn
   let text = "";
   let node: Node | null;
   while ((node = walker.nextNode())) {
-    if ((node.parentElement?.closest("script,style,noscript,[hidden],[aria-hidden='true']"))) continue;
+    if ((node.parentElement?.closest("script,style,noscript,[hidden],[aria-hidden='true'],[data-freereader-omit]"))) continue;
     const value = node.textContent ?? "";
     if (separateNodes && text && !text.endsWith(" ") && value && !/^\s/.test(value)) {
       text += " ";
@@ -46,14 +46,27 @@ export function pdfPageForBlock(blocks: TextBlock[], index: number): number {
     ?? [...blocks.slice(0, index)].reverse().find((block) => block.page)?.page ?? 1;
 }
 
-export function matchNativeBlocks(index: NativeTextIndex, blocks: TextBlock[]): Map<number, Range> {
-  const ranges = new Map<number, Range>();
+export function matchNativeBlocks(index: NativeTextIndex, blocks: TextBlock[]): Map<number, Range[]> {
+  const ranges = new Map<number, Range[]>();
   let offset = 0;
   for (const block of blocks) {
     const start = index.text.indexOf(block.text, offset);
     if (start < 0) continue;
-    const range = nativeRange(index, start, block.text.length);
-    if (range) ranges.set(block.index, range);
+    // Use text-node fragments rather than a range spanning parent elements.
+    // This avoids duplicate parent/child rectangles and excludes skipped notes
+    // or page furniture even when their DOM nodes lie between body text runs.
+    const fragments: Range[] = [];
+    const end = start + block.text.length;
+    let cursor = start;
+    while (cursor < end) {
+      const node = index.points[cursor].node;
+      let next = cursor + 1;
+      while (next < end && index.points[next].node === node) next += 1;
+      const range = nativeRange(index, cursor, next - cursor);
+      if (range) fragments.push(range);
+      cursor = next;
+    }
+    if (fragments.length) ranges.set(block.index, fragments);
     offset = start + block.text.length;
   }
   return ranges;

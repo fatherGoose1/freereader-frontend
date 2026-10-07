@@ -6,6 +6,7 @@ import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type Gutenber
 import { isPausedArchiveUrl } from "./pausedSources";
 import { chunkText, parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
 import { READING_CHUNK_REVISION, rechunkPdfBook } from "./readingChunks";
+import { PDF_NARRATION_REVISION, pdfTextFingerprint, refreshPdfNarration } from "./pdfNarration";
 import { asImportError, failureCategory, importFailureProperties, ImportError, type ImportFileType, type ImportStage } from "./importErrors";
 import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
 import { readingPageStarts } from "./pagination";
@@ -184,6 +185,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [selected, setSelected] = useState<LibraryBook | null>(initialBook ?? null);
   // Async media events must use the latest cursor, including changes before React renders.
   const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
+  const bookOpenEpoch = useRef(0);
   useEffect(() => {
     if (!selected || !["epub", "pdf"].includes(selected.format)) return;
     let cancelled = false;
@@ -713,11 +715,19 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     try {
       const parsed = await parseFile(file);
       const body = (blocks: ParsedBook["blocks"]) => blocks.filter((block) => !block.isHeading).map((block) => block.text).join(" ").replace(/\s+/g, " ").trim();
-      if (parsed.format !== book.format || body(parsed.blocks) !== body(book.blocks)) {
+      const matchingText = book.format === "pdf"
+        ? parsed.pdfOriginalTextHash === (book.pdfOriginalTextHash ?? await pdfTextFingerprint(book.blocks.map((block) => block.text)))
+        : body(parsed.blocks) === body(book.blocks);
+      if (parsed.format !== book.format || !matchingText) {
         throw new Error("Choose the original file for this book. Its text must match the saved reading copy.");
       }
       await saveNativeSource(book.id, file);
       if (selectedRef.current?.id !== book.id) return;
+      if (book.format === "pdf" && book.pdfNarrationRevision !== PDF_NARRATION_REVISION) {
+        const current = selectedRef.current;
+        resetPlayback();
+        updateBook(refreshPdfNarration(current, parsed));
+      }
       setNativeSource({ bookId: book.id, source: file });
       changeReadingView("native");
     } catch (error) {
@@ -739,7 +749,8 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const language = languageForBook(book);
     const quality = route.model.startsWith("supertonic") ? `${steps}-` : "";
     const chunkRevision = book.chunkingRevision ? `-chunks${book.chunkingRevision}` : "";
-    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
+    const pdfRevision = book.pdfNarrationRevision ? `-pdf${book.pdfNarrationRevision}` : "";
+    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
 
@@ -1099,18 +1110,39 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     });
   }
 
-  function openBook(book: LibraryBook) {
+  async function openBook(book: LibraryBook) {
     if (book.sourceIdentifier?.startsWith("author-book:")
       && /^\/books\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(book.sourceUrl ?? "")) {
       window.location.assign(book.sourceUrl!);
       return;
     }
+    const epoch = ++bookOpenEpoch.current;
     resetPlayback();
     setPanel(null);
     setMessage("");
     audioPrimed.current = false;
-    const language = languageForBook(book);
-    const rechunked = rechunkPdfBook(book, chunkText);
+    let prepared = book;
+    if (book.format === "pdf" && book.pdfNarrationRevision !== PDF_NARRATION_REVISION) {
+      setBusy(true);
+      setMessage("Preparing PDF narration without headers, footers, or footnotes…");
+      try {
+        const source = await getNativeSource(book.id);
+        if (epoch !== bookOpenEpoch.current) return;
+        if (source) {
+          const parsed = await parseFile(new File([source], book.sourceName, { type: "application/pdf" }));
+          prepared = refreshPdfNarration(book, parsed);
+        }
+      } catch {
+        if (epoch === bookOpenEpoch.current) setMessage("PDF narration could not be refreshed. Try opening the book again.");
+        return;
+      } finally {
+        if (epoch === bookOpenEpoch.current) setBusy(false);
+      }
+    }
+    if (epoch !== bookOpenEpoch.current) return;
+    setMessage("");
+    const language = languageForBook(prepared);
+    const rechunked = rechunkPdfBook(prepared, chunkText);
     const ready = rechunked.language ? rechunked : { ...rechunked, language, updatedAt: new Date().toISOString() };
     selectedRef.current = ready;
     setSelected(ready);
@@ -1244,6 +1276,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const sourceLoaded = nativeSource?.bookId === selected.id;
     const originalSource = sourceLoaded ? nativeSource.source : null;
     const showNative = supportsNative && readingView === "native";
+    const floatingPdfControls = showNative && selected.format === "pdf" && !!originalSource;
     return (
       <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
@@ -1290,11 +1323,11 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               >{item.title}</button>
             ))}
           </aside>
-          <article className={`${styles.readingPane} ${showNative ? styles.nativePane : ""}`}>
+          <article className={`${styles.readingPane} ${showNative ? styles.nativePane : ""} ${floatingPdfControls ? styles.pdfPane : ""}`}>
             <div className={styles.readingToolbar}>
               {supportsNative ? <div className={styles.viewToggle} role="group" aria-label="Reading view">
-                <button aria-pressed={showNative} onClick={() => changeReadingView("native")}>Native view</button>
-                <button aria-pressed={!showNative} onClick={() => changeReadingView("ereader")}>E-reader view</button>
+                <button aria-pressed={showNative} title="Native view" onClick={() => changeReadingView("native")}>Native view</button>
+                <button aria-pressed={!showNative} title="E-reader view" onClick={() => changeReadingView("ereader")}>E-reader view</button>
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
             </div>

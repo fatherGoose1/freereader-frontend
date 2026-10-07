@@ -8,6 +8,7 @@ import { graphemes, isLikelyHeading, normalizeReadingText as normalize } from ".
 import { detectSpeechLanguage, normalizeLanguage } from "./speech";
 import type { Chapter, DocumentFormat, ParsedBook, TextBlock } from "./types";
 import { chunkReadingText } from "./readingChunks";
+import { extractPdfNarration, PDF_NARRATION_REVISION } from "./pdfNarration";
 
 const MAX_BLOCK_LENGTH = 300;
 
@@ -274,15 +275,15 @@ async function parsePdf(buffer: ArrayBuffer, fallbackTitle: string): Promise<Par
   try {
     const pdf = await task.promise;
     const builder = new BookBuilder();
-    for (let index = 1; index <= pdf.numPages; index += 1) {
-      const content = await (await pdf.getPage(index)).getTextContent();
-      const text = content.items.map((item) => {
-        if (!("str" in item)) return "";
-        return `${item.str}${item.hasEOL ? "\n" : " "}`;
-      }).join("");
-      builder.plainText(text, index);
+    const content = await extractPdfNarration(pdf);
+    for (const { page, text } of content.pages) {
+      const start = builder.blocks.length;
+      builder.plainText(text, page);
+      for (const block of builder.blocks.slice(start)) block.page = page;
     }
-    return { title: fallbackTitle, format: "pdf", chapters: builder.chapters, blocks: builder.blocks };
+    return { title: fallbackTitle, format: "pdf", chapters: builder.chapters, blocks: builder.blocks,
+      pdfNarrationRevision: PDF_NARRATION_REVISION, pdfExcludedItems: content.excludedItems,
+      pdfOriginalTextHash: content.originalTextHash };
   } finally {
     await task.destroy();
   }

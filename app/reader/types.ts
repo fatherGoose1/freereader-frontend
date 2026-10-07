@@ -42,6 +42,9 @@ export interface LibraryBook {
   blocks: TextBlock[];
   position: ReadingPosition;
   chunkingRevision?: number;
+  pdfNarrationRevision?: number;
+  pdfExcludedItems?: Record<string, number[]>;
+  pdfOriginalTextHash?: string;
   cover?: Blob;
 }
 
@@ -60,6 +63,9 @@ export interface ParsedBook {
   format: DocumentFormat;
   chapters: Chapter[];
   blocks: TextBlock[];
+  pdfNarrationRevision?: number;
+  pdfExcludedItems?: Record<string, number[]>;
+  pdfOriginalTextHash?: string;
   cover?: Blob;
 }
 
