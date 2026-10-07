@@ -85,6 +85,10 @@ button, textarea, input, select { font: inherit; }
 .author-cta { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; color: var(--forest); text-decoration: none; white-space: nowrap; }
 
 .reader-app-route { min-height: 100vh; }
+@media (max-width: 800px) {
+  .reader-app-route:has([data-mobile-reader]) { min-height: 0; height: 100dvh; overflow: hidden; }
+  body:has([data-mobile-reader]) > .hiddenCanvasElement { position: fixed; top: 0; left: 0; visibility: hidden; pointer-events: none; }
+}
 
 /* Shared type and controls */
 .eyebrow {

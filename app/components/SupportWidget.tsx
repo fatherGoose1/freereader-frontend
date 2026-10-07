@@ -11,6 +11,7 @@ export default function SupportWidget() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const launcher = useRef<HTMLButtonElement>(null);
+  const externalTrigger = useRef<HTMLElement | null>(null);
   const dialog = useRef<HTMLElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -19,8 +20,18 @@ export default function SupportWidget() {
     setOpen(false);
     setError("");
     if (submitted) { setSubmitted(false); setEmail(""); setMessage(""); }
-    requestAnimationFrame(() => launcher.current?.focus());
+    requestAnimationFrame(() => (externalTrigger.current?.isConnected ? externalTrigger.current : launcher.current)?.focus({ preventScroll: true }));
   }
+
+  useEffect(() => {
+    const show = (event: Event) => {
+      const trigger = (event as CustomEvent<{ trigger?: HTMLElement }>).detail?.trigger;
+      externalTrigger.current = trigger instanceof HTMLElement ? trigger : null;
+      setOpen(true);
+    };
+    window.addEventListener("freereader:open-support", show);
+    return () => window.removeEventListener("freereader:open-support", show);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +75,7 @@ export default function SupportWidget() {
         <path d="M17 9h2a2 2 0 0 1 0 4h-2M8 3v2m5-2v2M3 21h15" />
       </svg>
     </a>
-    <button ref={launcher} type="button" className={styles.launcher} aria-label="Contact support" aria-expanded={open} aria-controls="support-dialog" onClick={() => setOpen(true)}>?</button>
+    <button ref={launcher} type="button" className={styles.launcher} aria-label="Contact support" aria-expanded={open} aria-controls="support-dialog" onClick={() => { externalTrigger.current = null; setOpen(true); }}>?</button>
     {open && <div className={styles.backdrop} onMouseDown={close}>
       <section ref={dialog} id="support-dialog" role="dialog" aria-modal="true" aria-labelledby="support-title" className={styles.dialog} onMouseDown={(event) => event.stopPropagation()}>
         <header className={styles.header}><h2 id="support-title">Contact support</h2><button ref={closeButton} type="button" aria-label="Close support" onClick={close}>×</button></header>

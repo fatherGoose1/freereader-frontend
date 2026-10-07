@@ -25,6 +25,8 @@ Original preserves EPUB publisher markup, styles, images, and embedded fonts in 
 
 PDF narration excludes detected running headers, footers, page numbers, footnote blocks, and superscript note references. Tagged PDF notes/artifacts take priority, with repeated margin text, position, spacing, and font-size heuristics for untagged documents. Excluded text-run indexes also keep native highlights out of those regions; the original canvas and selectable text remain intact. Existing PDFs with a locally retained original are refreshed once when reopened, with their saved position mapped onto the cleaned body text. Audio cache keys include the PDF narration revision. Highlight opacity is applied once to the complete overlay so overlapping text rectangles cannot create darker bands.
 
+At mobile widths (up to 800px), the header shows only Library and chapter navigation. Playback starts as a compact play/pause and progress bar that can expand to reveal the full controls. A single right-side disclosure reveals the view toggle, text sizing/zoom, coffee/support actions, and page navigation as small overlays; the PDF has no reserved side gutters. The controls reset to collapsed when opening a book. Desktop keeps its full header, player, and existing tools.
+
 ## Account sync
 
 Configure the browser with:

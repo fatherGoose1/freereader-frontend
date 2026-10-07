@@ -175,6 +175,8 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [librarySearch, setLibrarySearch] = useState("");
   const [librarySort, setLibrarySort] = useState("recent");
   const [textSize, setTextSize] = useState(20);
+  const [mobileToolsExpanded, setMobileToolsExpanded] = useState(false);
+  const [mobilePlayerExpanded, setMobilePlayerExpanded] = useState(false);
   const eReaderViewport = useRef<HTMLDivElement>(null);
   const [readingView, setReadingView] = useState<ReadingView>("native");
   const [nativeSource, setNativeSource] = useState<{ bookId: string; source: Blob | null } | null>(null);
@@ -187,6 +189,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   // Async media events must use the latest cursor, including changes before React renders.
   const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
   const bookOpenEpoch = useRef(0);
+  useEffect(() => {
+    setMobileToolsExpanded(false);
+    setMobilePlayerExpanded(false);
+  }, [selected?.id]);
   useEffect(() => {
     if (!selected || !["epub", "pdf"].includes(selected.format)) return;
     let cancelled = false;
@@ -1284,7 +1290,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const showNative = supportsNative && readingView === "native";
     const floatingPdfControls = selected.format === "pdf" && !!originalSource;
     return (
-      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
+      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
@@ -1330,12 +1336,17 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
             ))}
           </aside>
           <article className={`${styles.readingPane} ${supportsNative ? styles.nativePane : ""} ${floatingPdfControls ? styles.pdfPane : ""}`}>
-            <div className={styles.readingToolbar}>
+            <button type="button" className={styles.mobileToolsToggle} aria-label={mobileToolsExpanded ? "Collapse reading tools" : "Expand reading tools"} aria-expanded={mobileToolsExpanded} aria-controls="reader-reading-tools" onClick={() => setMobileToolsExpanded((expanded) => !expanded)}><ReaderIcon name={mobileToolsExpanded ? "close" : "more"} /></button>
+            <div id="reader-reading-tools" className={styles.readingToolbar}>
               {supportsNative ? <div className={styles.viewToggle} role="group" aria-label="Reading view">
                 <button aria-pressed={showNative} title="Original" onClick={() => changeReadingView("native")}>Original</button>
                 <button aria-pressed={!showNative} title="E-reader" onClick={() => changeReadingView("ereader")}>E-reader</button>
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
+              <div className={styles.mobileSupportActions}>
+                <a className={styles.mobileCoffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Buy me a coffee" title="Buy me a coffee"><ReaderIcon name="coffee" /></a>
+                <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
+              </div>
             </div>
             {showNative ? originalSource
               ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} onNavigate={goToBlock} />
@@ -1378,6 +1389,12 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           </section>
         )}
         <div className={styles.player} inert={panel === "voice"}>
+          <div className={styles.mobilePlayerBar}>
+            <button type="button" className={styles.mobileQuickPlay} aria-label={playing ? "Pause" : "Listen"} onClick={togglePlayback}><ReaderIcon name={playing ? "pause" : "play"} /></button>
+            <span>{Math.round(bookProgress * 100)}% of book</span>
+            <button type="button" className={styles.mobilePlayerToggle} aria-label={mobilePlayerExpanded ? "Collapse player controls" : "Expand player controls"} aria-expanded={mobilePlayerExpanded} aria-controls="reader-player-details" onClick={() => setMobilePlayerExpanded((expanded) => !expanded)}>Player <ReaderIcon name={mobilePlayerExpanded ? "chevronDown" : "chevronUp"} /></button>
+          </div>
+          <div id="reader-player-details" className={styles.playerDetails}>
           <div className={styles.progressMeta}><span>{chapter?.title ?? selected.title}</span><strong>{Math.round(bookProgress * 100)}% of book</strong></div>
           <input className={styles.progressSlider} type="range" min="0" max="1" step="0.001" value={bookProgress} onChange={(event) => seekOverall(Number(event.target.value))} aria-label="Book playback progress" />
           <div className={styles.playerRow}>
@@ -1389,6 +1406,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter" aria-label="Next chapter"><ReaderIcon name="next" /></button>
             </div>
             <button className={`${styles.textButton} ${styles.playerVoiceButton}`} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
+          </div>
           </div>
           {message && <p className={styles.statusLine} role="status">{message}</p>}
         </div>

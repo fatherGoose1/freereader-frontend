@@ -32,3 +32,7 @@
   :global(body:has(.reader-app-route [class*="readingShell"])) .coffee { bottom: 301px; }
   :global(body:has(.reader-app-route [class*="readingShell"])) .dialog { bottom: auto; }
 }
+@media (max-width: 800px) {
+  :global(body:has([data-mobile-reader])) :is(.launcher, .coffee) { display: none; }
+  :global(body:has([data-mobile-reader])) .dialog :is(input, textarea) { font-size: 16px; }
+}

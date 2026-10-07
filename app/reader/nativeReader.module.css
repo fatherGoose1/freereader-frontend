@@ -32,3 +32,10 @@
   .pdfNavigation button:last-child { right: 8px; }
   .pdfNavigation span { bottom: 8px; left: 50%; max-width: calc(100% - 104px); font-size: 10px; white-space: nowrap; transform: translateX(-50%); }
 }
+@media (max-width: 800px) {
+  :global([data-mobile-reader]) .pdfReader .pdfViewport { padding: 4px; }
+  :global([data-mobile-reader]) .navigation { position: absolute; z-index: 5; inset: auto 6px 8px auto; display: flex; flex-direction: column; gap: 4px; width: 88px; padding: 6px; background: #fffffff2; border: 1px solid #dfe5f0; border-radius: 9px; pointer-events: auto; }
+  :global([data-mobile-reader][data-mobile-tools-expanded="false"]) .navigation { display: none; }
+  :global([data-mobile-reader]) .navigation button { position: static; width: 100%; min-height: 32px; padding: 4px; font-size: 10px; transform: none; }
+  :global([data-mobile-reader]) .navigation span { position: static; max-width: none; padding: 2px; font-size: 9px; white-space: normal; transform: none; }
+}
