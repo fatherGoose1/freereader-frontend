@@ -14,12 +14,16 @@ let saveBook: typeof import("./storage").saveBook;
 let saveNarrationProject: typeof import("./storage").saveNarrationProject;
 let listNarrationProjects: typeof import("./storage").listNarrationProjects;
 let streamToLocalFile: typeof import("./storage").streamToLocalFile;
+let saveNativeSource: typeof import("./storage").saveNativeSource;
+let getNativeSource: typeof import("./storage").getNativeSource;
+let removeBook: typeof import("./storage").removeBook;
 
 before(async () => {
   Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
   ({
     getAudio, getLocalFile, putLocalFile, listBooks, listNarrationProjects,
     saveAudio, saveBook, saveNarrationProject, streamToLocalFile,
+    saveNativeSource, getNativeSource, removeBook,
   } = await import("./storage"));
 });
 
@@ -201,6 +205,23 @@ test("stores small audio as bytes but leaves models uncached when OPFS is unavai
   assert.equal(key, "audio/stored.wav");
   assert.ok(stored.bytes instanceof Uint8Array);
   assert.equal(stored.type, "audio/wav");
+});
+
+test("original document bytes survive WebKit-compatible storage and are removed with the book", async () => {
+  const restore = rejectBlobWrites();
+  try {
+    await saveNativeSource("native-pdf", new Blob([new Uint8Array([37, 80, 68, 70, 0, 255])], { type: "application/pdf" }));
+  } finally { restore(); }
+  const source = await getNativeSource("native-pdf");
+  assert.equal(source?.type, "application/pdf");
+  assert.deepEqual(new Uint8Array(await source!.arrayBuffer()), new Uint8Array([37, 80, 68, 70, 0, 255]));
+  await removeBook("native-pdf");
+  assert.equal(await getNativeSource("native-pdf"), null);
+});
+
+test("original source storage reports quota failures instead of claiming a durable save", async (t) => {
+  t.mock.method(FakeIDBObjectStore.prototype, "put", () => { throw new DOMException("Storage is full", "QuotaExceededError"); });
+  await assert.rejects(saveNativeSource("full-storage", new Blob(["source"])), { name: "QuotaExceededError" });
 });
 
 for (const available of [false, true]) {

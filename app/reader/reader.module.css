@@ -179,6 +179,21 @@
 .readingText p { margin: 0 0 1.3em; color: #3d4655; font-family: Georgia, "Times New Roman", serif; font-size: inherit; line-height: 1.85; cursor: pointer; border-radius: 4px; }
 .readingText :is(p, h2):hover { background: #f4f6fc; }
 .readingText .currentBlock { color: #254895; background: #edf2ff; box-shadow: -4px 0 #8ca7ed; }
+.viewToggle { display: flex; gap: 3px; padding: 3px; background: #f1f4fa; border-radius: 8px; }
+.viewToggle button { min-height: 36px; padding: 7px 12px; color: #66758e; background: transparent; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; }
+.viewToggle button[aria-pressed="true"] { color: #254895; background: white; box-shadow: 0 1px 4px #24365c14; }
+.readingShell .nativeGrid { grid-template-columns: 190px minmax(0, 1fr); align-items: stretch; width: calc(100% - 40px); gap: 24px; overflow: hidden; padding: 16px 0; }
+.readingShell .nativePane { display: flex; flex-direction: column; padding: 0; overflow: hidden; height: 100%; }
+.nativePane .readingToolbar { flex: none; padding: 10px 16px; }
+.nativeNotice { overflow: auto; padding: 32px 24px; color: #66758e; text-align: center; font-size: 13px; line-height: 1.7; }
+.nativeNotice strong { color: #3d4655; }
+.nativeNotice button { min-height: 44px; padding: 10px 16px; color: #254895; background: #edf2ff; border: 1px solid #dfe5f0; border-radius: 8px; }
+@media (max-width: 800px) {
+  .readingShell .nativeGrid { grid-template-columns: minmax(0, 1fr); width: calc(100% - 24px); gap: 0; padding: 12px 0; }
+  .nativeGrid .chapterRail { display: none; }
+  .nativePane .readingToolbar { padding: 8px; gap: 6px; }
+  .viewToggle button { padding: 7px 8px; font-size: 11px; }
+}
 .pageNavigation { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 18px; border-top: 1px solid #edf0f5; }
 .pageNavigation button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 9px 10px; color: #536b9b; background: #f6f8fc; border: 1px solid #e8edf7; border-radius: 8px; font-size: 12px; }
 .pageNavigation span { color: #7c8799; font-size: 11px; }

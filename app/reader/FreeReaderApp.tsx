@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
 import { parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
@@ -9,12 +10,14 @@ import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
 import { readingPageStarts } from "./pagination";
 import {
   getAudio,
+  getNativeSource,
   listBooks,
   listFolders,
   removeBook,
   requestPersistentStorage,
   saveAudio,
   saveBook,
+  saveNativeSource,
   saveFolder,
 } from "./storage";
 import { TEXT_PIPELINE_REVISION } from "./speechText";
@@ -35,6 +38,9 @@ import { linkInstallation } from "./usage";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
+
+const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
+type ReadingView = "native" | "ereader";
 
 type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
@@ -166,11 +172,30 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [librarySearch, setLibrarySearch] = useState("");
   const [librarySort, setLibrarySort] = useState("recent");
   const [textSize, setTextSize] = useState(20);
+  const [readingView, setReadingView] = useState<ReadingView>("native");
+  const [nativeSource, setNativeSource] = useState<{ bookId: string; source: Blob | null } | null>(null);
+  const [attachingSource, setAttachingSource] = useState(false);
+  const [sourceError, setSourceError] = useState("");
+  const nativeFileInput = useRef<HTMLInputElement>(null);
   const [organizingBook, setOrganizingBook] = useState<LibraryBook | null>(null);
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
   const [selected, setSelected] = useState<LibraryBook | null>(initialBook ?? null);
   // Async media events must use the latest cursor, including changes before React renders.
   const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
+  useEffect(() => {
+    if (!selected || !["epub", "pdf"].includes(selected.format)) return;
+    let cancelled = false;
+    setSourceError("");
+    setNativeSource(null);
+    void getNativeSource(selected.id).catch(() => null).then((source) => {
+      if (cancelled) return;
+      setNativeSource({ bookId: selected.id, source });
+      let preference: string | null = null;
+      try { preference = localStorage.getItem(`freereader-view:${selected.id}`); } catch { /* Storage may be restricted. */ }
+      setReadingView(preference === "ereader" || !source ? "ereader" : "native");
+    });
+    return () => { cancelled = true; };
+  }, [selected?.id]);
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialBook ? "" : "Your books and generated audio stay in this browser.");
@@ -437,6 +462,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
       fileType = parsed.format;
       const book = makeBook(parsed, file.name, file.size, sourceIdentifier, activeFolderId ?? undefined);
       stage = "storage";
+      if (book.format === "epub" || book.format === "pdf") await saveNativeSource(book.id, file);
       await saveBook(book);
       libraryChanged();
       setBooks((current) => [book, ...current]);
@@ -660,6 +686,35 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     setSelected(book);
     setBooks((current) => current.map((value) => value.id === book.id ? book : value));
     saveBook(book).then(libraryChanged).catch(() => setMessage("Reading position could not be saved."));
+  }
+
+  function changeReadingView(view: ReadingView) {
+    setReadingView(view);
+    if (selected) {
+      try { localStorage.setItem(`freereader-view:${selected.id}`, view); } catch { /* The view still changes in memory. */ }
+    }
+  }
+
+  async function attachNativeSource(file: File) {
+    const book = selectedRef.current;
+    if (!book) return;
+    setAttachingSource(true);
+    setSourceError("");
+    try {
+      const parsed = await parseFile(file);
+      const body = (blocks: ParsedBook["blocks"]) => blocks.filter((block) => !block.isHeading).map((block) => block.text).join(" ").replace(/\s+/g, " ").trim();
+      if (parsed.format !== book.format || body(parsed.blocks) !== body(book.blocks)) {
+        throw new Error("Choose the original file for this book. Its text must match the saved reading copy.");
+      }
+      await saveNativeSource(book.id, file);
+      if (selectedRef.current?.id !== book.id) return;
+      setNativeSource({ bookId: book.id, source: file });
+      changeReadingView("native");
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : "The original file could not be saved.");
+    } finally {
+      setAttachingSource(false);
+    }
   }
 
   function positionBook(book: LibraryBook, blockIndex: number, offsetSeconds = 0): LibraryBook {
@@ -1173,6 +1228,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const isModelDownload = message.startsWith("Downloading voice model");
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
     const pageIndex = Math.max(0, pageStarts.indexOf(page.start));
+    const supportsNative = selected.format === "epub" || selected.format === "pdf";
+    const sourceLoaded = nativeSource?.bookId === selected.id;
+    const originalSource = sourceLoaded ? nativeSource.source : null;
+    const showNative = supportsNative && readingView === "native";
     return (
       <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
@@ -1206,7 +1265,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
         </div>
         {accountNotice}
         {syncBar}
-        <div className={styles.readerGrid} inert={panel === "voice"}>
+        <div className={`${styles.readerGrid} ${showNative ? styles.nativeGrid : ""}`} inert={panel === "voice"}>
           <aside className={styles.chapterRail}>
             <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
             <span className={styles.kicker}>Contents</span>
@@ -1219,8 +1278,26 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               >{item.title}</button>
             ))}
           </aside>
-          <article className={styles.readingPane}>
-            <div className={styles.readingToolbar}><span>Tap a passage to listen from there</span><div className={styles.textSizing} role="group" aria-label="Text size"><button aria-label="Decrease text size" disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label="Increase text size" disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div></div>
+          <article className={`${styles.readingPane} ${showNative ? styles.nativePane : ""}`}>
+            <div className={styles.readingToolbar}>
+              {supportsNative ? <div className={styles.viewToggle} role="group" aria-label="Reading view">
+                <button aria-pressed={showNative} onClick={() => changeReadingView("native")}>Native view</button>
+                <button aria-pressed={!showNative} onClick={() => changeReadingView("ereader")}>E-reader view</button>
+              </div> : <span>Tap a passage to listen from there</span>}
+              <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
+            </div>
+            {showNative ? originalSource
+              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} onNavigate={goToBlock} />
+              : <div className={styles.nativeNotice}>
+                {!sourceLoaded ? <p role="status">Opening original document…</p> : <>
+                  <strong>Open this book in its original layout</strong>
+                  <p>Attach the original {selected.format.toUpperCase()} to use native view. Original files stay in this browser; your saved text and listening position are kept.</p>
+                  <button onClick={() => nativeFileInput.current?.click()} disabled={attachingSource}>{attachingSource ? "Reading original file…" : "Attach original file"}</button>
+                  <input ref={nativeFileInput} hidden type="file" accept={selected.format === "epub" ? ".epub,application/epub+zip" : ".pdf,application/pdf"} aria-label="Attach original file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void attachNativeSource(file); event.target.value = ""; }} />
+                  {sourceError && <p role="alert">{sourceError}</p>}
+                </>}
+              </div>
+              : <>
             <div className={styles.readingText} style={{ fontSize: textSize }}>
               {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
                 item.isHeading
@@ -1233,6 +1310,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               <span>Page {pageIndex + 1} of {pageStarts.length}</span>
               <button disabled={pageIndex >= pageStarts.length - 1} onClick={() => goToBlock(pageStarts[pageIndex + 1])}>Next <ReaderIcon name="arrow" /></button>
             </nav>
+            </>}
           </article>
         </div>
         {ttsProgress !== undefined && (

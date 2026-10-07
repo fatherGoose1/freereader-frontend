@@ -164,8 +164,19 @@ export async function saveBook(book: LibraryBook): Promise<IDBValidKey> {
   return transact("books", "readwrite", (store) => store.put(stored));
 }
 
-export function removeBook(id: string): Promise<undefined> {
+export async function removeBook(id: string): Promise<undefined> {
+  await transact("assets", "readwrite", (store) => store.delete(`books/${id}/native-source`));
   return transact("books", "readwrite", (store) => store.delete(id));
+}
+
+// Originals are durable local document assets, not expendable audio caches.
+// Store bytes rather than Blobs for compatibility with WebKit IndexedDB.
+export async function saveNativeSource(id: string, source: Blob): Promise<void> {
+  await storeAsset(`books/${id}/native-source`, source);
+}
+
+export async function getNativeSource(id: string): Promise<Blob | null> {
+  return assetBlob(await transact<StoredAsset | undefined>("assets", "readonly", (store) => store.get(`books/${id}/native-source`)));
 }
 
 export async function listFolders(): Promise<LibraryFolder[]> {

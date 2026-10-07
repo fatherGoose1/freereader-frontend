@@ -8,6 +8,7 @@ The floating `?` button across the site accepts an email address and support mes
 
 - EPUB: `epub.js`
 - PDF text: PDF.js, including a locally bundled worker
+- Uploaded EPUB/PDF originals: retained locally in IndexedDB, with native EPUB.js/PDF.js rendering and passage highlighting; native view is the default when the original is available, with a per-book E-reader view preference
 - DOCX: Mammoth
 - HTML and web articles: DOMParser and Mozilla Readability
 - Markdown: a local parser mirroring the iOS app's readable-markdown rules
@@ -19,6 +20,8 @@ The floating `?` button across the site accepts an email address and support mes
 - Offline app shell: service worker and web app manifest
 
 Without an account, EPUBs, PDFs, document text, and audio are never uploaded. A web user can optionally sign in with Google through Supabase; FreeReader then gzip-compresses parsed document text and covers for private Supabase Storage and separately syncs small metadata and reading-position records through the Koko backend. Original source files, generated audio, and voice models do not sync. Accounts are limited to 100 documents and each compressed cloud document is limited to 10 MiB.
+
+Native EPUB view preserves publisher markup, styles, images, and embedded fonts in paginated spreads; PDF view renders original pages with a selectable text layer and narration highlights. Switching views preserves playback and reading position. Older imports, URL imports, and books synced to a different browser can attach their matching original file from Native view. Source files are removed with their local library book and do not enter cloud sync or author publishing. Scanned PDFs still require a readable OCR text layer.
 
 ## Account sync
 

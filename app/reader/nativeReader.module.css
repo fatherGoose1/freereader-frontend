@@ -1,0 +1,20 @@
+.reader { display: flex; flex: 1; flex-direction: column; min-height: 0; position: relative; }
+.epub { flex: 1; min-height: 0; overflow: hidden; background: white; }
+.epub iframe { border: 0; }
+.loading, .notice { padding: 24px; color: #66758e; font-size: 13px; text-align: center; }
+.loading { position: absolute; top: 0; left: 0; right: 0; z-index: 1; pointer-events: none; }
+.navigation { display: flex; flex: none; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid #edf0f5; }
+.navigation button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 9px 10px; color: #536b9b; background: #f6f8fc; border: 1px solid #e8edf7; border-radius: 8px; font-size: 12px; }
+.navigation button svg { width: 16px; height: 16px; }
+.navigation button:disabled { opacity: .4; cursor: default; }
+.navigation span { color: #7c8799; font-size: 11px; text-align: center; }
+.pdfViewport { position: relative; flex: 1; min-height: 0; overflow: auto; background: #edf0f5; padding: 12px; }
+.pdfPage { position: relative; margin: 0 auto; background: white; box-shadow: 0 2px 12px #17253e18; }
+.pdfPage canvas { display: block; }
+.textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 2; }
+.textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0 0; }
+.textLayer > :not([class]), .textLayer :global(.markedContent) span:not([class]) { z-index: 1; }
+.textLayer :global(.markedContent) { display: contents; }
+.textLayer ::selection { background: #7797ef66; }
+.highlights { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; z-index: 3; }
+.highlights span { position: absolute; background: #7797ef59; border-radius: 2px; }
