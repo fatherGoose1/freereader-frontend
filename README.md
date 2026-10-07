@@ -2,6 +2,8 @@
 
 The existing marketing site remains at `/`; the local-first web reader is at `/reader`.
 
+Every successful document addition opens it immediately in the reader on mobile and desktop, after saving it to the library. This includes uploaded files, pasted text, web-link imports, and books added from the Free Books catalog.
+
 The floating `?` button across the site accepts an email address and support message. Submissions include the current page pathname (without query parameters) and go through the same-origin `/api/support-requests` proxy to the backend's private `freereader_support_requests` inbox; visitors do not need an account.
 
 ## Local architecture

@@ -35,6 +35,9 @@ test("Markdown URL imports preserve their format through conversion and storage"
   await openWebLink(page);
   await page.getByLabel("Article or document URL").fill("https://example.com/chapter.markdown");
   await page.getByRole("button", { name: "Import link", exact: true }).click();
+  // A successful import opens the document immediately.
+  await expect(page.locator("article")).toContainText("A Markdown Chapter");
+  await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByRole("button", { name: /^md A Markdown Chapter/ })).toBeVisible();
   await expect.poll(() => events.find((event) => event.event_name === "import_completed")?.properties).toMatchObject({
     source: "url", file_type: "md",
@@ -47,6 +50,8 @@ test("inserted text reports a completed paste import", async ({ page }) => {
   await page.getByLabel("Title (optional)").fill("Pasted Notes");
   await page.getByLabel("Text", { exact: true }).fill(prose);
   await page.getByRole("button", { name: "Add to Library", exact: true }).click();
+  await expect(page.locator("article")).toContainText(prose);
+  await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByRole("button", { name: /^txt Pasted Notes/ })).toBeVisible();
   await expect.poll(() => events.find((event) => event.event_name === "import_completed")?.properties).toMatchObject({
     source: "paste", file_type: "txt",
@@ -78,12 +83,13 @@ test("DOCX files use the browser converter and report DOCX", async ({ page }) =>
     buffer: await zip.generateAsync({ type: "nodebuffer" }),
   });
   const book = page.getByRole("button", { name: /^docx Browser Document/ });
-  await expect(book).toBeVisible();
+  // The DOCX opens in the reader immediately after conversion.
+  await expect(page.locator("article")).toContainText(prose);
   await expect.poll(() => events.find((event) => event.event_name === "import_completed")?.properties).toMatchObject({
     source: "file", file_type: "docx",
   });
-  await book.click();
-  await expect(page.locator("article")).toContainText(prose);
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await expect(book).toBeVisible();
 });
 
 test("storage failures retain the converted file format and identify the storage stage", async ({ page }) => {
@@ -98,4 +104,18 @@ test("storage failures retain the converted file format and identify the storage
     source: "file", file_type: "md", error_category: "storage", error_stage: "storage",
   });
   await expect(page.getByRole("button", { name: /^md Notes/ })).toHaveCount(0);
+});
+
+test("adding a file opens the reader immediately and keeps the document in the library", async ({ page }) => {
+  const events = await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "Quick Start.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html lang="en"><title>Quick Start</title><body><h1>Chapter One</h1><p>${prose}</p></body></html>`),
+  });
+  // The new document is open in the reader, not just added to the library.
+  await expect(page.locator("article")).toContainText(prose);
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeVisible();
+  await expect.poll(() => events.find((event) => event.event_name === "import_completed")?.properties).toMatchObject({ source: "file" });
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^html Quick Start/ })).toBeVisible();
 });

@@ -16,7 +16,17 @@ async function upload(page: Page, title: string, chapters = 1) {
     name: `${title}.html`, mimeType: "text/html",
     buffer: Buffer.from(`<html lang="en"><title>${title}</title><body>${Array.from({ length: chapters }, (_, i) => `<h1>Chapter ${i + 1}</h1><p>${paragraph.repeat(7)}</p>`).join("")}</body></html>`),
   });
+  // Adding a document opens it immediately; return to the library for these checks.
+  await expect(page.locator("article")).toBeVisible();
+  await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByRole("button", { name: new RegExp(`^html ${title}`) })).toBeVisible();
+}
+
+async function openControls(page: Page) {
+  const tools = page.getByRole("button", { name: "Expand reading tools" });
+  if (await tools.isVisible()) await tools.click();
+  const player = page.getByRole("button", { name: "Expand player controls" });
+  if (await player.isVisible()) await player.click();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -34,6 +44,7 @@ test("guests see the storage warning and Google sign-in in the library and reade
   expect(Math.abs(bounds!.x + bounds!.width / 2 - viewportWidth / 2)).toBeLessThan(2);
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
+  await openControls(page);
   await expect(notice).toBeVisible();
   await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
   await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
@@ -73,6 +84,7 @@ test("library entry points, search, sorting, and folders are usable", async ({ p
 test("page navigation, text sizing, settings and resume preserve the reading position", async ({ page }, testInfo) => {
   await upload(page, "A Quiet Afternoon", 4);
   await page.getByRole("button", { name: /^html A Quiet Afternoon/ }).click();
+  await openControls(page);
   const pages = page.getByRole("navigation", { name: "Reading pages" });
   await expect(pages.getByRole("button", { name: "Previous" })).toBeDisabled();
   await pages.getByRole("button", { name: "Next", exact: true }).click();
@@ -91,6 +103,7 @@ test("page navigation, text sizing, settings and resume preserve the reading pos
   await page.getByRole("button", { name: "Library", exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath("continue-reading.png"), fullPage: true });
   await page.getByRole("button", { name: "Continue reading", exact: true }).click();
+  await openControls(page);
   await expect(page.locator('article [aria-current="true"]')).toHaveText(position!);
   await expect(pages).toContainText("Page 2 of");
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
@@ -104,6 +117,7 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   });
   await upload(page, "Speaking speeds");
   await page.getByRole("button", { name: /^html Speaking speeds/ }).click();
+  await openControls(page);
   await expect(page.getByRole("combobox", { name: "Speed" })).toHaveCount(0);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Voice settings" });
@@ -146,6 +160,7 @@ test("changing voice during first generation starts the new voice without anothe
   try {
     await upload(page, "Change voice while generating");
     await page.getByRole("button", { name: /^html Change voice while generating/ }).click();
+    await openControls(page);
     await page.getByRole("button", { name: "Listen", exact: true }).click();
     await expect.poll(() => requests.length).toBe(1);
     await page.getByRole("button", { name: "Voice", exact: true }).click();
@@ -166,6 +181,7 @@ test("changing language, voice, and speed restarts the current passage automatic
   });
   await upload(page, "Restart settings", 3);
   await page.getByRole("button", { name: /^html Restart settings/ }).click();
+  await openControls(page);
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   const originalSource = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
@@ -201,7 +217,8 @@ test("speech errors are visible and listening can be retried", async ({ page }) 
     await route.fulfill({ contentType: "audio/wav", headers: { "X-Audio-Duration": "20" }, body: audio });
   });
   await page.locator('input[type="file"]').setInputFiles({ name: "Listen.txt", mimeType: "text/plain", buffer: Buffer.from(paragraph) });
-  await page.getByRole("button", { name: /^txt Listen/ }).click();
+  await expect(page.locator("article")).toBeVisible();
+  await openControls(page);
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Speech temporarily unavailable");
   fail = false;
@@ -229,5 +246,8 @@ test("add-content dialog supports keyboard navigation and the file picker", asyn
   await dialog.getByRole("button", { name: /^Upload File/ }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({ name: "My first book.txt", mimeType: "text/plain", buffer: Buffer.from(paragraph) });
+  // The new document opens in the reader right away.
+  await expect(page.locator("article")).toContainText("Reading gives us a little time");
+  await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByRole("button", { name: /^txt My first book/ })).toBeVisible();
 });

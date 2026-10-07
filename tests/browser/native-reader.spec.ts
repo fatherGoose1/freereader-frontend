@@ -60,11 +60,18 @@ async function chooseChapter(page: Page, title: string) {
   else await page.locator("aside").getByRole("button", { name: title, exact: true }).click();
 }
 
+async function openControls(page: Page) {
+  const tools = page.getByRole("button", { name: "Expand reading tools" });
+  if (await tools.isVisible()) await tools.click();
+  const player = page.getByRole("button", { name: "Expand player controls" });
+  if (await player.isVisible()) await player.click();
+}
+
 test("EPUB preserves publisher styling and images, follows chapters, and switches views without stopping playback", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
-  await page.getByRole("button", { name: /^epub Original EPUB/ }).click();
-  await expect(page.getByRole("button", { name: "Native view", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await openControls(page);
+  await expect(page.getByRole("button", { name: "Original", exact: true })).toHaveAttribute("aria-pressed", "true");
   const frame = page.frameLocator("article iframe").first();
   await expect(frame.locator("h1")).toHaveText("Chapter One");
   await expect(frame.locator("h1")).toHaveCSS("text-align", "center");
@@ -79,20 +86,21 @@ test("EPUB preserves publisher styling and images, follows chapters, and switche
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   const currentSource = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
-  await page.getByRole("button", { name: "E-reader view", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter Two");
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc)).toBe(currentSource);
-  await page.getByRole("button", { name: "Native view", exact: true }).click();
+  await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(frame.locator("h1")).toHaveText("Chapter Two");
   expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc)).toBe(currentSource);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await page.getByRole("button", { name: "E-reader view", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await page.getByRole("button", { name: "Library", exact: true }).click();
   await page.reload();
   await page.getByRole("button", { name: /^epub Original EPUB/ }).click();
-  await expect(page.getByRole("button", { name: "E-reader view", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Native view", exact: true }).click();
+  await openControls(page);
+  await expect(page.getByRole("button", { name: "E-reader", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(frame.locator("h1")).toHaveText("Chapter Two");
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
 });
@@ -100,7 +108,7 @@ test("EPUB preserves publisher styling and images, follows chapters, and switche
 test("PDF renders original pages with selectable text, highlights, navigation and a shared reading cursor", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
-  await page.getByRole("button", { name: /^pdf Original PDF/ }).click();
+  await openControls(page);
   const pages = page.getByRole("navigation", { name: "Original document pages" });
   await expect(pages).toContainText("Page 1 of 2");
   await expect(page.locator('article [class*="textLayer"]')).toContainText("Original PDF page one");
@@ -112,9 +120,9 @@ test("PDF renders original pages with selectable text, highlights, navigation an
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
-  await page.getByRole("button", { name: "E-reader view", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).toHaveText("Second page text is highlighted in the original PDF.");
-  await page.getByRole("button", { name: "Native view", exact: true }).click();
+  await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(pages).toContainText("Page 2 of 2");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
@@ -129,10 +137,10 @@ test("older imports can attach their original file without replacing reading pro
   await page.locator("button:visible").filter({ hasText: "Web Link" }).click();
   await page.getByLabel("Article or document URL").fill("https://example.com/Original.pdf");
   await page.getByRole("button", { name: "Import link", exact: true }).click();
-  await page.getByRole("button", { name: /^pdf Original/ }).click();
-  await expect(page.getByRole("button", { name: "E-reader view", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await openControls(page);
+  await expect(page.getByRole("button", { name: "E-reader", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.locator("article p").filter({ hasText: "Second page text" }).click();
-  await page.getByRole("button", { name: "Native view", exact: true }).click();
+  await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(page.getByRole("button", { name: "Attach original file", exact: true })).toBeVisible();
   await page.getByLabel("Attach original file", { exact: true }).setInputFiles({ name: "Original.pdf", mimeType: "application/pdf", buffer });
   await expect(page.getByRole("navigation", { name: "Original document pages" })).toContainText("Page 2 of 2");
@@ -142,7 +150,7 @@ test("older imports can attach their original file without replacing reading pro
 test("full EPUB maps chapter passages and advances highlights with audio playback", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles("lewis-lion-the-witch-and-the-wardrobe.epub");
-  await page.getByRole("button", { name: /^The Lion, the Witch and the Wardrobe/ }).click();
+  await openControls(page);
   await expect(page.locator("article iframe")).toHaveCount(1);
   await chooseChapter(page, "Chapter I");
   const frame = page.frameLocator("article iframe");
@@ -154,9 +162,9 @@ test("full EPUB maps chapter passages and advances highlights with audio playbac
   await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration - 0.03; });
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement, source) => audio.currentSrc !== source && audio.currentTime < 5 && !audio.paused, firstSource)).toBe(true);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await page.getByRole("button", { name: "E-reader view", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).toHaveText("Lucy Looks Into a Wardrobe");
-  await page.getByRole("button", { name: "Native view", exact: true }).click();
+  await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(page.locator("article .freereader-highlight")).toHaveCount(1);
   await chooseChapter(page, "Chapter XVII");
   await expect(frame.locator("body")).toContainText("Chapter XVII");
@@ -168,24 +176,24 @@ test("full EPUB maps chapter passages and advances highlights with audio playbac
   await pages.getByRole("button", { name: "Next", exact: true }).click();
   await expect(pages).not.toHaveText(previousPage!);
   await expect(page.locator("article .freereader-highlight")).toHaveCount(1);
-  await page.getByRole("button", { name: "E-reader view", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).not.toHaveText("Chapter XVII");
 });
 
 test("full PDF highlights a resumed passage on its source page", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles("119-2014-04-09-Jane Eyre.pdf");
-  await page.getByRole("button", { name: /^pdf 119 2014/ }).click();
+  await openControls(page);
   const progress = page.getByRole("slider", { name: "Book playback progress" });
   await progress.fill("0.5");
   const pages = page.getByRole("navigation", { name: "Original document pages" });
   await expect(pages).not.toContainText("Page 1 of");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   const nativePage = await pages.textContent();
-  await page.getByRole("button", { name: "E-reader view", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   const passage = await page.locator('article [aria-current="true"]').textContent();
   expect(passage!.length).toBeGreaterThan(30);
-  await page.getByRole("button", { name: "Native view", exact: true }).click();
+  await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(pages).toHaveText(nativePage!);
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("full-pdf.png") });

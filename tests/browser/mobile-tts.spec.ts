@@ -55,7 +55,8 @@ async function mockSpeech(page: Page, options: { delayMs?: number; seconds?: num
 
 async function importText(page: Page, name: string, text: string) {
   await page.locator('input[type="file"]').first().setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from(text) });
-  await page.getByRole("button", { name: new RegExp(`^txt ${name.replace(/\.txt$/, "")}`) }).click();
+  // Importing opens the document in the reader automatically.
+  await expect(page.locator("article")).toBeVisible();
 }
 
 const ENGLISH = "This is a long English passage about reading books and listening to stories while the next part is prepared. ";

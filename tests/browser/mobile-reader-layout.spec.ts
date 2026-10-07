@@ -22,7 +22,6 @@ async function openReader(page: Page) {
   await page.route("**/api/telemetry", (route) => route.fulfill({ status: 202, json: {} }));
   await page.goto("/reader/audiobooks");
   await page.locator('input[type="file"]').first().setInputFiles({ name: "Mobile Layout.pdf", mimeType: "application/pdf", buffer: layoutPdf() });
-  await page.getByRole("button", { name: /^pdf Mobile Layout/ }).click();
   await expect(page.locator("article canvas")).toBeVisible();
 }
 

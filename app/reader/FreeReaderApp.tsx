@@ -515,6 +515,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           duration_seconds: (Date.now() - started) / 1000,
         });
       }
+      await openBook(book);
     } catch (error) {
       const failure = asImportError(error, stage, fileType);
       setMessage(failure.message);
@@ -576,6 +577,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
         source,
         duration_seconds: (Date.now() - started) / 1000,
       });
+      await openBook(book);
     } catch (error) {
       const failure = asImportError(error, stage, fileType);
       setMessage(failure.message);
@@ -637,6 +639,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
         source: "paste",
         duration_seconds: (Date.now() - started) / 1000,
       });
+      await openBook(book);
     } catch (error) {
       const failure = asImportError(error, stage, fileType);
       setMessage(failure.message);
