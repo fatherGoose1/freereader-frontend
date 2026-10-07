@@ -9,7 +9,8 @@
 .navigation button:disabled { opacity: .4; cursor: default; }
 .navigation span { color: #7c8799; font-size: 11px; text-align: center; }
 .pdfViewport { position: relative; flex: 1; min-height: 0; overflow: auto; background: #edf0f5; padding: 12px; }
-.pdfPage { position: relative; margin: 0 auto; background: white; box-shadow: 0 2px 12px #17253e18; }
+.pdfSpread { display: flex; align-items: flex-start; justify-content: center; gap: 16px; width: max-content; min-width: 100%; min-height: 100%; }
+.pdfPage { position: relative; flex: none; background: white; box-shadow: 0 2px 12px #17253e18; }
 .pdfPage canvas { display: block; }
 .textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 2; }
 .textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0 0; }

@@ -7,6 +7,7 @@ import { detectDocument, fileTypeHint, isBinaryFormat, looksLikeHtml, MAX_IMPORT
 import { graphemes, isLikelyHeading, normalizeReadingText as normalize } from "./parsingText";
 import { detectSpeechLanguage, normalizeLanguage } from "./speech";
 import type { Chapter, DocumentFormat, ParsedBook, TextBlock } from "./types";
+import { chunkReadingText } from "./readingChunks";
 
 const MAX_BLOCK_LENGTH = 300;
 
@@ -73,7 +74,11 @@ class BookBuilder {
   }
 }
 
-function chunkText(text: string): string[] {
+export function chunkText(text: string): string[] {
+  return chunkReadingText(text, MAX_BLOCK_LENGTH, chunkUnsplittableText);
+}
+
+function chunkUnsplittableText(text: string): string[] {
   if (!text) return [];
   const characters = graphemes(text);
   if (characters.length <= MAX_BLOCK_LENGTH) return [text];

@@ -41,6 +41,7 @@ export interface LibraryBook {
   chapters: Chapter[];
   blocks: TextBlock[];
   position: ReadingPosition;
+  chunkingRevision?: number;
   cover?: Blob;
 }
 

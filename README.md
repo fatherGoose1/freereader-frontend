@@ -21,7 +21,7 @@ The floating `?` button across the site accepts an email address and support mes
 
 Without an account, EPUBs, PDFs, document text, and audio are never uploaded. A web user can optionally sign in with Google through Supabase; FreeReader then gzip-compresses parsed document text and covers for private Supabase Storage and separately syncs small metadata and reading-position records through the Koko backend. Original source files, generated audio, and voice models do not sync. Accounts are limited to 100 documents and each compressed cloud document is limited to 10 MiB.
 
-Native EPUB view preserves publisher markup, styles, images, and embedded fonts in paginated spreads; PDF view renders original pages with a selectable text layer and narration highlights. Switching views preserves playback and reading position. Older imports, URL imports, and books synced to a different browser can attach their matching original file from Native view. Source files are removed with their local library book and do not enter cloud sync or author publishing. Scanned PDFs still require a readable OCR text layer.
+Native EPUB view preserves publisher markup, styles, images, and embedded fonts in paginated spreads; PDF view renders original pages with a selectable text layer and narration highlights. PDFs use two-page spreads fitted to the desktop viewport and one width-fitted portrait page with vertical scrolling on mobile. Switching views preserves playback and reading position. Older imports, URL imports, and books synced to a different browser can attach their matching original file from Native view. Source files are removed with their local library book and do not enter cloud sync or author publishing. Scanned PDFs still require a readable OCR text layer.
 
 ## Account sync
 
@@ -56,11 +56,11 @@ The reader's Free Books catalog lists published author titles before public-doma
 
 ## iOS parser parity
 
-The web importer follows the iOS `DocumentImporter` block model: whitespace is normalized, plain-text headings use the same Roman numeral/chapter/all-caps rules, headings start chapters, and narration blocks are capped at 250 characters. Long paragraphs use the same preference order and scoring as iOS: sentence and quote boundaries first, then word boundaries, then character fallbacks, while minimizing block count and raggedness.
+The web importer normalizes whitespace, uses the iOS Roman numeral/chapter/all-caps heading rules, and starts chapters at headings. Narration blocks are capped at 300 characters and pack complete sentences first. A sentence that exceeds the limit is split at clauses, then commas, with word and character fallbacks only when needed. Existing PDF imports are re-chunked when reopened, preserving source page associations and mapping the saved reading position to the new passages. The chunking revision is part of the audio cache key so old recordings cannot play against new highlights.
 
 PDF pages retain source page numbers and line endings where PDF.js exposes them. EPUB spine items without headings receive fallback chapter names. HTML, DOCX, Markdown, lists, and block quotes map to the same heading/paragraph representation. Markdown front matter, code fences, raw HTML lines, and horizontal rules are omitted like they are on iOS. Web articles apply Readability followed by the iOS-style minimum-length, duplicate-block, link-density, and restricted-content checks.
 
-Browser extraction is intentionally not byte-for-byte identical. PDF.js and PDFKit can return text in a different order for complex page layouts, Mammoth interprets DOCX styles instead of reading Word XML directly, and epub.js handles malformed packages differently from ZIPFoundation. Scanned PDFs still require OCR before import. Books imported before a parser update keep their existing local blocks until re-imported.
+Browser extraction is intentionally not byte-for-byte identical. PDF.js and PDFKit can return text in a different order for complex page layouts, Mammoth interprets DOCX styles instead of reading Word XML directly, and epub.js handles malformed packages differently from ZIPFoundation. Scanned PDFs still require OCR before import. Existing PDFs adopt sentence-first chunking when reopened; other previously imported formats keep their local blocks until re-imported.
 
 ## URL fallback
 

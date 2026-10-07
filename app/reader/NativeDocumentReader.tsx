@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type Book from "epubjs/types/book";
 import type Rendition from "epubjs/types/rendition";
 import type Contents from "epubjs/types/contents";
@@ -205,17 +205,24 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
 
 function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps) {
   const viewport = useRef<HTMLDivElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const layer = useRef<HTMLDivElement>(null);
-  const pageElement = useRef<HTMLDivElement>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
-  const [width, setWidth] = useState(0);
-  const [rendered, setRendered] = useState(0);
-  const [rects, setRects] = useState<{ left: number; top: number; width: number; height: number }[]>([]);
-  const ranges = useRef(new Map<number, Range>());
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [desktop, setDesktop] = useState(false);
   const pageNumber = pdfPageForBlock(book.blocks, book.position.blockIndex);
   const [viewPage, setViewPage] = useState(pageNumber);
   useEffect(() => setViewPage(pageNumber), [pageNumber]);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 801px)");
+    const update = () => setDesktop(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  const pagesPerSpread = desktop ? 2 : 1;
+  const spreadStart = viewPage - (viewPage - 1) % pagesPerSpread;
+  const spreadEnd = Math.min(spreadStart + pagesPerSpread - 1, pdf?.numPages ?? spreadStart);
+  const pageWidth = Math.max(0, (size.width - (pagesPerSpread - 1) * 16) / pagesPerSpread);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,21 +241,70 @@ function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps)
   }, [source]);
   useEffect(() => {
     if (!viewport.current) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
     observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
+
+  function turn(page: number) {
+    const block = book.blocks.find((block) => pdfPageForBlock(book.blocks, block.index) === page);
+    setViewPage(page);
+    if (viewport.current) viewport.current.scrollTo({ top: 0, left: 0 });
+    if (block) onNavigate(block.index);
+  }
+  return <div className={styles.reader} aria-label="Native PDF reader">
+    <div className={styles.pdfViewport} ref={viewport}>
+      {!pdf && <p className={styles.loading} role="status">Opening original PDF…</p>}
+      {pdf && <div className={styles.pdfSpread}>
+        {Array.from({ length: spreadEnd - spreadStart + 1 }, (_, index) => spreadStart + index).map((page) => (
+          <PdfPage key={page} pdf={pdf} book={book} pageNumber={page} width={pageWidth} height={size.height}
+            fitHeight={desktop} textSize={textSize} scrollViewport={viewport} onNavigate={onNavigate} onError={onError} />
+        ))}
+      </div>}
+    </div>
+    <nav className={styles.navigation} aria-label="Original document pages">
+      <button disabled={!pdf || spreadStart <= 1} onClick={() => turn(spreadStart - pagesPerSpread)}><ReaderIcon name="back" /> Previous</button>
+      <span>{spreadEnd > spreadStart ? `Pages ${spreadStart}–${spreadEnd}` : `Page ${spreadStart}`} of {pdf?.numPages ?? "…"}</span>
+      <button disabled={!pdf || spreadEnd >= pdf.numPages} onClick={() => turn(spreadStart + pagesPerSpread)}>Next <ReaderIcon name="arrow" /></button>
+    </nav>
+  </div>;
+}
+
+interface PdfPageProps {
+  pdf: PDFDocumentProxy;
+  book: LibraryBook;
+  pageNumber: number;
+  width: number;
+  height: number;
+  fitHeight: boolean;
+  textSize: number;
+  scrollViewport: RefObject<HTMLDivElement | null>;
+  onNavigate: (index: number) => void;
+  onError: () => void;
+}
+
+function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, scrollViewport, onNavigate, onError }: PdfPageProps) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const pageElement = useRef<HTMLDivElement>(null);
+  const [rendered, setRendered] = useState(0);
+  const [rects, setRects] = useState<{ left: number; top: number; width: number; height: number }[]>([]);
+  const ranges = useRef(new Map<number, Range>());
+  const active = pdfPageForBlock(book.blocks, book.position.blockIndex) === pageNumber;
+
   useEffect(() => {
-    if (!pdf || !width) return;
+    if (!width || !height) return;
     let cancelled = false;
     let renderTask: ReturnType<import("pdfjs-dist").PDFPageProxy["render"]> | undefined;
     let textLayer: import("pdfjs-dist").TextLayer | undefined;
     const render = async () => {
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const page = await pdf.getPage(viewPage);
+      const page = await pdf.getPage(pageNumber);
       if (cancelled || !canvas.current || !layer.current || !pageElement.current) return;
       const base = page.getViewport({ scale: 1 });
-      const scale = Math.max(0.25, (width - 24) / base.width) * textSize / 20;
+      // Desktop fits the entire portrait spread; mobile fits one page to its
+      // width and scrolls vertically. Zoom can enlarge either layout.
+      const scale = Math.max(0.01, Math.min(width / base.width, fitHeight ? height / base.height : Infinity)) * textSize / 20;
       const view = page.getViewport({ scale });
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       canvas.current.width = Math.floor(view.width * ratio);
@@ -269,50 +325,36 @@ function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps)
       textLayer = new pdfjs.TextLayer({ textContentSource: content, container: layer.current, viewport: view });
       await Promise.all([renderTask.promise, textLayer.render()]);
       if (cancelled) return;
-      ranges.current = matchNativeBlocks(indexNativeText(layer.current, true), book.blocks.filter((block) => pdfPageForBlock(book.blocks, block.index) === viewPage));
+      ranges.current = matchNativeBlocks(indexNativeText(layer.current, true), book.blocks.filter((block) => pdfPageForBlock(book.blocks, block.index) === pageNumber));
       setRendered((value) => value + 1);
     };
     void render().catch((error) => { if (!cancelled && error?.name !== "RenderingCancelledException") onError(); });
     return () => { cancelled = true; renderTask?.cancel(); textLayer?.cancel(); };
-  }, [pdf, width, viewPage, textSize]);
+  }, [pdf, width, height, pageNumber, fitHeight, textSize]);
   useEffect(() => {
     const range = ranges.current.get(book.position.blockIndex);
-    if (!range || !pageElement.current || !viewport.current) { setRects([]); return; }
+    if (!range || !pageElement.current || !scrollViewport.current) { setRects([]); return; }
     const origin = pageElement.current.getBoundingClientRect();
     const boxes = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0);
     setRects(boxes.map((rect) => ({ left: rect.left - origin.left, top: rect.top - origin.top, width: rect.width, height: rect.height })));
     const first = boxes[0];
     if (first) {
-      const bounds = viewport.current.getBoundingClientRect();
-      if (first.top < bounds.top || first.bottom > bounds.bottom) viewport.current.scrollTop += first.top - bounds.top - bounds.height / 3;
+      const bounds = scrollViewport.current.getBoundingClientRect();
+      if (first.top < bounds.top || first.bottom > bounds.bottom) scrollViewport.current.scrollTop += first.top - bounds.top - bounds.height / 3;
+      if (first.left < bounds.left || first.right > bounds.right) scrollViewport.current.scrollLeft += first.left - bounds.left - 12;
     }
   }, [book.position.blockIndex, rendered]);
 
-  function turn(page: number) {
-    const block = book.blocks.find((block) => pdfPageForBlock(book.blocks, block.index) === page);
-    setViewPage(page);
-    if (block) onNavigate(block.index);
-  }
-  return <div className={styles.reader} aria-label="Native PDF reader">
-    <div className={styles.pdfViewport} ref={viewport}>
-      {!pdf && <p className={styles.loading} role="status">Opening original PDF…</p>}
-      <div className={styles.pdfPage} ref={pageElement}>
-        <canvas ref={canvas} aria-label={`Original PDF page ${viewPage}`} />
-        <div ref={layer} className={styles.textLayer} onClick={(event) => {
-          for (const [index, range] of ranges.current) {
-            if ([...range.getClientRects()].some((rect) => event.clientX >= rect.left && event.clientX <= rect.right
-              && event.clientY >= rect.top && event.clientY <= rect.bottom)) { onNavigate(index); break; }
-          }
-        }} />
-        <div className={styles.highlights} aria-label="Current passage" aria-current="true">
-          {rects.map((rect, index) => <span key={index} style={rect} />)}
-        </div>
-      </div>
+  return <div className={styles.pdfPage} ref={pageElement}>
+    <canvas ref={canvas} aria-label={`Original PDF page ${pageNumber}`} />
+    <div ref={layer} className={styles.textLayer} onClick={(event) => {
+      for (const [index, range] of ranges.current) {
+        if ([...range.getClientRects()].some((rect) => event.clientX >= rect.left && event.clientX <= rect.right
+          && event.clientY >= rect.top && event.clientY <= rect.bottom)) { onNavigate(index); break; }
+      }
+    }} />
+    <div className={styles.highlights} aria-label={active ? "Current passage" : undefined} aria-current={active ? "true" : undefined}>
+      {rects.map((rect, index) => <span key={index} style={rect} />)}
     </div>
-    <nav className={styles.navigation} aria-label="Original document pages">
-      <button disabled={!pdf || viewPage <= 1} onClick={() => turn(viewPage - 1)}><ReaderIcon name="back" /> Previous</button>
-      <span>Page {viewPage} of {pdf?.numPages ?? "…"}</span>
-      <button disabled={!pdf || viewPage >= pdf.numPages} onClick={() => turn(viewPage + 1)}>Next <ReaderIcon name="arrow" /></button>
-    </nav>
   </div>;
 }

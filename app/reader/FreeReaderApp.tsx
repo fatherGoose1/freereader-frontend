@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
-import { parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
+import { chunkText, parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
+import { READING_CHUNK_REVISION, rechunkPdfBook } from "./readingChunks";
 import { asImportError, failureCategory, importFailureProperties, ImportError, type ImportFileType, type ImportStage } from "./importErrors";
 import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
 import { readingPageStarts } from "./pagination";
@@ -130,6 +131,7 @@ function makeBook(
   return {
     id: crypto.randomUUID(),
     ...parsed,
+    chunkingRevision: READING_CHUNK_REVISION,
     sourceName,
     sourceIdentifier,
     parentId,
@@ -736,7 +738,8 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   function audioCacheKey(book: LibraryBook, index: number, route: NarrationRoute): string {
     const language = languageForBook(book);
     const quality = route.model.startsWith("supertonic") ? `${steps}-` : "";
-    const model = `${TEXT_PIPELINE_REVISION}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
+    const chunkRevision = book.chunkingRevision ? `-chunks${book.chunkingRevision}` : "";
+    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
 
@@ -1107,11 +1110,12 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     setMessage("");
     audioPrimed.current = false;
     const language = languageForBook(book);
-    const ready = book.language ? book : { ...book, language, updatedAt: new Date().toISOString() };
+    const rechunked = rechunkPdfBook(book, chunkText);
+    const ready = rechunked.language ? rechunked : { ...rechunked, language, updatedAt: new Date().toISOString() };
     selectedRef.current = ready;
     setSelected(ready);
     setVoice((current) => voiceForLanguage(book.preferredVoice ?? current, language));
-    if (!book.language) {
+    if (ready !== book) {
       setBooks((current) => current.map((value) => value.id === book.id ? ready : value));
       saveBook(ready).then(libraryChanged).catch(() => undefined);
     }
