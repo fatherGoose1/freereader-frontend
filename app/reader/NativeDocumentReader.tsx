@@ -20,10 +20,10 @@ interface Props {
 
 export default function NativeDocumentReader(props: Props) {
   const [error, setError] = useState("");
-  if (error) return <div className={styles.notice} role="alert">{error} You can continue in E-reader view.</div>;
+  if (error) return <div className={styles.notice} role="alert">{error} You can continue in E-reader.</div>;
   return props.book.format === "epub"
-    ? <EpubReader {...props} onError={() => setError("This EPUB could not be displayed in native view.")} />
-    : <PdfReader {...props} onError={() => setError("This PDF could not be displayed in native view.")} />;
+    ? <EpubReader {...props} onError={() => setError("This EPUB could not be displayed in Original.")} />
+    : <PdfReader {...props} onError={() => setError("This PDF could not be displayed in Original.")} />;
 }
 
 type ReaderProps = Props & { onError: () => void };

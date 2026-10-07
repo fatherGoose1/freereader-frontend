@@ -175,6 +175,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [librarySearch, setLibrarySearch] = useState("");
   const [librarySort, setLibrarySort] = useState("recent");
   const [textSize, setTextSize] = useState(20);
+  const eReaderViewport = useRef<HTMLDivElement>(null);
   const [readingView, setReadingView] = useState<ReadingView>("native");
   const [nativeSource, setNativeSource] = useState<{ bookId: string; source: Blob | null } | null>(null);
   const [attachingSource, setAttachingSource] = useState(false);
@@ -299,6 +300,11 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
       ? current
       : { bookId: selected.id, start });
   }, [selected?.id, selected?.position.blockIndex, pageStarts]);
+
+  useEffect(() => {
+    if (readingView !== "ereader" || !selected || !["epub", "pdf"].includes(selected.format)) return;
+    eReaderViewport.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [readingView, selected?.id, selected?.position.blockIndex, page.start, textSize]);
 
   useEffect(() => {
     if (!settingsRevision) return;
@@ -1276,7 +1282,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const sourceLoaded = nativeSource?.bookId === selected.id;
     const originalSource = sourceLoaded ? nativeSource.source : null;
     const showNative = supportsNative && readingView === "native";
-    const floatingPdfControls = showNative && selected.format === "pdf" && !!originalSource;
+    const floatingPdfControls = selected.format === "pdf" && !!originalSource;
     return (
       <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
@@ -1310,7 +1316,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
         </div>
         {accountNotice}
         {syncBar}
-        <div className={`${styles.readerGrid} ${showNative ? styles.nativeGrid : ""}`} inert={panel === "voice"}>
+        <div className={`${styles.readerGrid} ${supportsNative ? styles.nativeGrid : ""}`} inert={panel === "voice"}>
           <aside className={styles.chapterRail}>
             <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
             <span className={styles.kicker}>Contents</span>
@@ -1323,11 +1329,11 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               >{item.title}</button>
             ))}
           </aside>
-          <article className={`${styles.readingPane} ${showNative ? styles.nativePane : ""} ${floatingPdfControls ? styles.pdfPane : ""}`}>
+          <article className={`${styles.readingPane} ${supportsNative ? styles.nativePane : ""} ${floatingPdfControls ? styles.pdfPane : ""}`}>
             <div className={styles.readingToolbar}>
               {supportsNative ? <div className={styles.viewToggle} role="group" aria-label="Reading view">
-                <button aria-pressed={showNative} title="Native view" onClick={() => changeReadingView("native")}>Native view</button>
-                <button aria-pressed={!showNative} title="E-reader view" onClick={() => changeReadingView("ereader")}>E-reader view</button>
+                <button aria-pressed={showNative} title="Original" onClick={() => changeReadingView("native")}>Original</button>
+                <button aria-pressed={!showNative} title="E-reader" onClick={() => changeReadingView("ereader")}>E-reader</button>
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
             </div>
@@ -1336,19 +1342,21 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               : <div className={styles.nativeNotice}>
                 {!sourceLoaded ? <p role="status">Opening original document…</p> : <>
                   <strong>Open this book in its original layout</strong>
-                  <p>Attach the original {selected.format.toUpperCase()} to use native view. Original files stay in this browser; your saved text and listening position are kept.</p>
+                  <p>Attach the original {selected.format.toUpperCase()} to use Original. Original files stay in this browser; your saved text and listening position are kept.</p>
                   <button onClick={() => nativeFileInput.current?.click()} disabled={attachingSource}>{attachingSource ? "Reading original file…" : "Attach original file"}</button>
                   <input ref={nativeFileInput} hidden type="file" accept={selected.format === "epub" ? ".epub,application/epub+zip" : ".pdf,application/pdf"} aria-label="Attach original file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void attachNativeSource(file); event.target.value = ""; }} />
                   {sourceError && <p role="alert">{sourceError}</p>}
                 </>}
               </div>
               : <>
-            <div className={styles.readingText} style={{ fontSize: textSize }}>
+            <div ref={eReaderViewport} className={supportsNative ? styles.eReaderViewport : undefined}>
+            <div className={`${styles.readingText} ${supportsNative ? styles.eReaderPaper : ""}`} style={{ fontSize: textSize }}>
               {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
                 item.isHeading
                   ? <h2 key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</h2>
                   : <p key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
               ))}
+            </div>
             </div>
             <nav className={styles.pageNavigation} aria-label="Reading pages">
               <button disabled={pageIndex === 0} onClick={() => goToBlock(pageStarts[pageIndex - 1])}><ReaderIcon name="back" /> Previous</button>

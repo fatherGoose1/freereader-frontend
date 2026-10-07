@@ -26,7 +26,7 @@
 .pdfNavigation button:last-child { right: 12px; }
 .pdfNavigation span { position: absolute; bottom: 12px; left: 12px; max-width: 112px; padding: 6px 8px; background: #ffffffdc; border-radius: 8px; line-height: 1.5; }
 @media (max-width: 800px) {
-  .pdfReader .pdfViewport { padding: 8px 48px; }
+  .pdfReader .pdfViewport { padding: 8px 48px 8px 68px; }
   .pdfNavigation button { top: auto; bottom: 8px; width: 36px; min-height: 36px; justify-content: center; padding: 8px; font-size: 0; transform: none; }
   .pdfNavigation button:first-child { left: 8px; }
   .pdfNavigation button:last-child { right: 8px; }
