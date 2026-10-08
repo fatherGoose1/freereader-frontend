@@ -1474,6 +1474,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
           <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
         </Link>
         <div className={styles.actions}>
+          {authReady && !session && <button type="button" className={styles.librarySignIn} onClick={() => void signIn()}>Sign in to save your library</button>}
           <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
           <input ref={fileInputRef} hidden type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
             const file = event.currentTarget.files?.[0];
@@ -1510,7 +1511,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
             <button onClick={() => setPanel("paste")}><span className={styles.importIcon}><ReaderIcon name="text" /></span><span><strong>Insert Text</strong><small>Notes, scripts, or a passage</small></span><ReaderIcon name="plus" /></button>
             <button className={styles.freeBooksButton} onClick={openGutenbergBrowser}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>New Author Works + Public Domain Books</small></span><ReaderIcon name="arrow" /><span className="always-free-badge">New</span></button>
           </div>
-          <p className={styles.rightsNotice}><strong>Before you add or narrate:</strong> Use only content you have the rights to narrate, including your own work, public-domain material where you live, or content with permission or a suitable license. A free download or a purchased copy alone does not grant audio or sharing rights. <Link href="/terms">Read the content terms</Link>.</p>
+          <p className={styles.rightsNotice}><strong>Before you add reading material:</strong> Use only content you have the rights to narrate, including your own work, public-domain material where you live, or content with permission or a suitable license. A free download or a purchased copy alone does not grant audio or sharing rights. <Link href="/terms">Read the content terms</Link>.</p>
           <div className={styles.libraryToolbar}>
             <div className={styles.shelfHeading}>
               <div>

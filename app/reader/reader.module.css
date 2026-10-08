@@ -40,6 +40,7 @@
 /* A single, predictable workspace header. */
 .libraryHero {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -56,7 +57,9 @@
 .appMark i:nth-child(2) { height: 21px; }
 .appMark i:nth-child(3) { height: 15px; }
 .appMark i:nth-child(4) { height: 7px; }
-.actions { display: flex; align-items: center; gap: 12px; }
+.actions { display: flex; align-items: center; gap: 12px; max-width: 100%; margin-left: auto; }
+.librarySignIn { min-height: 44px; padding: 10px 18px; color: var(--app-label); background: #fff; border: 1px solid var(--border); border-radius: 9px; font-weight: 500; }
+.librarySignIn:hover { background: var(--app-grouped); }
 .accountNotice { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(620px, calc(100% - 32px)); margin: 14px auto 0; padding: 14px 44px 14px 16px; color: #46536b; background: #f5f7fc; border: 1px solid #dfe7f5; border-radius: 12px; box-shadow: 0 0 0 3px #f2ca6650, 0 0 28px #f2ca6680, 0 8px 24px #24365c12; }
 .accountNotice > div { padding-right: 24px; }
 .accountNotice strong { display: block; font-size: 14px; }
@@ -342,9 +345,11 @@
   .brandSubtitle { display: none; }
   .appMark { width: 36px; height: 36px; border-radius: 10px; }
   .actions { gap: 5px; }
+  .actions:has(.librarySignIn) { width: 100%; }
+  .librarySignIn { flex: 1; min-width: 0; padding: 9px 12px; font-size: 12px; }
   .accountButton { padding: 8px; }
   .accountButton span { display: none; }
-  .actions .primaryAction { padding: 9px 12px; font-size: 12px; }
+  .actions .primaryAction { flex: none; padding: 9px 12px; font-size: 12px; }
   .actions .primaryAction svg { width: 16px; }
   .libraryLayout { width: calc(100% - 32px); padding-top: 28px; }
   .workspaceHeading { margin-bottom: 24px; }
