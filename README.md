@@ -100,6 +100,8 @@ npm run build
 
 All speech is synthesized by the backend; on-device speech has been retired. `narration.ts` owns routing: Kokoro's trained languages (English, Spanish, French, Hindi, Italian, Japanese, Portuguese, and Mandarin Chinese) use a `Server` Kokoro route through `remoteSpeech.ts` and the same-origin `/api/tts` proxy, while the remaining languages use the backend Supertonic route. Non-English Kokoro voice previews are generated on demand by `/api/voice-preview`; Supertonic and English previews remain bundled. Audio cache keys include the engine, variant, voice, and settings.
 
+The shared capitalization normalizer is applied before forwarding every speech text to the backend, including single/batched standard speech, the landing demo, Premium speech, cloned-voice speech/reference transcripts, and generated previews. All-caps words use initial-cap form (`HELLO` → `Hello`, `HELLO WORLD` → `Hello World`), including decomposed accented characters. This changes spoken text without changing the displayed document.
+
 The Kokoro backend model is pinned to `hexgrad/Kokoro-82M` FP32 and returns mono AAC in fragmented MP4; Supertonic additionally receives a pitch-preserving tempo correction outside its native 0.7–2.0× range so the reader's 0.5–3.0× speaking speed works for every voice.
 
 Generation starts on playback demand. Once the first passage plays, both device classes prefetch a bounded window (30-second target, at most four following passages). Pause/navigation invalidates the look-ahead loop; an already-running passage may finish. Entire documents are not generated upfront.

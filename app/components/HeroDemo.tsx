@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SPEECH_LANGUAGES } from "../languages";
+import { normalizeCapitalization } from "../reader/speechText";
 
 const DEFAULT_TEXT =
   '"When you play the game of thrones you win or you die.”\n\n— George R.R. Martin';
@@ -58,7 +59,7 @@ export default function HeroDemo() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: trimmed,
+          text: normalizeCapitalization(trimmed),
           speed: 1,
           detectLanguage: true,
           steps: SUPERTONIC_STEPS,

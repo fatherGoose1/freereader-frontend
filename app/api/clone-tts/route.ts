@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { callBackend, freereaderBackendConfig } from "../freereaderBackend";
+import { normalizeCapitalization } from "../../reader/speechText";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
   if (!text || !voiceId || !userId) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
-  const upstreamBody: Record<string, unknown> = { text, voice_id: voiceId, user_id: userId };
+  const upstreamBody: Record<string, unknown> = { text: normalizeCapitalization(text), voice_id: voiceId, user_id: userId };
   if (typeof body?.language === "string" && body.language) upstreamBody.language = body.language;
   if (typeof body?.speed === "number" && Number.isFinite(body.speed)) upstreamBody.speed = body.speed;
   if (typeof body?.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);

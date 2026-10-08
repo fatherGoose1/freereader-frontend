@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../app/languages";
 import { KOKORO_VOICES, isSupertonicVoice, supertonicVoices } from "../app/reader/voices";
+import { normalizeCapitalization } from "../app/reader/speechText";
 
 // Short native-language samples make every voice comparable without generating a project passage.
 const samples: Record<SpeechLanguage, string> = {
@@ -65,7 +66,7 @@ for (const [language] of SPEECH_LANGUAGES) {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: samples[language],
+        text: normalizeCapitalization(samples[language]),
         language,
         voice,
         speed: 1,

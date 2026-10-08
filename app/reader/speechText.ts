@@ -1,4 +1,4 @@
-export const TEXT_PIPELINE_REVISION = "text-10";
+export const TEXT_PIPELINE_REVISION = "text-11";
 
 const ROMAN_NUMERAL = /^(?=[MDCLXVI]+$)M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/i;
 
@@ -39,7 +39,7 @@ function replaceRomanNumerals(text: string, isHeading: boolean): string {
   return normalized;
 }
 
-function normalizeCapitalization(text: string): string {
+export function normalizeCapitalization(text: string): string {
   let result = "";
   let word = "";
   const appendWord = () => {
@@ -52,7 +52,7 @@ function normalizeCapitalization(text: string): string {
     word = "";
   };
   for (const character of text) {
-    if (/\p{L}/u.test(character) || (word && "'’-".includes(character))) {
+    if (/\p{L}/u.test(character) || (word && (/\p{M}/u.test(character) || "'’-".includes(character)))) {
       word += character;
     } else {
       appendWord();

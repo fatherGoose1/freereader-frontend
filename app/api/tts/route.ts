@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeCapitalization } from "../../reader/speechText";
 
 export const runtime = "nodejs";
 
@@ -21,8 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_engine" }, { status: 400 });
   }
   const upstreamBody: Record<string, unknown> = texts
-    ? { texts, speed: body.speed }
-    : { text: single, speed: body.speed };
+    ? { texts: texts.map(normalizeCapitalization), speed: body.speed }
+    : { text: normalizeCapitalization(single!), speed: body.speed };
   // When detecting a language, let the backend choose a voice for the detected engine.
   // A Supertonic voice would be invalid if the text is detected as English (Kokoro).
   if (body.detectLanguage === true) {

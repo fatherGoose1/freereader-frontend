@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { callBackend, freereaderBackendConfig } from "../freereaderBackend";
 import { isQwenVoice } from "../../reader/voices";
+import { normalizeCapitalization } from "../../reader/speechText";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     || (body.instruct !== undefined && (typeof body.instruct !== "string" || body.instruct.length > 200))) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-  const upstreamBody: Record<string, unknown> = { text: body.text.trim(), voice_id: body.voiceId };
+  const upstreamBody: Record<string, unknown> = { text: normalizeCapitalization(body.text.trim()), voice_id: body.voiceId };
   if (typeof body.language === "string") upstreamBody.language = body.language;
   if (typeof body.instruct === "string" && body.instruct.trim()) upstreamBody.instruct = body.instruct.trim();
   let response: Response;

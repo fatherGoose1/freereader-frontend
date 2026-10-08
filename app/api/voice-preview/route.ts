@@ -1,5 +1,6 @@
 import { callBackend, freereaderBackendConfig } from "../freereaderBackend";
 import { isKokoroVoiceForLanguage } from "../../reader/voices";
+import { normalizeCapitalization } from "../../reader/speechText";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   if (!config) return Response.json({ error: "speech_not_configured" }, { status: 503 });
   try {
     const response = await callBackend(config, "/api/v1/freereader/speech", {
-      text: PREVIEW_TEXT[language as keyof typeof PREVIEW_TEXT], language,
+      text: normalizeCapitalization(PREVIEW_TEXT[language as keyof typeof PREVIEW_TEXT]), language,
       engine: "kokoro", voice, speed: 1,
     }, 120_000);
     if (!response.ok || !response.body || !response.headers.get("Content-Type")?.startsWith("audio/")) {

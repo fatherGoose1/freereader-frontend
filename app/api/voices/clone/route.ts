@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { callBackend, freereaderBackendConfig } from "../../freereaderBackend";
+import { normalizeCapitalization } from "../../../reader/speechText";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   if (typeof body?.voiceId === "string" && body.voiceId.trim()) upstreamBody.voice_id = body.voiceId.trim();
   if (typeof body?.name === "string") upstreamBody.name = body.name.trim().slice(0, 80);
   if (typeof body?.language === "string") upstreamBody.language = body.language.trim();
-  if (typeof body?.refText === "string") upstreamBody.ref_text = body.refText.trim();
+  if (typeof body?.refText === "string") upstreamBody.ref_text = normalizeCapitalization(body.refText.trim());
 
   let response: Response;
   try {
