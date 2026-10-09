@@ -4,6 +4,7 @@ import HeroDemo from "../components/HeroDemo";
 import AppStoreButton from "../components/AppStoreButton";
 import LandingDemoVideo from "../components/LandingDemoVideo";
 import FeedbackCarousel from "../components/FeedbackCarousel";
+import ReadingSupportSection from "../components/ReadingSupportSection";
 import { SPEECH_LANGUAGES } from "../languages";
 
 const formats = ["EPUB", "PDF", "DOCX", "TXT", "HTML", "Markdown"];
@@ -68,6 +69,8 @@ export default function Home() {
           <Link className="text-link audiobook-story-link" href="/reader/audiobooks">Open the audiobook reader <ArrowIcon /></Link>
         </div>
       </section>
+
+      <ReadingSupportSection />
 
       <section className="section language-section" aria-labelledby="languages-heading">
         <div className="wrap language-layout">
