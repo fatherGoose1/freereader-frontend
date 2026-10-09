@@ -7,68 +7,60 @@ export default function ReadingSupportSection() {
       <div className="wrap">
         <div className={styles.layout}>
           <div className={styles.copy}>
-            <span className={styles.eyebrow}>For the days reading feels like work</span>
-            <h2 id="reading-support-heading">Reading can be hard.<br />Getting help shouldn’t be.</h2>
-            <p className={styles.intro}>
-              Losing your place. Reading the same paragraph three times. Getting to
-              the end of a page and wondering what it said. If that sounds familiar,
-              you’re welcome here.
+            <h2 id="reading-support-heading">For people with dyslexia, ADHD, and reading disabilities.</h2>
+            <p>
+              With dyslexia, reading each word can take so much effort that it’s
+              hard to keep track of what a sentence means. FreeReader reads your
+              books and documents aloud, so you can listen instead or follow the
+              text as you hear it.
             </p>
             <p>
-              Whether you have dyslexia, ADHD, a reading disability, or simply find
-              it hard to focus or understand what you’re reading, FreeReader gives
-              you another way in: hear the words while you follow along.
+              ADHD and trouble focusing can mean losing your place or reading the
+              same paragraph over and over. Audio and passage highlighting can
+              help you stay with the text and find your place when your attention
+              drifts.
+            </p>
+            <p>
+              If you get to the end of a page without understanding what you’ve
+              read, hearing it may help. You can slow the voice down, pause to
+              think, and listen again as often as you need.
             </p>
 
-            <dl className={styles.benefits}>
-              <div>
-                <dt>Let your ears do some of the work.</dt>
-                <dd>With dyslexia, sounding out words can take a lot of energy. Listening lets you spend more of that energy on what they mean.</dd>
-              </div>
-              <div>
-                <dt>A little help keeping your place.</dt>
-                <dd>If ADHD or a wandering mind makes it hard to stay with a page, read-aloud audio and passage highlighting can give you something to follow.</dd>
-              </div>
-              <div>
-                <dt>Take the time you need.</dt>
-                <dd>Adjust the speaking speed, pause to think, or listen to a passage again. Give a difficult idea a second pass, at your own pace.</dd>
-              </div>
-            </dl>
-
             <Link className={`text-link ${styles.readerLink}`} href="/reader/audiobooks">
-              Try listening to something you’ve been meaning to read
+              Open the free reader
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5l5 5-5 5" /></svg>
             </Link>
           </div>
 
-          <aside className={styles.facts} aria-labelledby="reading-support-facts-heading">
-            <h3 id="reading-support-facts-heading">You’re in good company.</h3>
-            <p>Reading struggles are more common than you might think.</p>
+          <aside className={styles.facts} aria-label="Reading difficulties in numbers">
             <dl className={styles.statistics}>
               <div>
-                <dt>About 10%</dt>
+                <dt>10% <span>≈ 800 million people</span></dt>
                 <dd>
-                  of people are estimated to be dyslexic.
+                  Estimated to have dyslexia worldwide, applying the 10% estimate to a population of 8 billion.
                   <a href="https://www.bdadyslexia.org.uk/dyslexia">British Dyslexia Association</a>
+                  <a href="https://www.un.org/en/global-issues/population">UN · world population reached 8 billion in 2022</a>
                 </dd>
               </div>
               <div>
-                <dt>6% of U.S. adults</dt>
+                <dt>6% <span>15.5 million adults</span></dt>
                 <dd>
-                  reported a current ADHD diagnosis in a 2023 survey.
+                  U.S. adults who reported a current ADHD diagnosis in a 2023 survey.
                   <a href="https://europepmc.org/articles/PMC11466376">CDC · published 2024</a>
                 </dd>
               </div>
               <div>
-                <dt>About 15%</dt>
+                <dt>15% <span>≈ 7.4 million children</span></dt>
                 <dd>
-                  of U.S. public school children receive special instruction for reading difficulties.
+                  U.S. public school children receiving special instruction for reading difficulties, estimated using 2022 enrollment.
                   <a href="https://www.msdmanuals.com/professional/pediatrics/learning-and-developmental-disorders/dyslexia">MSD Manual · updated 2025</a>
+                  <a href="https://nces.ed.gov/programs/coe/indicator/cga/public-school-enrollment">NCES · 49.6 million students in 2022</a>
                 </dd>
               </div>
             </dl>
             <p className={styles.sourceNote}>
-              These figures describe different populations and can overlap.
+              Dyslexia and reading-support headcounts are rough calculations,
+              not measured totals. These groups can overlap.
               Reading difficulties are broader than diagnosed reading disabilities.
             </p>
           </aside>
@@ -76,11 +68,10 @@ export default function ReadingSupportSection() {
 
         <div className={styles.donation}>
           <div>
-            <h3>Free to use. Kept going by people.</h3>
             <p>
               FreeReader is a non-commercial, donation-funded product. Donations
               help us keep the reader running and free for everyone who needs it.
-              If you’re able to give, thank you. If not, just make yourself at home.
+              You don’t need to donate to use it.
             </p>
           </div>
           <a className="coffee-button" href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer">
