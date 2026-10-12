@@ -11,6 +11,60 @@ Production Supabase project: `kszgohcoirrrucypgipy` (Koko).
 Production backend: `https://koko-backend-production-c887.up.railway.app`.
 Preview branch: `feat/edu-portal`.
 
+### Verified deployment record (2026-10-12)
+
+- Backend commit: `a507350` on `koko-backend/main`.
+- Railway deployment: `3788caf0-6bd2-436f-8d7b-88e9739c3eb7` — **SUCCESS**.
+- Production migration revision: `20261012_0022`; all 16 EDU tables have RLS enabled,
+  and both `anon` and `authenticated` lack EDU schema usage.
+- Production backend flags: EDU and EDU speech **enabled** for preview testing.
+- Frontend branch: `feat/edu-portal`, initial feature commit `4121368`.
+- Stable preview: **https://freereader-frontend-git-feat-edu-portal-flexytech.vercel.app/edu**
+- Verified preview deployment: `dpl_Gybdvo9Z6vejyCaduJpxK366MmGp` — **READY**.
+- Production backend `edu-security-check`: **passed on Railway**.
+- Production `/health`: **200**; unauthenticated EDU `/session`: **401**.
+- Consumer speech smoke check: **200**, valid MP4 audio, 2.625 seconds.
+- Preview EDU `/api/edu/session` without a token: **401**.
+- Consumer Site URL preserved; production and preview EDU callbacks appended to
+  Supabase's existing Google redirect allowlist.
+- Vercel EDU flags/file limit configured **only for this feature branch's Preview**;
+  the production consumer frontend was not deployed or reconfigured.
+
+Release verification: backend **375 passed**, 4 PostgreSQL-only skips; frontend
+consumer unit tests **139 passed**; EDU unit tests **11 passed**; EDU browser tests
+**12 passed** across mobile Chromium/WebKit and desktop Chromium; production build passed.
+These counts cover the clean release, excluding unrelated pending work.
+
+The preview lockfile upgrades Next.js to 16.4.0 and patches the applicable image/
+sanitizer/source-map dependencies. Audit now reports no high/critical vulnerabilities.
+Three moderate advisory entries remain in Mammoth's unused CLI argument-formatting
+dependency chain; the document conversion API is retained without a breaking downgrade.
+
+### What Parker needs to do now
+
+1. Open the stable preview above and authenticate with Vercel if prompted.
+2. Sign into EDU using the Google account you want to use for testing.
+3. Provide that account's exact Google email (and your preferred test-school name)
+   so the first school-admin invitation can be provisioned. No email was guessed
+   and no administrator was granted access to an unrelated account.
+4. Accept that invitation, then test the teacher/class/assignment/student workflows.
+5. Only if larger originals are required, upgrade Supabase's plan to allow 100 MB
+   and then increase the EDU backend/preview/bucket limits together.
+
+The CLI below is available on the deployed Railway container. Its Python
+environment is `/opt/venv`, so remote execution can use:
+
+```bash
+railway ssh --service koko-backend --environment production -- \
+  /opt/venv/bin/flask --app koko_backend:create_app edu-create-school \
+  --name "Your Test School" --admin-email "YOUR-GOOGLE-EMAIL" \
+  --timezone "America/New_York"
+```
+
+The agent cannot perform your interactive Vercel/Google browser login or select
+your administrator email. A plan upgrade is also an owner billing action. Cleanup
+scheduling and school retention rules are still follow-ups before broad rollout.
+
 Already configured through authenticated CLIs/APIs:
 
 - Restrictive policies on both `storage.objects` and `storage.buckets` for EDU.
