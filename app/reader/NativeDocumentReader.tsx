@@ -54,6 +54,7 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
     let pendingFollow = Promise.resolve();
     const start = async () => {
       const { default: ePub } = await import("epubjs");
+      const { default: DOMPurify } = await import("dompurify");
       const bytes = await source.arrayBuffer();
       if (cancelled) return;
       epub = ePub({ replacements: "blobUrl" });
@@ -63,6 +64,16 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
       const locations = new Map<number, EpubLocation>();
       const sections: Section[] = [];
       epub.spine.each((section: Section) => sections.push(section));
+      // WebKit disables parent-installed link listeners in a no-scripts sandbox.
+      // Sanitize before serialization/display, then use a strict CSP to forbid
+      // book scripts while allowing the parent's navigation/highlight handlers.
+      for (const section of sections) section.hooks.serialize.register((html: string, target: Section) => {
+        const clean = DOMPurify.sanitize(target.output || html, { WHOLE_DOCUMENT: true,
+          ADD_TAGS: ["link", "style"], FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "button", "textarea", "select", "base", "meta"],
+          FORBID_ATTR: ["srcdoc"], ALLOWED_URI_REGEXP: /^(?:(?:https?|blob):|data:image\/|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i });
+        const policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' blob: data:; img-src blob: data:; font-src blob: data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+        target.output = clean.replace(/<head[^>]*>/i, `$&<meta http-equiv="Content-Security-Policy" content="${policy}" />`);
+      });
       let blockCursor = 0;
       // Use the same source elements as the importer; chunk boundaries do not
       // introduce paragraph breaks into the rendered EPUB.
@@ -97,14 +108,33 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
       rendition = epub.renderTo(host.current, {
         width: host.current.clientWidth, height: host.current.clientHeight,
         flow: "paginated", spread: "auto", minSpreadWidth: 900,
-        allowScriptedContent: false,
+        allowScriptedContent: true,
       });
       const active = { book: epub, rendition, locations };
       engine.current = active;
       rendition.hooks.content.register((contents: Contents) => {
         contents.document.documentElement.lang ||= book.language ?? "en";
         contents.document.addEventListener("click", (event) => {
-          if ((event.target as Element).closest("a")) { manualNavigation.current = true; return; }
+          const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
+          if (link) {
+            // srcdoc/blob chapters have the site's URL as a browser fallback.
+            // Never let a relative EPUB href navigate that iframe to a web route.
+            event.preventDefault(); event.stopImmediatePropagation();
+            const href = link.getAttribute("href") ?? "";
+            if (/^https?:\/\//i.test(href)) { window.open(href, "_blank", "noopener,noreferrer"); return; }
+            if (!href || /^(?:javascript|data|vbscript|file):/i.test(href)) return;
+            const current = sections.find((section) => section.index === contents.sectionIndex);
+            if (!current) return;
+            try {
+              const target = new URL(href, `https://epub.internal/${current.href}`);
+              const section = epub!.spine.get(decodeURIComponent(target.pathname.slice(1)))
+                || epub!.spine.get(href.split("#")[0] || current.href);
+              if (!section) return;
+              manualNavigation.current = true;
+              void rendition!.display(section.href + target.hash).catch(onError);
+            } catch { /* Invalid book links cannot escape into the application. */ }
+            return;
+          }
           const matches = [...locations].filter(([, target]) => target.section === contents.sectionIndex);
           for (const [index, target] of matches) {
             const range = contents.range(target.cfi);
@@ -114,7 +144,7 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
               return;
             }
           }
-        });
+        }, true);
       });
       rendition.on("relocated", (value: Rendition["location"]) => {
         if (cancelled) return;

@@ -66,7 +66,8 @@ export default function AssignmentEditor({ assignmentId }: { assignmentId?: stri
       const result = await eduFetch<{ assignment: Assignment }>(existing ? `assignments/${existing.id}` : `schools/${school.id}/assignments`, userId, {
         method: existing ? "PATCH" : "POST", body: JSON.stringify(payload),
       });
-      router.push(path(`assignments/${result.assignment.id}`));
+      router.push(path(status === "published" && result.assignment.versionIds[0]
+        ? `assignments/${result.assignment.id}/reader/${result.assignment.versionIds[0]}` : `assignments/${result.assignment.id}`));
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
   return <main className={styles.main}><h1>{assignmentId ? "Edit assignment" : "Create reading assignment"}</h1>

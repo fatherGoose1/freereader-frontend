@@ -6,11 +6,12 @@ const MAX_BODY = 128 * 1024;
 
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
   if (process.env.EDU_ENABLED !== "true") return NextResponse.json({ error: "edu_disabled" }, { status: 404 });
+  const { path } = await context.params;
+  const shared = path[0] === "shared";
   const authorization = request.headers.get("authorization") ?? "";
-  if (!authorization.startsWith("Bearer ") || authorization.length > 8192) {
+  if (!shared && (!authorization.startsWith("Bearer ") || authorization.length > 8192)) {
     return NextResponse.json({ error: "sign_in_required" }, { status: 401 });
   }
-  const { path } = await context.params;
   if (!path.length || path.some((part) => !/^[a-zA-Z0-9_-]+$/.test(part))) {
     return NextResponse.json({ error: "invalid_path" }, { status: 400 });
   }
@@ -42,7 +43,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const timeout = setTimeout(abort, path.at(-1) === "speech" ? 120_000 : 90_000);
   try {
     const upstream = await fetch(`${backend}/api/v1/freereader/edu/${path.map(encodeURIComponent).join("/")}`, {
-      method: request.method, headers: { Authorization: authorization, "Content-Type": "application/json" },
+      method: request.method, headers: { ...(!shared ? { Authorization: authorization } : { "X-FreeReader-Edu-Guest": (request.headers.get("x-freereader-edu-guest") ?? "").slice(0, 128) }), "Content-Type": "application/json" },
       body: body ? new Blob([body], { type: "application/json" }) : undefined, signal: controller.signal, cache: "no-store", redirect: "error",
     });
     const headers = new Headers({ "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Vary": "Authorization" });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
@@ -11,14 +11,14 @@ import { asImportError, failureCategory, importFailureProperties, ImportError, t
 import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
 import { readingPageStarts } from "./pagination";
 import {
-  getAudio,
-  getNativeSource,
+  getAudio as getLocalAudio,
+  getNativeSource as getLocalNativeSource,
   listBooks,
   listFolders,
   removeBook,
   requestPersistentStorage,
-  saveAudio,
-  saveBook,
+  saveAudio as saveLocalAudio,
+  saveBook as saveLocalBook,
   saveNativeSource,
   saveFolder,
 } from "./storage";
@@ -29,8 +29,8 @@ import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
 import { isKokoroVoice, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
-import { flushTelemetry, recordTelemetry, type TelemetryProperties } from "./telemetry";
-import posthog from "posthog-js";
+import { flushTelemetry, recordTelemetry as recordConsumerTelemetry, type TelemetryProperties } from "./telemetry";
+import consumerPosthog from "posthog-js";
 import styles from "./reader.module.css";
 import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
@@ -51,6 +51,16 @@ const BATCH_MAX_CHARS = 1200;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   generationStartedAt?: number;
+};
+export type ManagedReader = {
+  original: Blob;
+  speechRate?: number;
+  exitLabel: string;
+  exit: () => void;
+  header?: ReactNode;
+  save: (book: LibraryBook, speechRate: number) => Promise<void>;
+  event: (name: string, properties: TelemetryProperties) => void;
+  generate: (book: LibraryBook, index: number, options: { voice: NarratorVoice; language: SpeechLanguage; speed: number }, needed: () => boolean) => Promise<PreparedAudio>;
 };
 type PendingAudio = { promise: Promise<PreparedAudio>; request: { isCurrent: () => boolean } };
 type ActiveAudio = { bookId: string; index: number; url: string };
@@ -167,7 +177,19 @@ function folderPath(folder: LibraryFolder, folders: LibraryFolder[]): string {
   return names.join(" / ");
 }
 
-export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBook } = {}) {
+export default function FreeReaderApp({ initialBook, managed }: { initialBook?: LibraryBook; managed?: ManagedReader } = {}) {
+  const managedAudio = useRef(new Map<string, Blob>());
+  const currentSpeechRate = useRef(managed?.speechRate ?? 1);
+  const posthog = managed ? { capture: (..._args: unknown[]) => {}, captureException: (..._args: unknown[]) => {} } : consumerPosthog;
+  const recordTelemetry = (name: string, properties: TelemetryProperties = {}) => managed ? managed.event(name, properties) : recordConsumerTelemetry(name, properties);
+  const saveBook = (book: LibraryBook) => managed ? managed.save(book, currentSpeechRate.current) : saveLocalBook(book);
+  const getNativeSource = (id: string) => managed ? Promise.resolve(id === initialBook?.id ? managed.original : null) : getLocalNativeSource(id);
+  const getAudio = (key: string) => managed ? Promise.resolve(managedAudio.current.get(key) ?? null) : getLocalAudio(key);
+  const saveAudio = async (key: string, blob: Blob) => {
+    if (!managed) return saveLocalAudio(key, blob);
+    managedAudio.current.set(key, blob);
+    if (managedAudio.current.size > 16) managedAudio.current.delete(managedAudio.current.keys().next().value!);
+  };
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -239,8 +261,9 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   const [previewLoading, setPreviewLoading] = useState(false);
   const [voice, setVoice] = useState<NarratorVoice>(initialBook?.preferredVoice ?? "af_heart");
   const steps = 12;
-  const [speechRate, setSpeechRate] = useState(1);
-  const appliedSpeechRate = useRef(1);
+  const [speechRate, setSpeechRate] = useState(managed?.speechRate ?? 1);
+  currentSpeechRate.current = speechRate;
+  const appliedSpeechRate = useRef(managed?.speechRate ?? 1);
   const [settingsRevision, setSettingsRevision] = useState(0);
   const resumeAfterSettings = useRef<{ bookId: string; index: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -332,6 +355,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   }
 
   useEffect(() => {
+    if (managed) { setAuthReady(true); return; }
     const supabase = supabaseClient();
     if (!supabase) { setAuthReady(true); return; }
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
@@ -347,7 +371,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   }, []);
 
   useEffect(() => {
-    if (!libraryLoaded || !session) return;
+    if (managed || !libraryLoaded || !session) return;
     let cancelled = false;
     const sync = async () => {
       if (cancelled) return;
@@ -415,6 +439,18 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   </div>;
 
   useEffect(() => {
+    if (managed) {
+      setBooks(initialBook ? [initialBook] : []);
+      setLibraryLoaded(true);
+      recordTelemetry("document_opened", initialBook ? documentProperties(initialBook) : {});
+      return () => {
+        playbackEpoch.current += 1; generationEpoch.current += 1; wantsPlayback.current = false;
+        audioRef.current?.pause();
+        if (selectedRef.current) void saveBook(selectedRef.current).catch(() => undefined);
+        if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
+        managedAudio.current.clear();
+      };
+    }
     recordTelemetry("app_launch");
     posthog.capture("app_launched");
     Promise.all([listBooks(), listFolders()])
@@ -770,6 +806,22 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
   }
 
   async function ensureAudio(book: LibraryBook, index: number, isCurrent: () => boolean): Promise<PreparedAudio> {
+    if (managed) {
+      if (!isCurrent()) throw new SpeechCancelledError("Narration was cancelled");
+      const language = languageForBook(book);
+      const selectedVoice = voiceForLanguage(voice, language);
+      const key = `${book.id}:${index}:${selectedVoice}:${speechRate}:${language}`;
+      const cached = managedAudio.current.get(key);
+      if (cached) return { blob: cached, duration: 0, provider: "Server", model: "edu-standard", cached: true };
+      const existing = pendingAudio.current.get(key);
+      if (existing) { existing.request.isCurrent = isCurrent; return existing.promise; }
+      const request = { isCurrent };
+      const promise = managed.generate(book, index, { voice: selectedVoice, language, speed: speechRate }, () => request.isCurrent())
+        .then(async (result) => { await saveAudio(key, result.blob); return result; })
+        .finally(() => pendingAudio.current.delete(key));
+      pendingAudio.current.set(key, { promise, request });
+      return promise;
+    }
     const checkRequest = () => {
       if (!isCurrent()) throw new SpeechCancelledError("Playback position changed");
     };
@@ -1293,7 +1345,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
     const showNative = supportsNative && readingView === "native";
     const floatingPdfControls = selected.format === "pdf" && !!originalSource;
     return (
-      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook ? styles.embeddedReader : ""}`} data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
+      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook && !managed ? styles.embeddedReader : ""}`} data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
@@ -1302,14 +1354,16 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
         <div className={styles.readerTop} inert={panel === "voice"}>
           <button className={styles.textButton} onClick={() => {
             resetPlayback();
+            if (managed) { if (selectedRef.current) void saveBook(selectedRef.current).catch(() => undefined); managed.exit(); return; }
             if (initialBook) { window.location.assign("/reader/audiobooks"); return; }
             selectedRef.current = null;
             setSelected(null);
             setPanel(null);
             setMessage("Your reading position has been saved.");
-          }}><ReaderIcon name="back" /> {initialBook ? "Back to library" : "Library"}</button>
+          }}><ReaderIcon name="back" /> {managed?.exitLabel ?? (initialBook ? "Back to library" : "Library")}</button>
           <div className={styles.readerTitle}><strong>{selected.title}</strong><span>{chapter?.title ?? "Beginning"}</span></div>
           <div className={styles.readerTools}>
+            {managed?.header}
             {selected.chapters.length > 0 && (
               <label className={styles.chapterPicker}>Chapters
                 <select
@@ -1346,10 +1400,10 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
                 <button aria-pressed={!showNative} title="E-reader" onClick={() => changeReadingView("ereader")}>E-reader</button>
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
-              <div className={styles.mobileSupportActions}>
+              {!managed && <div className={styles.mobileSupportActions}>
                 <a className={styles.mobileCoffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Buy me a coffee" title="Buy me a coffee"><ReaderIcon name="coffee" /></a>
                 <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
-              </div>
+              </div>}
             </div>
             {showNative ? originalSource
               ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} onNavigate={goToBlock} />

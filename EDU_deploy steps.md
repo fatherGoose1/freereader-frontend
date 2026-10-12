@@ -2,6 +2,35 @@
 
 ## Current rollout: production backend + Vercel feature preview
 
+### Reader, sharing, and staff update
+
+- Assignment titles open a dedicated full-screen reader, and publishing opens it
+  immediately. EDU now uses the actual consumer FreeReader component/layout/player
+  with school/guest adapters, not the old embedded EDU audio controls.
+- Teacher **Copy student link · no login** enables an assignment-scoped link.
+  Students need no account or class enrollment. Anyone holding that link can read
+  its published documents while the assignment is available. Teacher/admin routes
+  still require Google login and the same school/class permissions.
+- **Revoke student link** blocks subsequent requests; **Regenerate student link**
+  replaces it and invalidates the previous link. Archiving/closing an assignment
+  also denies guest access. Original objects/audio remain in private EDU storage.
+- Anonymous progress/preferences remain on that device. Guest activity is recorded
+  under the assignment with an anonymous hashed browser identity; it is not a named
+  student's completion/comprehension record and creates no user account.
+- Staff invitations now have Name / Email rows, multi-row paste, CSV/TSV/text import,
+  editable validation, batch Teacher/Admin role selection, and individual/copy-all
+  invitation links. The batch endpoint is admin-only and idempotent for retries.
+- Migrations `20261012_0023`/`20261012_0024` add staff names/batch metadata and
+  assignment sharing, exclusively in the EDU schema.
+- The feature alias has a URL-scoped Vercel protection exception so student links
+  do not require Vercel login. Other project/preview protection settings are unchanged.
+- EPUB relative chapter links are intercepted and resolved against the archive.
+  Spine HTML is sanitized before display and carries a strict no-script CSP, so
+  WebKit navigation works without allowing uploaded book scripts to execute.
+
+Real production AAC playback and EPUB chapter navigation were verified on desktop
+Chromium, mobile Chromium, and mobile WebKit. Parsing changes are outside this update.
+
 Per the requested rollout, no separate staging environment is being created.
 The backend/database/Storage changes are being deployed to production; the
 frontend is on `feat/edu-portal`, tested through its Vercel Preview deployment.

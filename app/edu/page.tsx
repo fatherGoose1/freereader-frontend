@@ -27,9 +27,9 @@ export default function Dashboard() {
     </section><section className={styles.card}><div className={styles.row}><h2>Reading assignments</h2>{staff && <Link className={styles.primary} href={path("assignments/new")}>New assignment</Link>}</div>
       {!data && !error && <p role="status">Loading assignments…</p>}
       {data && !data.assignments.length && <p>No assignments yet.</p>}
-      <ul className={styles.list}>{data?.assignments.map((item) => <li key={item.id}><div className={styles.row}><Link href={path(`assignments/${item.id}`)}><strong>{item.title}</strong></Link><span className={styles.status}>{item.status}</span></div>
+      <ul className={styles.list}>{data?.assignments.map((item) => <li key={item.id}><div className={styles.row}><Link href={path(item.versionIds[0] ? `assignments/${item.id}/reader/${item.versionIds[0]}` : `assignments/${item.id}`)}><strong>{item.title}</strong></Link><span className={styles.status}>{item.status}</span></div>
         <div className={styles.muted}>Due {dateLabel(item.dueAt, school.timezone)} · {item.classIds.map((id) => data.classes.find((cls) => cls.id === id)?.name).filter(Boolean).join(", ")}</div>
-        {item.canManage && <Link href={path(`assignments/${item.id}/edit`)}>Edit assignment</Link>}
+        {item.canManage && <div className={styles.row}><Link href={path(`assignments/${item.id}`)}>Manage / share</Link><Link href={path(`assignments/${item.id}/edit`)}>Edit assignment</Link></div>}
       </li>)}</ul>
     </section></div>
   </main>;

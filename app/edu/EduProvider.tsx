@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { eduClient, eduFetch, assertSessionActor } from "./client";
@@ -17,6 +17,9 @@ export function useEdu() { const value = useContext(Context); if (!value) throw 
 
 export default function EduProvider({ children, host }: { children: React.ReactNode; host: string }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const publicReading = /^(?:\/edu)?\/shared\//.test(pathname);
+  const fullScreenReader = publicReading || /\/reader\//.test(pathname);
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
@@ -37,6 +40,7 @@ export default function EduProvider({ children, host }: { children: React.ReactN
   }
   useEffect(() => {
     setCleanHost(window.location.hostname === host);
+    if (publicReading) { setSession(null); setSchools([]); setReady(true); return; }
     let alive = true;
     const applySession = (next: Session | null) => {
       if (!alive) return;
@@ -58,7 +62,7 @@ export default function EduProvider({ children, host }: { children: React.ReactN
       });
       return () => { alive = false; data.subscription.unsubscribe(); };
     } catch (error) { setError((error as Error).message); setReady(true); }
-  }, [host]);
+  }, [host, publicReading]);
   useEffect(() => {
     if (!session) { setSchools([]); setSchoolId(""); return; }
     let alive = true;
@@ -88,7 +92,7 @@ export default function EduProvider({ children, host }: { children: React.ReactN
     return () => { clearInterval(timer); window.removeEventListener("online", flush); };
   }, [session?.user.id, school?.id]);
   return <Context.Provider value={{ session, ready, schools, school, userId: session?.user.id ?? "", selectSchool: setSchoolId, refresh, path }}>
-    <div className={styles.app}>
+    {fullScreenReader && (publicReading || session) ? <div className={styles.readerSurface} data-freereader-product="edu">{publicReading ? children : <div key={session!.user.id}>{children}</div>}</div> : <div className={styles.app} data-freereader-product="edu">
       <header className={styles.header}>
         <Link href={path()} className={styles.brand}>FreeReader <span>EDU</span></Link>
         {session && <nav aria-label="School navigation"><Link href={path()}>Assignments</Link><Link href={path("calendar")}>Calendar</Link>{school?.role === "admin" && <Link href={path("admin")}>Administration</Link>}</nav>}
@@ -97,6 +101,6 @@ export default function EduProvider({ children, host }: { children: React.ReactN
       </header>
       {error && <div className={styles.error} role="alert">{error}{session && <button onClick={() => void refresh().catch((error) => setError(error.message))}>Retry</button>}</div>}
       {!ready ? <main className={styles.main}><p role="status">Loading your school account…</p></main> : !session ? <main className={styles.main}><section className={styles.card}><h1>Reading support for your school</h1><p>Sign in with your school Google account to open assignments, read documents, and listen to them.</p><button className={styles.primary} onClick={() => void signIn()}>Sign in with Google</button></section></main> : <div key={session.user.id}>{children}</div>}
-    </div>
+    </div>}
   </Context.Provider>;
 }

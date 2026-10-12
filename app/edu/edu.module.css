@@ -36,4 +36,19 @@
 .text button { display: block; width: 100%; text-align: left; border: none; padding: 10px; line-height: 1.75; font-family: var(--serif); }
 .text button[aria-current="true"] { background: #e9efff; }
 .reader audio { width: 100%; }
+.staffFieldset { display: grid; gap: 16px; padding: 0; border: 0 !important; min-width: 0; }
+.staffToolbar { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.staffGrid { border: 1px solid #dce2ed; border-radius: 9px; overflow: hidden; }
+.staffHead, .staffRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 44px; gap: 12px; padding: 10px 12px; }
+.staffHead { background: #f6f7fb; font-size: 13px; color: #697386; font-weight: 650; }
+.staffRow { border-top: 1px solid #e2e6ee; align-items: start; }
+.staffRow input { width: 100%; min-width: 0; }
+.staffRow input[aria-invalid="true"] { border-color: #bd4c42; }
+.staffRow button { padding: 6px; font-size: 20px; border-color: transparent; }
+.staffIssue { display: block; color: #912b25; font-size: 12px; margin-top: 4px; }
+.staffResults { margin-top: 24px; }
+.staffResult { border-top: 1px solid #e2e6ee; padding: 12px 0; display: grid; gap: 5px; }
+.staffResult input { flex: 1; min-width: 120px; }
+.readerSurface { height: 100dvh; width: 100%; overflow: hidden; }
+.readerSaveError { position: fixed; bottom: 220px; left: 24px; right: 24px; z-index: 30; padding: 12px; background: #fff0ef; color: #912b25; border-radius: 8px; font-size: 13px; }
 @media (max-width: 750px) { .header { padding: 14px; gap: 14px; } .main { padding: 16px; } .split { grid-template-columns: 1fr; } .calendar { gap: 2px; } .day { padding: 3px; min-height: 90px; } .day a { font-size: 10px; } .card { padding: 18px; } }

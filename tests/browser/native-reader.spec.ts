@@ -207,3 +207,20 @@ test("full PDF highlights a resumed passage on its source page", async ({ page }
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("full-pdf.png") });
 });
+
+test("embedded EPUB chapter links navigate within the book rather than requesting a website XHTML route", async ({ page }) => {
+  await setup(page);
+  const book = await JSZip.loadAsync(await epub());
+  const chapter = await book.file("OPS/one.xhtml")!.async("string");
+  book.file("OPS/one.xhtml", chapter.replace("<h1>Chapter One</h1>", '<h1>Chapter One</h1><a id="chapter-link" href="two.xhtml">Read Chapter Two</a><script>window.parent.epubScriptRan=true;</script>'));
+  const requests: string[] = [];
+  page.on("request", (request) => { if (new URL(request.url()).pathname.endsWith("two.xhtml")) requests.push(request.url()); });
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "linked.epub", mimeType: "application/epub+zip", buffer: await book.generateAsync({ type: "nodebuffer" }) });
+  await openControls(page);
+  const frame = page.frameLocator("article iframe").first();
+  await expect(frame.locator("h1")).toHaveText("Chapter One");
+  await frame.locator("#chapter-link").click();
+  await expect(frame.locator("h1")).toHaveText("Chapter Two");
+  expect(await page.evaluate(() => (window as unknown as { epubScriptRan?: boolean }).epubScriptRan)).toBeUndefined();
+  expect(requests).toEqual([]);
+});

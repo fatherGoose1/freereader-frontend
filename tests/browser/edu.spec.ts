@@ -44,7 +44,7 @@ async function signIn(context: BrowserContext) {
   }, { userId });
 }
 
-async function setup(page: Page, role: "teacher" | "student" = "student") {
+async function setup(page: Page, role: "teacher" | "student" | "admin" = "student") {
   let progress: Record<string, unknown> | null = null;
   const consumerRequests: string[] = [];
   const original = pdf();
@@ -75,21 +75,21 @@ test("student opens hosted original PDF, listens, saves position, and reloads wi
   await signIn(context);
   const state = await setup(page);
   await page.goto(`/edu/assignments/${assignmentId}`);
-  await page.getByRole("button", { name: document.title, exact: true }).click();
+  await page.getByRole("link", { name: `Read ${document.title}`, exact: true }).click();
+  await openTools(page);
   await expect(page.getByRole("navigation", { name: "Original document pages" })).toContainText("Page 1 of 1");
   await expect(page.locator('[class*="textLayer"]')).toContainText("The original school PDF");
-  await page.getByRole("button", { name: "E-reader view" }).click();
-  await page.getByRole("button", { name: "Next passage", exact: true }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await page.locator("article p").filter({ hasText: "Students can listen" }).click();
   await expect(page.locator('[aria-current="true"]')).toContainText("Students can listen");
-  await page.getByRole("button", { name: "Play audio", exact: true }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((element: HTMLAudioElement) => !element.paused)).toBe(true);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await page.getByRole("button", { name: "Mark reading complete", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Marked complete" })).toBeVisible();
   await expect.poll(() => state.progress()?.blockIndex).toBe(1);
   await page.reload();
-  await page.getByRole("button", { name: document.title, exact: true }).click();
-  await expect(page.getByText("Passage 2 of 2", { exact: true })).toBeVisible();
+  await openTools(page);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article [aria-current="true"]')).toContainText("Students can listen");
   expect(state.consumerRequests).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem("freereaderTelemetryQueue"))).toBeNull();
 });
@@ -176,11 +176,74 @@ test("untrusted school reading text cannot execute markup and consumer capture/s
     originalUrl: new URL("/edu-test-original", route.request().url()).href, readingUrl: new URL("/edu-test-reading", route.request().url()).href,
     originalSha256: hash(original), readingSha256: hash(reading), progress: null } }));
   await page.goto(`/edu/assignments/${assignmentId}`);
-  await page.getByRole("button", { name: document.title, exact: true }).click();
-  await page.getByRole("button", { name: "E-reader view" }).click();
-  await expect(page.locator('button[aria-current="true"]')).toHaveText(payload);
+  await page.getByRole("link", { name: `Read ${document.title}`, exact: true }).click();
+  await openTools(page);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article [aria-current="true"]')).toHaveText(payload);
   await expect(page.locator('img[src="https://evil.test/steal"]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { eduSecurityLeak?: boolean }).eduSecurityLeak)).toBeUndefined();
   await expect(page.getByRole("button", { name: "Contact support", exact: true })).toHaveCount(0);
   expect(state.consumerRequests).toEqual([]);
+});
+
+async function openTools(page: Page) {
+  await expect(page.locator("article")).toBeVisible();
+  const toggle = page.getByRole("button", { name: "Expand reading tools" });
+  if (await toggle.isVisible()) await toggle.click();
+}
+
+test("staff grid reviews pasted/imported rows and creates one named invitation per recipient", async ({ page, context }) => {
+  await signIn(context); await setup(page, "admin");
+  let submitted: { records: { name: string; email: string }[]; role: string } | null = null;
+  const result = () => submitted;
+  await page.route(`**/api/edu/schools/${schoolId}/members`, (route) => route.fulfill({ json: { members: [], invitations: [] } }));
+  await page.route(`**/api/edu/schools/${schoolId}/invitations/bulk`, (route) => {
+    submitted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { invitations: submitted!.records.map((record, index) => ({ ...record, id: String(index), url: `https://school.test/invite/${index}`, status: "pending", expiresAt: "2026-10-20T00:00:00Z" })) } });
+  });
+  await page.goto("/edu/admin");
+  await page.getByLabel("Staff name 1", { exact: true }).evaluate((input) => {
+    const clipboard = new DataTransfer(); clipboard.setData("text/plain", "Alice Smith\talice@school.test\nBob Jones\tbob@school.test");
+    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true, cancelable: true }));
+  });
+  await expect(page.getByLabel("Staff name 2", { exact: true })).toHaveValue("Bob Jones");
+  await page.getByLabel("Import staff file", { exact: true }).setInputFiles({ name: "staff.csv", mimeType: "text/csv", buffer: Buffer.from('Email Address,Full Name\ncarol@school.test,"Carol, Jones"') });
+  await expect(page.getByLabel("Staff name 3", { exact: true })).toHaveValue("Carol, Jones");
+  await page.getByRole("button", { name: "Create 3 invitations", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "3 invitations created" })).toBeVisible();
+  expect(result()?.records).toHaveLength(3); expect(result()?.role).toBe("teacher");
+  await expect(page.getByLabel("Invitation link for Alice Smith")).toBeVisible();
+});
+
+test("student share link opens the actual FreeReader interface without an account and plays audio", async ({ page }) => {
+  // CI uses WAV; deployment verification supplies real backend AAC in memory.
+  const audio = process.env.EDU_TEST_AUDIO_BASE64
+    ? { audio: process.env.EDU_TEST_AUDIO_BASE64, type: process.env.EDU_TEST_AUDIO_TYPE!, duration: process.env.EDU_TEST_AUDIO_DURATION! }
+    : { audio: wav().toString("base64"), type: "audio/wav", duration: "4" };
+  const token = "public-assignment-capability-token";
+  const original = pdf();
+  const reading = gzipSync(JSON.stringify({ schemaVersion: 1, cover: null, document: { id: versionId, title: document.title, format: "pdf", size: original.length,
+    sourceName: "school.pdf", language: "en", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
+    chapters: [{ title: "Chapter", startBlockIndex: 0 }], blocks: [{ index: 0, chapterIndex: 0, isHeading: false, page: 1, text: "The original school PDF is shared with every enrolled student." }] } }));
+  const hash = (value: Buffer) => createHash("sha256").update(value).digest("hex");
+  let authenticated = false;
+  await page.route("**/api/edu/**", (route) => {
+    if (route.request().headers().authorization) authenticated = true;
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/speech")) return route.fulfill({ body: Buffer.from(audio.audio, "base64"), contentType: audio.type, headers: { "X-Audio-Duration": audio.duration } });
+    if (path.endsWith("/telemetry")) return route.fulfill({ status: 202, json: {} });
+    if (path.endsWith(`/documents/${versionId}`)) return route.fulfill({ json: { originalUrl: new URL("/shared-test-original", route.request().url()).href,
+      readingUrl: new URL("/shared-test-reading", route.request().url()).href, originalSha256: hash(original), readingSha256: hash(reading), progress: null } });
+    if (path.endsWith(`/shared/${token}`)) return route.fulfill({ json: { assignment, documents: [document], school: { name: "Hummingbird Academy" } } });
+    return route.fulfill({ status: 401, json: { error: "sign_in_required" } });
+  });
+  await page.route("**/shared-test-original", (route) => route.fulfill({ body: original, contentType: "application/pdf" }));
+  await page.route("**/shared-test-reading", (route) => route.fulfill({ body: reading, contentType: "application/gzip" }));
+  await page.goto(`/edu/shared/${token}`);
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "School navigation" })).toHaveCount(0);
+  await expect(page.locator("article canvas")).toBeVisible();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((element: HTMLAudioElement) => !element.paused && element.currentTime > .1)).toBe(true);
+  expect(authenticated).toBe(false);
 });
