@@ -60,11 +60,13 @@ async function chooseChapter(page: Page, title: string) {
   else await page.locator("aside").getByRole("button", { name: title, exact: true }).click();
 }
 
-async function openControls(page: Page) {
+async function openControls(page: Page, expandPlayer = false) {
+  // setInputFiles dispatches change before asynchronous parsing/opening finishes.
+  await expect(page.locator("article")).toBeVisible();
   const tools = page.getByRole("button", { name: "Expand reading tools" });
   if (await tools.isVisible()) await tools.click();
   const player = page.getByRole("button", { name: "Expand player controls" });
-  if (await player.isVisible()) await player.click();
+  if (expandPlayer && await player.isVisible()) await player.click();
 }
 
 test("EPUB preserves publisher styling and images, follows chapters, and switches views without stopping playback", async ({ page }, testInfo) => {
@@ -110,20 +112,26 @@ test("PDF renders original pages with selectable text, highlights, navigation an
   await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
   await openControls(page);
   const pages = page.getByRole("navigation", { name: "Original document pages" });
-  await expect(pages).toContainText("Page 1 of 2");
-  await expect(page.locator('article [class*="textLayer"]')).toContainText("Original PDF page one");
+  const desktopSpread = await page.evaluate(() => window.innerWidth > 800);
+  await expect(pages).toContainText(desktopSpread ? "Pages 1–2 of 2" : "Page 1 of 2");
+  await expect(page.locator('article [class*="textLayer"]').first()).toContainText("Original PDF page one");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("native-pdf.png") });
-  await pages.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(pages).toContainText("Page 2 of 2");
-  await expect(page.locator('article [class*="textLayer"]')).toContainText("Second page text");
+  if (desktopSpread) {
+    await expect(page.getByLabel("Original PDF page 2", { exact: true })).toBeVisible();
+    await page.locator('article [class*="textLayer"] span').filter({ hasText: "Second page text" }).click();
+  } else {
+    await pages.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await expect(pages).toContainText(desktopSpread ? "Pages 1–2 of 2" : "Page 2 of 2");
+  await expect(page.locator('article [class*="textLayer"]').filter({ hasText: "Second page text" }).first()).toContainText("Second page text");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).toHaveText("Second page text is highlighted in the original PDF.");
   await page.getByRole("button", { name: "Original", exact: true }).click();
-  await expect(pages).toContainText("Page 2 of 2");
+  await expect(pages).toContainText(desktopSpread ? "Pages 1–2 of 2" : "Page 2 of 2");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
 });
@@ -143,7 +151,8 @@ test("older imports can attach their original file without replacing reading pro
   await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(page.getByRole("button", { name: "Attach original file", exact: true })).toBeVisible();
   await page.getByLabel("Attach original file", { exact: true }).setInputFiles({ name: "Original.pdf", mimeType: "application/pdf", buffer });
-  await expect(page.getByRole("navigation", { name: "Original document pages" })).toContainText("Page 2 of 2");
+  const desktopSpread = await page.evaluate(() => window.innerWidth > 800);
+  await expect(page.getByRole("navigation", { name: "Original document pages" })).toContainText(desktopSpread ? "Pages 1–2 of 2" : "Page 2 of 2");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
 });
 
@@ -183,7 +192,7 @@ test("full EPUB maps chapter passages and advances highlights with audio playbac
 test("full PDF highlights a resumed passage on its source page", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles("119-2014-04-09-Jane Eyre.pdf");
-  await openControls(page);
+  await openControls(page, true);
   const progress = page.getByRole("slider", { name: "Book playback progress" });
   await progress.fill("0.5");
   const pages = page.getByRole("navigation", { name: "Original document pages" });

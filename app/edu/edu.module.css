@@ -1,0 +1,39 @@
+.app { min-height: 100vh; background: #f6f7fb; }
+.header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 18px 28px; background: white; border-bottom: 1px solid #e2e6ee; }
+.header nav { display: flex; flex-wrap: wrap; gap: 20px; flex: 1; }
+.brand { font-size: 24px; font-weight: 750; text-decoration: none; color: #294bbe; }
+.brand span { font-size: 13px; background: #e9efff; padding: 5px 8px; border-radius: 6px; }
+.main { max-width: 1200px; margin: auto; padding: 28px; }
+.row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 24px; }
+.card { padding: 24px; background: white; border: 1px solid #e2e6ee; border-radius: 14px; margin-bottom: 20px; overflow-wrap: anywhere; }
+.app h1 { margin-top: 0; font-size: 30px; line-height: 1.25; }
+.app h2 { font-size: 21px; margin-top: 0; }
+.app button, .primary { border: 1px solid #ccd4e3; border-radius: 8px; background: white; padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-block; }
+.app button:disabled { opacity: .55; cursor: wait; }
+.app .primary { color: white; background: #365bd6; border-color: #365bd6; }
+.app input:not([type="checkbox"]), .app select, .app textarea { padding: 9px 12px; border: 1px solid #ccd4e3; border-radius: 7px; max-width: 100%; background: white; }
+.form { display: grid; gap: 16px; }
+.form label { display: grid; gap: 5px; }
+.form fieldset { border: 1px solid #e2e6ee; border-radius: 8px; }
+.form .check { display: flex; align-items: center; gap: 8px; padding: 5px; }
+.muted { color: #697386; font-size: 14px; }
+.error { padding: 14px 20px; background: #fff0ef; color: #912b25; border-radius: 8px; }
+.notice { padding: 14px; background: #e9efff; border-radius: 8px; }
+.list { list-style: none; padding: 0; }
+.list li { border-top: 1px solid #e2e6ee; padding: 14px 0; }
+.status { padding: 3px 8px; border-radius: 5px; background: #e9efff; font-size: 12px; }
+.calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.day { padding: 8px; min-height: 120px; background: white; border: 1px solid #e2e6ee; border-radius: 5px; }
+.day a { display: block; background: #e9efff; margin: 5px 0; padding: 5px; font-size: 12px; overflow-wrap: anywhere; }
+.weekDay { font-size: 12px; text-align: center; font-weight: 650; }
+.table { width: 100%; border-collapse: collapse; text-align: left; }
+.table td, .table th { border-bottom: 1px solid #e2e6ee; padding: 10px; }
+.scroll { overflow-x: auto; }
+.reader { display: grid; gap: 16px; }
+.native { display: flex; flex-direction: column; height: min(75vh, 900px); min-height: 400px; position: relative; }
+.text { max-height: 70vh; overflow: auto; padding: 24px; background: white; border-radius: 10px; }
+.text button { display: block; width: 100%; text-align: left; border: none; padding: 10px; line-height: 1.75; font-family: var(--serif); }
+.text button[aria-current="true"] { background: #e9efff; }
+.reader audio { width: 100%; }
+@media (max-width: 750px) { .header { padding: 14px; gap: 14px; } .main { padding: 16px; } .split { grid-template-columns: 1fr; } .calendar { gap: 2px; } .day { padding: 3px; min-height: 90px; } .day a { font-size: 10px; } .card { padding: 18px; } }

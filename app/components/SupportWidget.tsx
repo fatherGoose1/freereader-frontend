@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { usePathname } from "next/navigation";
+import { isEduSurface } from "../../lib/edu-analytics-boundary";
 import styles from "./supportWidget.module.css";
 
 export default function SupportWidget() {
+  const pathname = usePathname();
+  const [schoolSurface, setSchoolSurface] = useState(false);
+  useEffect(() => { setSchoolSurface(isEduSurface()); }, [pathname]);
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -25,6 +30,7 @@ export default function SupportWidget() {
 
   useEffect(() => {
     const show = (event: Event) => {
+      if (isEduSurface()) return;
       const trigger = (event as CustomEvent<{ trigger?: HTMLElement }>).detail?.trigger;
       externalTrigger.current = trigger instanceof HTMLElement ? trigger : null;
       setOpen(true);
@@ -53,6 +59,7 @@ export default function SupportWidget() {
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isEduSurface()) { setOpen(false); return; }
     if (submitting) return;
     setSubmitting(true);
     setError("");
@@ -68,6 +75,7 @@ export default function SupportWidget() {
     } finally { setSubmitting(false); }
   }
 
+  if (schoolSurface) return null;
   return <>
     <a className={styles.coffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Buy me a coffee" title="Buy me a coffee">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

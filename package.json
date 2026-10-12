@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "test": "tsx --test app/reader/*.test.ts app/authors/*.test.ts",
+    "test:edu": "tsx --test app/edu/*.test.ts",
     "test:mobile": "playwright test"
   },
   "dependencies": {
