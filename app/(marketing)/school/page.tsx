@@ -21,7 +21,7 @@ export default function SchoolPage() {
         <div className={`wrap ${styles.inner}`}>
           <div className={styles.copy}>
             <h1 id="school-heading">Reading accessibility for students with dyslexia, ADHD, and other challenges.</h1>
-            <p className={styles.lede}>Talking about turning PDFs, textbooks, web pages, and anything into audio.</p>
+            <p className={styles.lede}>Tools to turn PDFs, textbooks, web pages, and anything into audio.</p>
             <ul className={styles.benefits} aria-label="School benefits">
               {benefits.map(({ title, detail }) => (
                 <li key={title}>
