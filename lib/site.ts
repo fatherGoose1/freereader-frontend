@@ -5,6 +5,7 @@ export const sitePages = [
   { path: "/reader", title: "FreeReader Web Reader", description: "Import EPUBs, PDFs, DOCX, HTML, Markdown, web articles, and Project Gutenberg books, then listen to them in your browser.", priority: 0.9, changeFrequency: "weekly" as const },
   { path: "/authors/submissions", title: "Submit a book to FreeReader", description: "Submit your book and share a browser-based read-aloud link with your readers.", priority: 0.8, changeFrequency: "monthly" as const },
   { path: "/pricing", title: "Video narration pricing", description: "Create video voiceovers with 1 free hour a month, 10 hours on Pro, or 20 hours on Premium with voice cloning. Audiobook reading is always free.", priority: 0.7, changeFrequency: "monthly" as const },
+  { path: "/blog", title: "The FreeReader Blog", description: "Reading tips, accessibility guides, and product updates from FreeReader.", priority: 0.6, changeFrequency: "weekly" as const },
   { path: "/support", title: "Support", description: "Get help with FreeReader: importing books, playback, voices, and privacy questions.", priority: 0.5, changeFrequency: "monthly" as const },
   { path: "/copyright", title: "Copyright & Rights Policy", description: "How to report copyright concerns about content available through FreeReader.", priority: 0.3, changeFrequency: "yearly" as const },
   { path: "/privacy", title: "Privacy Policy", description: "How FreeReader handles local libraries, account sync, speech requests, and analytics.", priority: 0.3, changeFrequency: "yearly" as const },
