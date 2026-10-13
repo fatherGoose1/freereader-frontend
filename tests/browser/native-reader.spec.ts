@@ -179,10 +179,69 @@ test("the spoken word advances inside the highlighted passage in both native and
   await expect(word).toHaveCount(1); // Cached audio retains its timing sidecar.
 });
 
+test("word highlighting can be switched off without stopping audio and stays off after reopening", async ({ page }) => {
+  await setup(page);
+  const mobileAdd = page.getByRole("button", { name: "Add reading", exact: true });
+  if (await mobileAdd.isVisible()) await mobileAdd.click();
+  await page.locator("button:visible").filter({ hasText: "Insert Text" }).click();
+  await page.getByLabel("Title (optional)").fill("Toggle Highlight Test");
+  await page.getByLabel("Text", { exact: true }).fill("A short passage about reading a book in the correct order.");
+  await page.getByRole("button", { name: "Add to Library", exact: true }).click();
+  await openControls(page, true);
+  await expect(page.locator('article [aria-current="true"]')).toBeVisible();
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const toggle = page.getByRole("switch", { name: "Highlight spoken words" });
+  await expect(toggle).toBeChecked();
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const word = page.locator('article [class*="spokenWord"]');
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await expect(word).toHaveCount(1);
+  const source = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await toggle.uncheck();
+  await expect(word).toHaveCount(0);
+  await expect(page.locator('article [aria-current="true"]')).toBeVisible();
+  await toggle.check();
+  await expect(word).toHaveCount(1);
+  await toggle.uncheck();
+  expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc)).toBe(source);
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: /^txt Toggle Highlight Test/ }).click();
+  await openControls(page, true);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect(toggle).not.toBeChecked();
+});
+
+test("spoken words remain highlighted across punctuation joined by an em dash", async ({ page }) => {
+  await setup(page);
+  const text = "But at any rate he might answer questions.—How am I to get in?” she repeated, aloud.";
+  const mobileAdd = page.getByRole("button", { name: "Add reading", exact: true });
+  if (await mobileAdd.isVisible()) await mobileAdd.click();
+  await page.locator("button:visible").filter({ hasText: "Insert Text" }).click();
+  await page.getByLabel("Title (optional)").fill("Alice Highlight Test");
+  await page.getByLabel("Text", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "Add to Library", exact: true }).click();
+  await expect(page.locator("article p").filter({ hasText: "questions.—How" })).toBeVisible();
+  await openControls(page, true);
+  const speechRequest = page.waitForRequest((request) => request.url().endsWith("/api/tts") && request.postDataJSON()?.word_timings === true);
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const { texts } = (await speechRequest).postDataJSON() as { texts: string[] };
+  const words = spokenWords(texts[0]);
+  const how = words.findIndex((word) => texts[0].slice(word.start, word.start + word.length).startsWith("How"));
+  expect(how).toBeGreaterThan(0);
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement, { index, count }) => {
+    audio.currentTime = 8 + (index - 1) * 12 / Math.max(1, count - 1) + .02;
+  }, { index: how, count: words.length });
+  await expect(page.locator('article [aria-current="true"] [class*="spokenWord"]')).toHaveText("How");
+});
+
 test("a different model plays with passage highlighting only", async ({ page }) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
-  await openControls(page);
+  await openControls(page, true);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await page.getByRole("dialog", { name: "Voice settings" }).getByLabel("Voice").selectOption("F1");
   await page.getByRole("button", { name: "Done" }).click();
@@ -197,14 +256,15 @@ test("a different model plays with passage highlighting only", async ({ page }) 
 test("non-English Kokoro keeps passage-only highlighting", async ({ page }) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
-  await openControls(page);
+  await openControls(page, true);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await page.getByRole("dialog", { name: "Voice settings" }).getByLabel("Language").selectOption("fr");
   await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
-  await expect(page.locator("article .freereader-highlight")).toHaveCount(1);
-  await expect(page.locator("article .freereader-spoken-word")).toHaveCount(0);
+  await expect(page.locator('article [aria-current="true"]')).toBeVisible();
+  await expect(page.locator('article [class*="spokenWord"]')).toHaveCount(0);
 });
 
 test("PDF shows a stronger word overlay only while speaking", async ({ page }) => {

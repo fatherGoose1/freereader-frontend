@@ -6,6 +6,14 @@ export function spokenWords(text: string): SpokenWord[] {
   return [...text.matchAll(/\S+/gu)].map((match) => ({ start: match.index, length: match[0].length }));
 }
 
+function displayedWords(text: string): SpokenWord[] {
+  // A publisher may join two words with a dash or punctuation where the speech
+  // normalizer inserts a space (e.g. "questions.—How"). Whitespace alone cannot
+  // identify the two distinct words in the original document.
+  return [...text.matchAll(/[\p{L}\p{N}]+(?:[.'’_-][\p{L}\p{N}]+)*/gu)]
+    .map((match) => ({ start: match.index, length: match[0].length }));
+}
+
 export function parseWordTimings(value: unknown): WordTiming[] | undefined {
   if (!Array.isArray(value) || !value.length || value.length > 2_000) return;
   const timings: WordTiming[] = [];
@@ -22,11 +30,16 @@ export function parseWordTimings(value: unknown): WordTiming[] | undefined {
 /** Kokoro indexes normalized speech words; keep the publisher's original display offsets. */
 export function matchWordTimings(text: string, spokenText: string, timings?: WordTiming[]): TimedSpokenWord[] {
   if (!timings) return [];
-  const original = spokenWords(text);
-  const normalized = spokenWords(spokenText);
+  const original = displayedWords(text);
+  const normalized = spokenWords(spokenText)
+    .map((word, index) => ({ index, text: spokenText.slice(word.start, word.start + word.length) }))
+    .filter((word) => /[\p{L}\p{N}]/u.test(word.text));
   if (original.length !== normalized.length) return [];
-  return timings.flatMap(([index, startSeconds, endSeconds]) => original[index]
-    ? [{ word: original[index], startSeconds, endSeconds }] : []);
+  const displayIndex = new Map(normalized.map((word, index) => [word.index, original[index]]));
+  return timings.flatMap(([index, startSeconds, endSeconds]) => {
+    const word = displayIndex.get(index);
+    return word ? [{ word, startSeconds, endSeconds }] : [];
+  });
 }
 
 export function wordAtTime(timings: TimedSpokenWord[], time: number): SpokenWord | undefined {

@@ -310,6 +310,11 @@
 .settingsRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; color: #67758d; font-size: 13px; }
 .settingsRow > span { display: flex; align-items: center; gap: 6px; }
 .settingsRow select { min-width: 0; max-width: 62%; min-height: 40px; padding: 8px; color: #425d98; background: #f3f6fc; border: 1px solid #e1e8f5; border-radius: 7px; }
+.wordHighlightSetting input { appearance: none; position: relative; width: 42px; height: 24px; flex: none; margin: 0; background: #cbd4e3; border-radius: 99px; cursor: pointer; }
+.wordHighlightSetting input::after { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; content: ""; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px #17253e33; transition: transform .15s ease; }
+.wordHighlightSetting input:checked { background: var(--app-blue); }
+.wordHighlightSetting input:checked::after { transform: translateX(18px); }
+.wordHighlightSetting input:focus-visible { outline: 2px solid var(--app-blue); outline-offset: 3px; }
 .speakingRateSetting { display: grid; gap: 6px; color: #6b7a94; font-size: 12px; }
 .speakingRateSetting > div:first-child, .speakingRateBounds { display: flex; justify-content: space-between; align-items: center; }
 .speakingRateSetting output { color: #365bd6; font-weight: 600; }

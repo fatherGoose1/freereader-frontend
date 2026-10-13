@@ -51,6 +51,7 @@ type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "p
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
+const WORD_HIGHLIGHT_PREFERENCE = "freereader-highlight-spoken-words";
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -276,6 +277,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [settingsRevision, setSettingsRevision] = useState(0);
   const resumeAfterSettings = useRef<{ bookId: string; index: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [highlightSpokenWords, setHighlightSpokenWords] = useState(true);
   const [audioProgress, setAudioProgress] = useState(0);
   const [spoken, setSpoken] = useState<{ bookId: string; index: number; word: SpokenWord } | null>(null);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
@@ -295,6 +297,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const playableBooks = useRef(new Set<string>());
   const PAGE_CHAR_LIMIT = 900;
   const [page, setPage] = useState({ bookId: "", start: 0 });
+  useEffect(() => {
+    try { setHighlightSpokenWords(localStorage.getItem(WORD_HIGHLIGHT_PREFERENCE) !== "false"); }
+    catch { /* Keep the on-by-default setting when browser storage is unavailable. */ }
+  }, []);
   useEffect(() => { setImportErrorMessage(""); }, [panel]);
   useEffect(() => {
     if (!previewBook) return;
@@ -1366,7 +1372,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
-    const activeWord = playing && spoken?.bookId === selected.id && spoken.index === block?.index ? spoken.word : undefined;
+    const activeWord = highlightSpokenWords && playing && spoken?.bookId === selected.id && spoken.index === block?.index ? spoken.word : undefined;
     const chapter = selected.chapters[block?.chapterIndex] ?? selected.chapters[0];
     const bookProgress = readingProgress(selected, audioProgress);
     const isModelDownload = message.startsWith("Downloading voice model");
@@ -1524,6 +1530,14 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               <div className={styles.speakingRateBounds}><span>0.5×</span><span>3.0×</span></div>
             </div>
             <small>Speaking speed applies to newly generated passages.</small>
+            <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>Highlight spoken words</span>
+              <input type="checkbox" role="switch" checked={highlightSpokenWords} onChange={(event) => {
+                const enabled = event.currentTarget.checked;
+                setHighlightSpokenWords(enabled);
+                try { localStorage.setItem(WORD_HIGHLIGHT_PREFERENCE, String(enabled)); }
+                catch { /* The preference still applies to this session. */ }
+              }} />
+            </label>
           </div>
           </div>
         )}
