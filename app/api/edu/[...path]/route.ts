@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { EDU_ACCESS_COOKIE, eduAccessGranted } from "@/app/edu/access";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -6,6 +8,9 @@ const MAX_BODY = 128 * 1024;
 
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
   if (process.env.EDU_ENABLED !== "true") return NextResponse.json({ error: "edu_disabled" }, { status: 404 });
+  if (!eduAccessGranted((await cookies()).get(EDU_ACCESS_COOKIE)?.value)) {
+    return NextResponse.json({ error: "locked" }, { status: 401 });
+  }
   const { path } = await context.params;
   const shared = path[0] === "shared";
   const authorization = request.headers.get("authorization") ?? "";
