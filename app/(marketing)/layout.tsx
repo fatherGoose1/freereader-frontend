@@ -43,7 +43,7 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
             <CoffeeButton />
           </div>
           <div className="footer-links">
-            <div><strong>Product</strong><Link href="/reader/audiobooks">Audiobook reader</Link><Link href="/narration">Video narration</Link><Link href="/authors/submissions">Author publishing</Link><Link href="/pricing">Pricing</Link><Link href="/#languages-heading">Languages</Link></div>
+            <div><strong>Product</strong><Link href="/reader/audiobooks">Audiobook reader</Link><Link href="/narration">Video narration</Link><Link href="/authors/submissions">Author publishing</Link><Link href="/#languages-heading">Languages</Link></div>
             <div><strong>Company</strong><Link href="/blog">Blog</Link><Link href="/support">Support</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link><Link href="/copyright">Copyright &amp; rights</Link></div>
           </div>
         </div>
