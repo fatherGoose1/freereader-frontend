@@ -31,6 +31,19 @@
 Real production AAC playback and EPUB chapter navigation were verified on desktop
 Chromium, mobile Chromium, and mobile WebKit. Parsing changes are outside this update.
 
+Verified rollout on October 12, 2026:
+
+- Backend `872c5d7`, Railway deployment `7d59efdc-58c0-464a-8b78-3df6a48a428d`: SUCCESS.
+- Reader frontend `bc4b2dd`, Vercel deployment `dpl_8LcVPwfrZJcP2s6Fg6CR5aZ8UtDs`: READY.
+- Production Alembic head `20261012_0024`; all 17 EDU tables have RLS, and browser
+  roles still lack EDU schema access. `edu-security-check` passed.
+- Backend checks: 381 passed / 4 skipped; isolated PostgreSQL EDU/migration/security
+  checks: 43 passed. Frontend unit checks: 139 consumer + 14 EDU passed. EDU/native
+  browser workflows: 36 passed, plus 3 real production AAC playback checks.
+- Unauthenticated requests with **no Vercel bypass header**: `/edu` and shared
+  reader routes return 200; an invalid guest link API returns 404; teacher
+  `/api/edu/session` remains 401 without authentication.
+
 Per the requested rollout, no separate staging environment is being created.
 The backend/database/Storage changes are being deployed to production; the
 frontend is on `feat/edu-portal`, tested through its Vercel Preview deployment.
