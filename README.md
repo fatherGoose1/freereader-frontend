@@ -2,6 +2,12 @@
 
 The existing marketing site remains at `/`; the local-first web reader is at `/reader`.
 
+FreeReader EDU is available at `/edu` on the feature-branch preview, with
+host routing for `edu.freereader.io`. It uses the production backend and a
+separate private schema/bucket. See [EDU_deploy steps.md](EDU_deploy%20steps.md)
+for the rollout status and owner actions, and [EDU_IMPLEMENTATION.md](EDU_IMPLEMENTATION.md)
+for the implementation design. Frontend production EDU stays disabled.
+
 Every successful document addition opens it immediately in the reader on mobile and desktop, after saving it to the library. This includes uploaded files, pasted text, web-link imports, and books added from the Free Books catalog.
 
 The floating `?` button across the site accepts an email address and support message. Submissions include the current page pathname (without query parameters) and go through the same-origin `/api/support-requests` proxy to the backend's private `freereader_support_requests` inbox; visitors do not need an account.
