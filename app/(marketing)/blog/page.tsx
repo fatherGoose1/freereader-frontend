@@ -42,12 +42,7 @@ export default async function BlogIndexPage() {
     <main className={styles.page}>
       <section className={styles.hero}>
         <div className="wrap">
-          <span className="eyebrow">Blog</span>
-          <h1>Reading, out loud.</h1>
-          <p className={styles.heroLead}>
-            Accessibility guides, reading tips, and product updates from the team making it easier
-            to listen to books, documents, and articles.
-          </p>
+          <h1>Blog</h1>
         </div>
       </section>
 

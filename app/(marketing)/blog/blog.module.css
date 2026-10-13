@@ -1,17 +1,10 @@
 .page { padding-bottom: 0; }
 
 .hero {
-  padding: 96px 0 48px;
+  padding: 80px 0 40px;
   text-align: center;
 }
-.hero h1 { margin: 18px 0 0; }
-.heroLead {
-  max-width: 640px;
-  margin: 20px auto 0;
-  color: var(--muted);
-  font-size: clamp(17px, 2vw, 20px);
-  line-height: 1.6;
-}
+.hero h1 { margin: 0; }
 
 .empty { padding: 24px 0 96px; color: var(--muted); text-align: center; }
 
@@ -43,11 +36,13 @@
 .featuredSection { padding: 24px 0 8px; }
 .featured {
   display: block;
+  max-width: 720px;
+  margin-inline: auto;
   overflow: hidden;
   color: var(--ink);
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 18px;
   box-shadow: var(--shadow-sm);
   text-decoration: none;
   transition: transform .2s ease, box-shadow .2s ease;
@@ -57,10 +52,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
-  padding: 48px;
+  gap: 14px;
+  padding: 32px;
 }
-.featuredBody h3 { font-size: clamp(26px, 3vw, 36px); line-height: 1.12; letter-spacing: -.03em; }
+.featuredBody h3 { font-size: clamp(22px, 2.6vw, 30px); line-height: 1.15; letter-spacing: -.03em; }
 .featuredBody p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.6; }
 .readMore { margin-top: auto; color: var(--forest); }
 
