@@ -44,13 +44,13 @@ test("mobile keeps the PDF wide and collapses the player and all side tools", as
   await page.getByRole("button", { name: "Collapse player controls" }).click();
   await expect(page.locator("#reader-player-details")).toBeHidden();
 
-  await expect(page.getByRole("link", { name: "Buy me a coffee" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Support FreeReader" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Contact support", exact: true })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Original document pages" })).toHaveCount(0);
   await page.getByRole("button", { name: "Expand reading tools" }).click();
   await expect(page.getByRole("button", { name: "Original", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Buy me a coffee" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Support FreeReader" })).toBeVisible();
   const tools = (await page.locator("#reader-reading-tools").boundingBox())!;
   expect(tools.x).toBeGreaterThan(width - 110);
   await expect.poll(() => page.locator("article canvas").evaluate((canvas) => canvas.clientWidth)).toBeGreaterThan(width * 0.9);
@@ -65,7 +65,7 @@ test("mobile keeps the PDF wide and collapses the player and all side tools", as
   await page.screenshot({ path: testInfo.outputPath("compact-mobile-reader.png") });
   await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByRole("button", { name: "Contact support", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Buy me a coffee" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Support FreeReader" })).toBeVisible();
 });
 
 test("desktop retains its title, full player and existing side controls", async ({ page }, testInfo) => {
@@ -79,5 +79,5 @@ test("desktop retains its title, full player and existing side controls", async 
   await expect(page.getByRole("button", { name: "Original", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Contact support", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Buy me a coffee" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Support FreeReader" })).toBeVisible();
 });

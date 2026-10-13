@@ -1347,7 +1347,7 @@ export default function FreeReaderApp({ initialBook }: { initialBook?: LibraryBo
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
               <div className={styles.mobileSupportActions}>
-                <a className={styles.mobileCoffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Buy me a coffee" title="Buy me a coffee"><ReaderIcon name="coffee" /></a>
+                <a className={styles.mobileCoffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Support FreeReader" title="Support FreeReader"><ReaderIcon name="coffee" /></a>
                 <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
               </div>
             </div>

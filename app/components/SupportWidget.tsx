@@ -69,7 +69,7 @@ export default function SupportWidget() {
   }
 
   return <>
-    <a className={styles.coffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Buy me a coffee" title="Buy me a coffee">
+    <a className={styles.coffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Support FreeReader" title="Support FreeReader">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" />
         <path d="M17 9h2a2 2 0 0 1 0 4h-2M8 3v2m5-2v2M3 21h15" />

@@ -8,7 +8,7 @@ function CoffeeButton() {
         <path d="M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" />
         <path d="M17 9h2a2 2 0 0 1 0 4h-2M8 3v2m5-2v2M3 21h15" />
       </svg>
-      Buy me a coffee
+      Support FreeReader
     </a>
   );
 }
