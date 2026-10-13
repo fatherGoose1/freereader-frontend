@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as {
     text?: unknown; texts?: unknown; speed?: unknown;
-    language?: unknown; detectLanguage?: unknown; voice?: unknown; voiceName?: unknown; steps?: unknown; engine?: unknown;
+    language?: unknown; detectLanguage?: unknown; voice?: unknown; voiceName?: unknown; steps?: unknown; engine?: unknown; word_timings?: unknown;
   } | null;
   if (!body || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
