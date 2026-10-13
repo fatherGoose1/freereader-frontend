@@ -42,7 +42,7 @@ export default function Home() {
               <AppStoreButton />
             </div>
             <div className="hero-assurances" aria-label="FreeReader product highlights">
-              <span><CheckIcon /> Start free</span>
+              <span><CheckIcon /> 100% free</span>
               <span><CheckIcon /> 32 languages</span>
               <span><CheckIcon /> No signup required</span>
             </div>
