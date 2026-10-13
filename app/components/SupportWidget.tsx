@@ -70,7 +70,7 @@ export default function SupportWidget() {
     } finally { setSubmitting(false); }
   }
 
-  const showCoffee = pathname !== "/";
+  const showCoffee = pathname === "/reader" || pathname.startsWith("/reader/");
   return <>
     {showCoffee && <a className={styles.coffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Support FreeReader" title="Support FreeReader">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { formatPostDate, getPublishedPost, getPublishedPosts, renderMarkdown, type BlogPostSummary } from "../../../../lib/blog";
+import { formatPostDate, getPublishedPost, getPublishedPosts, renderMarkdown } from "../../../../lib/blog";
 import styles from "../blog.module.css";
 
 export const revalidate = 300;
@@ -19,11 +19,6 @@ function ArrowIcon() {
       <path d="M4 10h11M11 5l5 5-5 5" />
     </svg>
   );
-}
-
-function Cover({ post, className }: { post: BlogPostSummary; className: string }) {
-  if (post.cover_image_url) return <img className={className} src={post.cover_image_url} alt="" />;
-  return <div className={`${className} ${styles.coverFallback}`} aria-hidden="true"><span>{post.category ?? "FreeReader"}</span></div>;
 }
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -56,8 +51,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             </div>
           </header>
 
-          <Cover post={post} className={styles.articleCover} />
-
           <div className={styles.prose} dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }} />
 
           <div className={styles.articleFooter}>
@@ -72,7 +65,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <div className={styles.grid}>
             {related.map((item) => (
               <Link className={styles.card} href={`/blog/${item.slug}`} key={item.id}>
-                <Cover post={item} className={styles.cardCover} />
                 <div className={styles.cardBody}>
                   {item.category && <span className={styles.category}>{item.category}</span>}
                   <h3>{item.title}</h3>

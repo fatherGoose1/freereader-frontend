@@ -37,8 +37,8 @@ There are fast readers and slow readers. Personally, I am a very slow reader. Fo
 
 FreeReader lets you slow down or speed up the narration in order to boost comprehension as much as possible.
 
-We want to create the most comfortable environment for readers possible. If this sounds like it would help you, check out FreeReader.io. Upload your own documents or start listening to a free classic book.$post$,
-  'FreeReader Team',
+We want to create the most comfortable environment for readers possible. If this sounds like it would help you, check out [FreeReader.io](https://freereader.io). Upload your own documents or start listening to a free classic book.$post$,
+  'Parker Stevens',
   'Accessibility',
   4,
   'published',

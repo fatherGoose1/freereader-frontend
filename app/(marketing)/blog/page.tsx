@@ -29,17 +29,6 @@ function PostMeta({ post }: { post: BlogPostSummary }) {
   );
 }
 
-function Cover({ post, className }: { post: BlogPostSummary; className: string }) {
-  if (post.cover_image_url) {
-    return <img className={className} src={post.cover_image_url} alt="" loading="lazy" />;
-  }
-  return (
-    <div className={`${className} ${styles.coverFallback}`} aria-hidden="true">
-      <span>{post.category ?? "FreeReader"}</span>
-    </div>
-  );
-}
-
 export default async function BlogIndexPage() {
   let posts: BlogPostSummary[] = [];
   try {
@@ -71,7 +60,6 @@ export default async function BlogIndexPage() {
           <section className={`wrap ${styles.featuredSection}`} aria-labelledby="featured-heading">
             <h2 id="featured-heading" className="sr-only">Featured article</h2>
             <Link className={styles.featured} href={`/blog/${featured.slug}`}>
-              <Cover post={featured} className={styles.featuredCover} />
               <div className={styles.featuredBody}>
                 <PostMeta post={featured} />
                 <h3>{featured.title}</h3>
@@ -87,7 +75,6 @@ export default async function BlogIndexPage() {
               <div className={styles.grid}>
                 {rest.map((post) => (
                   <Link className={styles.card} href={`/blog/${post.slug}`} key={post.id}>
-                    <Cover post={post} className={styles.cardCover} />
                     <div className={styles.cardBody}>
                       <PostMeta post={post} />
                       <h3>{post.title}</h3>
