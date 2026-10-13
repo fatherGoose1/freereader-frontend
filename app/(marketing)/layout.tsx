@@ -31,6 +31,7 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
           <div className="header-actions">
             <CoffeeButton />
             <Link className="author-cta" href="/authors/submissions">Publish a book</Link>
+            <Link className="author-cta school-cta" href="/school">FreeReader for Schools</Link>
           </div>
         </nav>
       </header>
