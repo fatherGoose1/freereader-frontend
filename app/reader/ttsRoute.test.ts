@@ -104,3 +104,27 @@ test("English Supertonic requests tell the backend which model to use", async (t
   assert.equal(response.status, 200);
   assert.equal(fetch.mock.callCount(), 1);
 });
+
+test("reader word timings request preserves the audio-and-timings archive", async (t) => {
+  const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
+  process.env.FREEREADER_TTS_API_TOKEN = "test-token";
+  t.after(() => {
+    if (originalToken === undefined) delete process.env.FREEREADER_TTS_API_TOKEN;
+    else process.env.FREEREADER_TTS_API_TOKEN = originalToken;
+  });
+  t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      texts: ["Hello reader."], speed: 1, voice: "af_heart", word_timings: true,
+    });
+    return new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "Content-Type": "application/zip", "X-Audio-Durations": "2.000000" },
+    });
+  });
+  const response = await POST(new Request("http://localhost/api/tts", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts: ["Hello reader."], speed: 1, voice: "af_heart", word_timings: true }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-Audio-Durations"), "2.000000");
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([1, 2, 3]));
+});

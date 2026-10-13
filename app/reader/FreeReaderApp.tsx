@@ -12,17 +12,19 @@ import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
 import { readingPageStarts } from "./pagination";
 import {
   getAudio as getLocalAudio,
+  getWordTimings,
   getNativeSource as getLocalNativeSource,
   listBooks,
   listFolders,
   removeBook,
   requestPersistentStorage,
   saveAudio as saveLocalAudio,
+  saveWordTimings,
   saveBook as saveLocalBook,
   saveNativeSource,
   saveFolder,
 } from "./storage";
-import { TEXT_PIPELINE_REVISION } from "./speechText";
+import { normalizeForSpeech, TEXT_PIPELINE_REVISION } from "./speechText";
 import { cancelNarration, narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
@@ -40,6 +42,7 @@ import { linkInstallation } from "./usage";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
+import { matchWordTimings, wordAtTime, type SpokenWord, type TimedSpokenWord, type WordTiming } from "./spokenWord";
 
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
@@ -50,6 +53,7 @@ const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
+  wordTimings?: WordTiming[];
   generationStartedAt?: number;
 };
 export type ManagedReader = {
@@ -63,7 +67,7 @@ export type ManagedReader = {
   generate: (book: LibraryBook, index: number, options: { voice: NarratorVoice; language: SpeechLanguage; speed: number }, needed: () => boolean) => Promise<PreparedAudio>;
 };
 type PendingAudio = { promise: Promise<PreparedAudio>; request: { isCurrent: () => boolean } };
-type ActiveAudio = { bookId: string; index: number; url: string };
+type ActiveAudio = { bookId: string; index: number; url: string; words: TimedSpokenWord[] };
 type FeaturedBook = { id: string; slug: string; title: string; description: string; author_name: string; cover_path: string | null; reads: number };
 
 const gutenbergCategories = [
@@ -95,6 +99,11 @@ function wordCount(book: LibraryBook): number {
 function formatBytes(bytes: number): string {
   if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1_000))} KB`;
   return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
+}
+
+function renderPassage(text: string, word?: SpokenWord) {
+  if (!word) return text;
+  return <>{text.slice(0, word.start)}<span className={styles.spokenWord}>{text.slice(word.start, word.start + word.length)}</span>{text.slice(word.start + word.length)}</>;
 }
 
 function BookCover({ book, index }: { book: LibraryBook; index: number }) {
@@ -268,6 +277,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const resumeAfterSettings = useRef<{ bookId: string; index: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
+  const [spoken, setSpoken] = useState<{ bookId: string; index: number; word: SpokenWord } | null>(null);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogTrigger = useRef<HTMLElement | null>(null);
@@ -801,7 +811,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const quality = route.model.startsWith("supertonic") ? `${steps}-` : "";
     const chunkRevision = book.chunkingRevision ? `-chunks${book.chunkingRevision}` : "";
     const pdfRevision = book.pdfNarrationRevision ? `-pdf${book.pdfNarrationRevision}` : "";
-    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
+    // Older Kokoro audio has no timing sidecar; regenerate it once for word cues.
+    const wordRevision = language === "en" && route.model.startsWith("kokoro") ? "-words1" : "";
+    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}${wordRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
 
@@ -833,7 +845,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const cached = await getAudio(key);
     checkRequest();
     if (cached) {
-      return { blob: cached, provider: route.provider, model: route.model, cached: true, duration: 0 };
+      return { blob: cached, provider: route.provider, model: route.model, cached: true, duration: 0,
+        wordTimings: await getWordTimings(key) };
     }
     const existing = pendingAudio.current.get(key);
     if (existing) {
@@ -882,9 +895,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         return Promise.all(batch.map(async (item, position) => {
           const part = parts[position];
           // A failed remote request may have completed with a local variant. Cache its real route.
-          await saveAudio(audioCacheKey(book, item.index, actualRoute), part.blob);
+          const partKey = audioCacheKey(book, item.index, actualRoute);
+          if (part.wordTimings) await saveWordTimings(partKey, part.wordTimings);
+          await saveAudio(partKey, part.blob);
           return { blob: part.blob, provider: part.provider, model: actualRoute.model, cached: false,
-            duration: part.duration, generationStartedAt: part.generationStartedAt };
+            duration: part.duration, generationStartedAt: part.generationStartedAt, wordTimings: part.wordTimings };
         }));
       }).finally(() => {
         if (request.isCurrent()) setTtsProgress(undefined);
@@ -899,11 +914,13 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
 
     const promise = synthesize(block.text, selectedVoice, steps, onStatus, block.isHeading, speechRate, language,
-      () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, route: actualRoute }) => {
+      () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, wordTimings, route: actualRoute }) => {
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
-      await saveAudio(audioCacheKey(book, index, actualRoute), blob);
+      const partKey = audioCacheKey(book, index, actualRoute);
+      if (wordTimings) await saveWordTimings(partKey, wordTimings);
+      await saveAudio(partKey, blob);
       // Keep timing attached to this chunk so background generation cannot overwrite it.
-      return { blob, provider, model: actualRoute.model, cached: false, duration, generationStartedAt };
+      return { blob, provider, model: actualRoute.model, cached: false, duration, generationStartedAt, wordTimings };
     }).finally(() => {
       if (request.isCurrent()) setTtsProgress(undefined);
       pendingAudio.current.delete(key);
@@ -939,6 +956,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     wantsPlayback.current = false;
     audioRef.current?.pause();
     setPlaying(false);
+    setSpoken(null);
     setBusy(false);
     setTtsProgress(undefined);
   }
@@ -985,7 +1003,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       const { blob, ...info } = await ensureAudio(book, index, isCurrent);
       if (!isCurrent()) return;
       audioUrl.current = URL.createObjectURL(blob);
-      const source = { bookId: book.id, index, url: audioUrl.current };
+      const spokenText = normalizeForSpeech(book.blocks[index].text, book.blocks[index].isHeading, languageForBook(book));
+      const source: ActiveAudio = { bookId: book.id, index, url: audioUrl.current,
+        words: matchWordTimings(book.blocks[index].text, spokenText, info.wordTimings) };
       activeAudio.current = source;
       audio.onloadedmetadata = () => {
         if (activeAudio.current !== source || !currentAudio() || audio.readyState < 1) return;
@@ -998,6 +1018,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       audio.playbackRate = 1;
       await audio.play();
       if (!isCurrent()) return;
+      updateSpokenWord();
       const playbackStartedAt = performance.timeOrigin + performance.now();
       // Generated audio: actual synthesis start through playback, excluding setup.
       // Cached audio has no synthesis start; retain its request-to-playback latency.
@@ -1080,6 +1101,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       try {
         await audio.play();
         if (playbackEpoch.current !== epoch || !wantsPlayback.current) return;
+        updateSpokenWord();
         void pregenerate(selectedRef.current!, source.index + 1);
       } catch (error) {
         if (playbackEpoch.current !== epoch) return;
@@ -1123,11 +1145,21 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (!current) return;
     const { audio, book, source } = current;
     setAudioProgress(audio.duration ? audio.currentTime / audio.duration : 0);
+    updateSpokenWord();
     if (Date.now() - lastPositionSave.current > 15_000) {
       lastPositionSave.current = Date.now();
       const positioned = positionBook(book, source.index, audio.currentTime);
       updateBook(positioned);
     }
+  }
+
+  function updateSpokenWord() {
+    const current = currentAudio();
+    if (!current || current.audio.paused || !wantsPlayback.current) return;
+    const { audio, book, source } = current;
+    const word = wordAtTime(source.words, audio.currentTime);
+    setSpoken((previous) => word ? previous?.bookId === book.id && previous.index === source.index
+      && previous.word.start === word.start ? previous : { bookId: book.id, index: source.index, word } : null);
   }
 
   async function onEnded() {
@@ -1334,6 +1366,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
+    const activeWord = playing && spoken?.bookId === selected.id && spoken.index === block?.index ? spoken.word : undefined;
     const chapter = selected.chapters[block?.chapterIndex] ?? selected.chapters[0];
     const bookProgress = readingProgress(selected, audioProgress);
     const isModelDownload = message.startsWith("Downloading voice model");
@@ -1346,7 +1379,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const floatingPdfControls = selected.format === "pdf" && !!originalSource;
     return (
       <main className={`${styles.appShell} ${styles.readingShell} ${initialBook && !managed ? styles.embeddedReader : ""}`} data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
-        <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onEnded={onEnded} onError={() => {
+        <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onSeeked={updateSpokenWord} onPlaying={updateSpokenWord} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
           resetPlayback();
@@ -1406,7 +1439,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </div>}
             </div>
             {showNative ? originalSource
-              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} onNavigate={goToBlock} />
+              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} spokenWord={activeWord} onNavigate={goToBlock} />
               : <div className={styles.nativeNotice}>
                 {!sourceLoaded ? <p role="status">Opening original document…</p> : <>
                   <strong>Open this book in its original layout</strong>
@@ -1421,8 +1454,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             <div className={`${styles.readingText} ${supportsNative ? styles.eReaderPaper : ""}`} style={{ fontSize: textSize }}>
               {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
                 item.isHeading
-                  ? <h2 key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</h2>
-                  : <p key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
+                  ? <h2 key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{renderPassage(item.text, item.index === block?.index ? activeWord : undefined)}</h2>
+                  : <p key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{renderPassage(item.text, item.index === block?.index ? activeWord : undefined)}</p>
               ))}
             </div>
             </div>

@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }
   if (body.engine) upstreamBody.engine = body.engine;
+  if (body.word_timings === true) upstreamBody.word_timings = true;
   if (typeof body.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);
   const backend = process.env.KOKO_BACKEND_URL
     ?? "https://koko-backend-production-c887.up.railway.app";

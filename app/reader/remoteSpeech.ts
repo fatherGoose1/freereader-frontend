@@ -4,9 +4,10 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
-import { clonedVoiceId, isClonedVoice, isQwenVoice, voiceDisplayName } from "./voices";
+import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isQwenVoice, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
 import type { SpeechResult } from "./mobileSpeech";
+import { parseWordTimings } from "./spokenWord";
 
 type BatchItem = { text: string; isHeading: boolean };
 type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic"; source?: TelemetrySource; instruct?: string };
@@ -85,6 +86,7 @@ export class RemoteSpeechClient {
           : normalizeForSpeech(item.text, item.isHeading, language)),
         speed: speechSpeed,
       };
+      if (language === "en" && requestedVoice && isKokoroVoiceForLanguage(requestedVoice, language) && !supertonic) body.word_timings = true;
       if (options) {
         body.language = language;
         body.voice = options.voice;
@@ -125,8 +127,14 @@ export class RemoteSpeechClient {
           const entry = archive.file(`${index}.m4a`);
           if (!entry) throw new Error("Speech service returned an incomplete batch.");
           const blob = await entry.async("blob");
-          parts.push(speechResult(new Blob([blob], { type: "audio/mp4" }), durations[index],
-            generationSeconds, generationStartedAt));
+          const result = speechResult(new Blob([blob], { type: "audio/mp4" }), durations[index],
+            generationSeconds, generationStartedAt);
+          const timingFile = archive.file(`${index}.json`);
+          if (timingFile) {
+            try { result.wordTimings = parseWordTimings(JSON.parse(await timingFile.async("text"))); }
+            catch { /* The audio remains usable without word timings. */ }
+          }
+          parts.push(result);
         }
         status?.("Speech ready", 1);
         return parts;

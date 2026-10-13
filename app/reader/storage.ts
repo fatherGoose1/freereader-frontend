@@ -1,5 +1,6 @@
 import type { AccountSyncRecord, LibraryBook, LibraryFolder } from "./types";
 import type { NarrationProject } from "../narration/model";
+import { parseWordTimings, type WordTiming } from "./spokenWord";
 
 const DATABASE = "freereader-web";
 const VERSION = 6;
@@ -322,6 +323,17 @@ export async function saveAudio(path: string, audio: Blob): Promise<void> {
 
 export async function getAudio(path: string): Promise<File | Blob | null> {
   return getLocalFile(`audio/${path}`);
+}
+
+export async function saveWordTimings(path: string, timings: WordTiming[]): Promise<void> {
+  await putLocalFile(`audio/${path}.words.json`, new Blob([JSON.stringify(timings)], { type: "application/json" }));
+}
+
+export async function getWordTimings(path: string): Promise<WordTiming[] | undefined> {
+  const stored = await getLocalFile(`audio/${path}.words.json`);
+  if (!stored) return;
+  try { return parseWordTimings(JSON.parse(await stored.text())); }
+  catch { return; }
 }
 
 export async function requestPersistentStorage(): Promise<boolean> {

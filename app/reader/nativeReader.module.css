@@ -17,8 +17,11 @@
 .textLayer > :not([class]), .textLayer :global(.markedContent) span:not([class]) { z-index: 1; }
 .textLayer :global(.markedContent) { display: contents; }
 .textLayer ::selection { background: #7797ef66; }
-.highlights { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: .35; z-index: 3; }
-.highlights span { position: absolute; background: #7797ef; border-radius: 2px; }
+.highlights, .wordHighlights { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; z-index: 3; }
+.highlights { opacity: .28; }
+.wordHighlights { opacity: .63; z-index: 4; }
+.highlights span, .wordHighlights span { position: absolute; background: #7797ef; border-radius: 2px; }
+.wordHighlights span { background: #667df3; border-radius: 4px; }
 .pdfReader .pdfViewport { padding: 12px 84px 12px 132px; }
 .pdfNavigation { position: absolute; z-index: 4; inset: 0; display: block; padding: 0; border: 0; pointer-events: none; }
 .pdfNavigation button { position: absolute; top: 50%; transform: translateY(-50%); background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }

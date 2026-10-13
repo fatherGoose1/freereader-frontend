@@ -1,4 +1,5 @@
 import type { TextBlock } from "./types";
+import type { SpokenWord } from "./spokenWord";
 
 export interface NativeTextIndex {
   text: string;
@@ -37,6 +38,27 @@ export function nativeRange(index: NativeTextIndex, start: number, length: numbe
   range.setStart(first.node, first.offset);
   range.setEnd(last.node, last.offset + 1);
   return range;
+}
+
+/** Find the matching word in a publisher's text without modifying its DOM. */
+export function nativeWordRange(range: Range, text: string, word: SpokenWord): Range | undefined {
+  const root = range.commonAncestorContainer.nodeType === 3
+    ? range.commonAncestorContainer.parentNode! : range.commonAncestorContainer;
+  const index = indexNativeText(root);
+  const near = index.points.findIndex((point) => point.node === range.startContainer && point.offset >= range.startOffset);
+  const start = index.text.indexOf(text, Math.max(0, near));
+  return start < 0 ? undefined : nativeRange(index, start + word.start, word.length);
+}
+
+/** PDF text runs may be split into many spans; use the same normalized map as the passage highlight. */
+export function pdfWordRange(index: NativeTextIndex, blocks: TextBlock[], blockIndex: number, word: SpokenWord): Range | undefined {
+  let offset = 0;
+  for (const block of blocks) {
+    const start = index.text.indexOf(block.text, offset);
+    if (start < 0) continue;
+    if (block.index === blockIndex) return nativeRange(index, start + word.start, word.length);
+    offset = start + block.text.length;
+  }
 }
 
 export function pdfPageForBlock(blocks: TextBlock[], index: number): number {

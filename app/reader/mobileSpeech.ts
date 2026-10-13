@@ -1,5 +1,6 @@
 import type { TtsStatus, Voice } from "./tts";
 import type { SpeechLanguage } from "./speech";
+import type { WordTiming } from "./spokenWord";
 
 export function usesMobileSpeech(device = typeof navigator === "undefined" ? undefined : navigator): boolean {
   return !!device && (/Android|iPhone|iPad|iPod/i.test(device.userAgent)
@@ -8,6 +9,7 @@ export function usesMobileSpeech(device = typeof navigator === "undefined" ? und
 
 export type SpeechResult = {
   blob: Blob; duration: number; provider: string; generationSeconds: number;
+  wordTimings?: WordTiming[];
   // performance.timeOrigin + performance.now(), comparable across worker/window clocks.
   generationStartedAt: number;
 };

@@ -184,6 +184,7 @@
 .readingText p { margin: 0 0 1.3em; color: #3d4655; font-family: Georgia, "Times New Roman", serif; font-size: inherit; line-height: 1.85; cursor: pointer; border-radius: 4px; }
 .readingText :is(p, h2):hover { background: #f4f6fc; }
 .readingText .currentBlock { color: #254895; background: #edf2ff; box-shadow: -4px 0 #8ca7ed; }
+.readingText .spokenWord { color: #172f73; background: #aabaff; border-radius: 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .viewToggle { display: flex; gap: 3px; padding: 3px; background: #f1f4fa; border-radius: 8px; }
 .viewToggle button { min-height: 36px; padding: 7px 12px; color: #66758e; background: transparent; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; }
 .viewToggle button[aria-pressed="true"] { color: #254895; background: white; box-shadow: 0 1px 4px #24365c14; }

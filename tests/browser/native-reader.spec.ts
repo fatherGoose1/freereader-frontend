@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import JSZip from "jszip";
+import { spokenWords } from "../../app/reader/spokenWord";
 
 const opening = "Once there were four children whose names were Peter, Susan, Edmund and Lucy. ";
 
@@ -46,7 +47,19 @@ function wav() {
 async function setup(page: Page) {
   await page.route("**/api/telemetry", (route) => route.fulfill({ status: 202, json: {} }));
   await page.route("**/api/tts", async (route) => {
-    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const { texts, word_timings } = route.request().postDataJSON() as { texts: string[]; word_timings?: boolean };
+    if (word_timings) {
+      const archive = new JSZip();
+      texts.forEach((text, index) => {
+        archive.file(`${index}.m4a`, wav());
+        const words = spokenWords(text);
+        archive.file(`${index}.json`, JSON.stringify(words.map((_, wordIndex) => [wordIndex,
+          wordIndex ? 8 + (wordIndex - 1) * 12 / Math.max(1, words.length - 1) : 0,
+          wordIndex ? 8 + wordIndex * 12 / Math.max(1, words.length - 1) : 8])));
+      });
+      return route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }),
+        headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+    }
     if (texts.length === 1) return route.fulfill({ contentType: "audio/wav", body: wav(), headers: { "X-Audio-Duration": "20" } });
     const archive = new JSZip();
     texts.forEach((_, index) => archive.file(`${index}.m4a`, wav()));
@@ -134,6 +147,79 @@ test("PDF renders original pages with selectable text, highlights, navigation an
   await expect(pages).toContainText(desktopSpread ? "Pages 1–2 of 2" : "Page 2 of 2");
   await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
+});
+
+test("the spoken word advances inside the highlighted passage in both native and E-reader views", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  await openControls(page);
+  const passage = page.locator("article .freereader-highlight");
+  await expect(passage).toHaveCount(1);
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const word = page.locator("article .freereader-spoken-word");
+  await expect(word).toHaveCount(1);
+  await expect(passage).toHaveCount(1);
+  const firstWord = await word.evaluate((element) => element.outerHTML);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = 3; });
+  await expect(word).toHaveCount(1);
+  expect(await word.evaluate((element) => element.outerHTML)).toBe(firstWord);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration * 0.7; });
+  await expect.poll(() => word.evaluate((element) => element.outerHTML)).not.toBe(firstWord);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article [aria-current="true"] [class*="spokenWord"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.locator('article [class*="spokenWord"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Original", exact: true }).click();
+  await expect(word).toHaveCount(0);
+  await expect(passage).toHaveCount(1);
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: /^epub Original EPUB/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect(word).toHaveCount(1); // Cached audio retains its timing sidecar.
+});
+
+test("a different model plays with passage highlighting only", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("dialog", { name: "Voice settings" }).getByLabel("Voice").selectOption("F1");
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
+  await expect(page.locator('article [class*="wordHighlights"] span')).toHaveCount(0);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = 10; });
+  await expect(page.locator('article [class*="wordHighlights"] span')).toHaveCount(0);
+});
+
+test("non-English Kokoro keeps passage-only highlighting", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("dialog", { name: "Voice settings" }).getByLabel("Language").selectOption("fr");
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await expect(page.locator("article .freereader-highlight")).toHaveCount(1);
+  await expect(page.locator("article .freereader-spoken-word")).toHaveCount(0);
+});
+
+test("PDF shows a stronger word overlay only while speaking", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
+  await openControls(page);
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const word = page.locator('article [class*="wordHighlights"] span');
+  await expect(word.first()).toBeVisible();
+  await expect(page.locator('article [aria-label="Current passage"] span').first()).toBeVisible();
+  const first = await word.first().evaluate((element) => (element as HTMLElement).style.left);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration * 0.7; });
+  await expect.poll(() => word.first().evaluate((element) => (element as HTMLElement).style.left)).not.toBe(first);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(word).toHaveCount(0);
 });
 
 test("older imports can attach their original file without replacing reading progress", async ({ page }) => {

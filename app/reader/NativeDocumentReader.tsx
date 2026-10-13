@@ -7,7 +7,8 @@ import type Contents from "epubjs/types/contents";
 import type Section from "epubjs/types/section";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { LibraryBook } from "./types";
-import { indexNativeText, matchNativeBlocks, nativeRange, pdfPageForBlock } from "./nativeText";
+import { indexNativeText, matchNativeBlocks, nativeRange, nativeWordRange, pdfPageForBlock, pdfWordRange, type NativeTextIndex } from "./nativeText";
+import type { SpokenWord } from "./spokenWord";
 import ReaderIcon from "./ReaderIcon";
 import styles from "./nativeReader.module.css";
 
@@ -15,6 +16,7 @@ interface Props {
   book: LibraryBook;
   source: Blob;
   textSize: number;
+  spokenWord?: SpokenWord;
   onNavigate: (index: number) => void;
 }
 
@@ -29,7 +31,7 @@ export default function NativeDocumentReader(props: Props) {
 type ReaderProps = Props & { onError: () => void };
 type EpubLocation = { cfi: string; section: number };
 
-function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps) {
+function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }: ReaderProps) {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<{ book: Book; rendition: Rendition; locations: Map<number, EpubLocation> } | null>(null);
   const cursor = useRef(book.position.blockIndex);
@@ -40,7 +42,9 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
   const [moving, setMoving] = useState(false);
   const manualNavigation = useRef(false);
   const size = useRef(textSize);
+  const word = useRef(spokenWord);
   cursor.current = book.position.blockIndex;
+  word.current = spokenWord;
   navigate.current = onNavigate;
 
   useEffect(() => {
@@ -49,6 +53,7 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
     let rendition: Rendition | undefined;
     let observer: ResizeObserver | undefined;
     let highlighted: string | undefined;
+    let highlightedWord: string | undefined;
     let lastFollowed = -1;
     let setupFinished = false;
     let pendingFollow = Promise.resolve();
@@ -170,11 +175,30 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
           lastFollowed = index;
         }
         if (cancelled || cursor.current !== index) return;
-        if (highlighted) rendition.annotations.remove(highlighted, "highlight");
-        highlighted = locations.get(index)?.cfi;
-        if (highlighted) rendition.annotations.highlight(highlighted, { blockIndex: index }, undefined, "freereader-highlight", {
-          fill: "#7797ef", "fill-opacity": "0.35", "mix-blend-mode": "multiply",
-        });
+        const passage = locations.get(index)?.cfi;
+        if (highlighted !== passage) {
+          if (highlighted) rendition.annotations.remove(highlighted, "highlight");
+          highlighted = passage;
+          if (highlighted) rendition.annotations.highlight(highlighted, { blockIndex: index }, undefined, "freereader-highlight", {
+            fill: "#7797ef", "fill-opacity": "0.28", "mix-blend-mode": "multiply",
+          });
+        }
+        let nextWord: string | undefined;
+        const currentWord = word.current;
+        if (passage && currentWord) {
+          const contents = (rendition.getContents() as unknown as Contents[]).find((item) => item.sectionIndex === target.section);
+          if (contents) {
+            const range = nativeWordRange(contents.range(passage), book.blocks[index].text, currentWord);
+            if (range) nextWord = contents.cfiFromRange(range);
+          }
+        }
+        if (highlightedWord !== nextWord) {
+          if (highlightedWord) rendition.annotations.remove(highlightedWord, "highlight");
+          highlightedWord = nextWord;
+          if (nextWord) rendition.annotations.highlight(nextWord, {}, undefined, "freereader-spoken-word", {
+            fill: "#667df3", "fill-opacity": "0.63", "mix-blend-mode": "multiply",
+          });
+        }
       };
       // A rapid chapter/seek change must not let an older display overwrite
       // the latest highlight, or leave multiple annotations behind.
@@ -208,7 +232,7 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
 
   useEffect(() => {
     if (ready) void follow.current().catch(onError);
-  }, [book.position.blockIndex, ready]);
+  }, [book.position.blockIndex, spokenWord?.start, ready]);
   useEffect(() => {
     size.current = textSize;
     const rendition = engine.current?.rendition;
@@ -233,7 +257,7 @@ function EpubReader({ book, source, textSize, onNavigate, onError }: ReaderProps
   </div>;
 }
 
-function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps) {
+function PdfReader({ book, source, textSize, spokenWord, onNavigate, onError }: ReaderProps) {
   const viewport = useRef<HTMLDivElement>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -288,7 +312,7 @@ function PdfReader({ book, source, textSize, onNavigate, onError }: ReaderProps)
       {pdf && <div className={styles.pdfSpread}>
         {Array.from({ length: spreadEnd - spreadStart + 1 }, (_, index) => spreadStart + index).map((page) => (
           <PdfPage key={page} pdf={pdf} book={book} pageNumber={page} width={pageWidth} height={size.height}
-            fitHeight={desktop} textSize={textSize} scrollViewport={viewport} onNavigate={onNavigate} onError={onError} />
+            fitHeight={desktop} textSize={textSize} spokenWord={spokenWord} scrollViewport={viewport} onNavigate={onNavigate} onError={onError} />
         ))}
       </div>}
     </div>
@@ -308,18 +332,21 @@ interface PdfPageProps {
   height: number;
   fitHeight: boolean;
   textSize: number;
+  spokenWord?: SpokenWord;
   scrollViewport: RefObject<HTMLDivElement | null>;
   onNavigate: (index: number) => void;
   onError: () => void;
 }
 
-function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, scrollViewport, onNavigate, onError }: PdfPageProps) {
+function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, spokenWord, scrollViewport, onNavigate, onError }: PdfPageProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const pageElement = useRef<HTMLDivElement>(null);
   const [rendered, setRendered] = useState(0);
   const [rects, setRects] = useState<{ left: number; top: number; width: number; height: number }[]>([]);
+  const [wordRects, setWordRects] = useState<typeof rects>([]);
   const ranges = useRef(new Map<number, Range[]>());
+  const textIndex = useRef<NativeTextIndex | null>(null);
   const active = pdfPageForBlock(book.blocks, book.position.blockIndex) === pageNumber;
 
   useEffect(() => {
@@ -346,7 +373,9 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
       layer.current.style.setProperty("--scale-factor", String(scale));
       layer.current.replaceChildren();
       ranges.current.clear();
+      textIndex.current = null;
       setRects([]);
+      setWordRects([]);
       setRendered(0);
       renderTask = page.render({ canvasContext: canvas.current.getContext("2d")!, viewport: view,
         transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
@@ -358,7 +387,8 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
       for (const index of book.pdfExcludedItems?.[String(pageNumber)] ?? []) {
         textLayer.textDivs[index]?.setAttribute("data-freereader-omit", "true");
       }
-      ranges.current = matchNativeBlocks(indexNativeText(layer.current, true), book.blocks.filter((block) => pdfPageForBlock(book.blocks, block.index) === pageNumber));
+      textIndex.current = indexNativeText(layer.current, true);
+      ranges.current = matchNativeBlocks(textIndex.current, book.blocks.filter((block) => pdfPageForBlock(book.blocks, block.index) === pageNumber));
       setRendered((value) => value + 1);
     };
     void render().catch((error) => { if (!cancelled && error?.name !== "RenderingCancelledException") onError(); });
@@ -377,6 +407,13 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
       if (first.left < bounds.left || first.right > bounds.right) scrollViewport.current.scrollLeft += first.left - bounds.left - 12;
     }
   }, [book.position.blockIndex, rendered]);
+  useEffect(() => {
+    if (!active || !spokenWord || !textIndex.current || !pageElement.current) { setWordRects([]); return; }
+    const range = pdfWordRange(textIndex.current, book.blocks.filter((block) => pdfPageForBlock(book.blocks, block.index) === pageNumber), book.position.blockIndex, spokenWord);
+    const origin = pageElement.current.getBoundingClientRect();
+    setWordRects(range ? [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0)
+      .map((rect) => ({ left: rect.left - origin.left, top: rect.top - origin.top, width: rect.width, height: rect.height })) : []);
+  }, [book.position.blockIndex, spokenWord?.start, rendered, active]);
 
   return <div className={styles.pdfPage} ref={pageElement}>
     <canvas ref={canvas} aria-label={`Original PDF page ${pageNumber}`} />
@@ -388,6 +425,9 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sc
     }} />
     <div className={styles.highlights} aria-label={active ? "Current passage" : undefined} aria-current={active ? "true" : undefined}>
       {rects.map((rect, index) => <span key={index} style={rect} />)}
+    </div>
+    <div className={styles.wordHighlights} aria-hidden="true">
+      {wordRects.map((rect, index) => <span key={index} style={rect} />)}
     </div>
   </div>;
 }
