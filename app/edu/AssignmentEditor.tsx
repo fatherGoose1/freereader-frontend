@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEdu } from "./EduProvider";
 import { useDashboard } from "./useDashboard";
@@ -8,6 +9,7 @@ import { uploadDocument } from "./documents";
 import { localDateTime, schoolTimeToUTC, type Assignment, type DocumentVersion } from "./model";
 import { IMPORT_ACCEPT } from "../reader/importFormats";
 import styles from "./edu.module.css";
+import UiIcon from "./UiIcon";
 
 export default function AssignmentEditor({ assignmentId }: { assignmentId?: string }) {
   const { path, userId } = useEdu();
@@ -70,28 +72,37 @@ export default function AssignmentEditor({ assignmentId }: { assignmentId?: stri
         ? `assignments/${result.assignment.id}/reader/${result.assignment.versionIds[0]}` : `assignments/${result.assignment.id}`));
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
-  return <main className={styles.main}><h1>{assignmentId ? "Edit assignment" : "Create reading assignment"}</h1>
+  return <main className={styles.main}>
+    <div className={styles.breadcrumbs}><Link href={path()}>Assignments</Link><UiIcon name="chevron" />{existing && <><Link href={path(`assignments/${existing.id}`)}>{existing.title}</Link><UiIcon name="chevron" /></>}<span>{assignmentId ? "Edit" : "New assignment"}</span></div>
+    <div className={styles.pageHeading}><div><span className={styles.eyebrow}>{assignmentId ? "Make changes" : "A new reading"}</span><h1>{assignmentId ? "Edit assignment" : "Create reading assignment"}</h1></div></div>
     {(error || loadError) && <p role="alert" className={styles.error}>{error || loadError}</p>}
-    {!loaded ? <p role="status">Loading assignment configuration…</p> : <form className={`${styles.card} ${styles.form}`} onSubmit={(event) => { event.preventDefault(); void save("published"); }}>
-      <fieldset disabled={busy} className={styles.form}><label>Title<input required maxLength={500} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-        <label>Instructions<textarea rows={4} maxLength={10000} value={instructions} onChange={(event) => setInstructions(event.target.value)} /></label>
-        <fieldset><legend>Assign to classes</legend>{data?.classes.map((cls) => <label className={styles.check} key={cls.id}><input type="checkbox" checked={classIds.includes(cls.id)} onChange={() => toggle(cls.id, classIds, setClassIds)} />{cls.name}</label>)}{!data?.classes.length && <p>Create a class from the dashboard first.</p>}</fieldset>
-        <fieldset><legend>Reading documents</legend>{locked && <p className={styles.muted}>Published assignments keep their document versions. Create a new assignment to replace the reading.</p>}
-          {documents.map((doc) => <label className={styles.check} key={doc.id}><input type="checkbox" disabled={locked} checked={versionIds.includes(doc.id)} onChange={() => toggle(doc.id, versionIds, setVersionIds)} />{doc.title} ({doc.format.toUpperCase()})</label>)}
-          {!locked && <label>Upload documents<input type="file" multiple accept={IMPORT_ACCEPT} onChange={async (event) => {
-            const files = [...(event.target.files ?? [])]; event.target.value = ""; setBusy(true); setError("");
-            try { for (const file of files) { if (currentSchool.current !== school.id) break; const doc = await uploadDocument(school.id, file, setStatus, userId); if (currentSchool.current !== school.id) break; setDocuments((docs) => [doc, ...docs]); setVersionIds((ids) => [...ids, doc.id]); } if (currentSchool.current === school.id) setStatus("Documents uploaded and verified."); }
-            catch (error) { setError((error as Error).message); } finally { setBusy(false); }
-          }} /></label>}
-          {status && <p role="status">{status}</p>}
-        </fieldset>
-        <p className={styles.muted}>All times are in {school.timezone}. Due dates do not close access.</p>
-        <div className={styles.row}><label>Available from<input type="datetime-local" required value={available} onChange={(event) => setAvailable(event.target.value)} /></label>
-          <label>Due at<input type="datetime-local" required value={due} onChange={(event) => setDue(event.target.value)} /></label>
-          <label>Closes at (optional)<input type="datetime-local" value={closes} onChange={(event) => setCloses(event.target.value)} /></label></div>
-        <div className={styles.row}>{!locked && <button type="button" disabled={!classIds.length || !versionIds.length || !title.trim()} onClick={() => void save("draft")}>Save draft</button>}
-          <button className={styles.primary} disabled={!classIds.length || !versionIds.length || !title.trim()}>{busy ? "Saving…" : locked ? "Save changes" : "Publish assignment"}</button></div>
-      </fieldset>
+    {!loaded ? <p role="status" className={styles.muted}>Loading assignment…</p> : <form onSubmit={(event) => { event.preventDefault(); void save("published"); }}>
+      <fieldset disabled={busy} className={styles.editorFieldset}><div className={styles.editorLayout}>
+        <div className={styles.editorMain}>
+          <section className={styles.card}><div className={styles.sectionHeading}><div><span className={styles.sectionEyebrow}>01 · The basics</span><h2>About this reading</h2></div></div><div className={styles.form}>
+            <label>Title<input required maxLength={500} autoFocus={!assignmentId} placeholder="What will your class read?" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+            <label>Instructions <span className={styles.optional}>(optional)</span><textarea rows={3} maxLength={10000} placeholder="Anything students should know before they start…" value={instructions} onChange={(event) => setInstructions(event.target.value)} /></label>
+          </div></section>
+          <section className={styles.card}><div className={styles.sectionHeading}><div><span className={styles.sectionEyebrow}>02 · Who will read</span><h2>Classes</h2></div></div><div className={styles.choiceGrid}>
+            {data?.classes.map((cls) => <label className={styles.choiceItem} key={cls.id}><input type="checkbox" checked={classIds.includes(cls.id)} onChange={() => toggle(cls.id, classIds, setClassIds)} /><span><strong>{cls.name}</strong>{cls.term && <small>{cls.term}</small>}</span></label>)}
+            {!data?.classes.length && <p className={styles.muted}>No classes yet. <Link href={path()}>Create one on the dashboard</Link> first.</p>}
+          </div></section>
+          <section className={styles.card}><div className={styles.sectionHeading}><div><span className={styles.sectionEyebrow}>03 · What to read</span><h2>Reading material</h2></div></div>
+            {locked && <p className={styles.muted}>Published readings stay attached to this assignment. Create a new assignment to change documents.</p>}
+            {documents.length > 0 && <div className={styles.choiceGrid}>{documents.map((doc) => <label className={styles.choiceItem} key={doc.id}><input type="checkbox" disabled={locked} checked={versionIds.includes(doc.id)} onChange={() => toggle(doc.id, versionIds, setVersionIds)} /><span><strong>{doc.title}</strong><small>{doc.format.toUpperCase()}</small></span></label>)}</div>}
+            {!locked && <label className={styles.uploadBox}><span><UiIcon name="upload" /> Upload documents</span><small>PDF, EPUB, Word, or text files</small><input type="file" multiple accept={IMPORT_ACCEPT} onChange={async (event) => {
+              const files = [...(event.target.files ?? [])]; event.target.value = ""; setBusy(true); setError("");
+              try { for (const file of files) { if (currentSchool.current !== school.id) break; const doc = await uploadDocument(school.id, file, setStatus, userId); if (currentSchool.current !== school.id) break; setDocuments((docs) => [doc, ...docs]); setVersionIds((ids) => [...ids, doc.id]); } if (currentSchool.current === school.id) setStatus("Documents uploaded and verified."); }
+              catch (error) { setError((error as Error).message); } finally { setBusy(false); }
+            }} /></label>}
+            {status && <p role="status" className={styles.notice}>{status}</p>}
+          </section>
+        </div>
+        <aside><section className={styles.card}><div className={styles.sectionHeading}><div><span className={styles.sectionEyebrow}>04 · When</span><h2>Schedule</h2></div><UiIcon name="calendar" /></div>
+          <div className={styles.form}><label>Available from<input type="datetime-local" required value={available} onChange={(event) => setAvailable(event.target.value)} /></label><label>Due at<input type="datetime-local" required value={due} onChange={(event) => setDue(event.target.value)} /></label><label>Closes at <span className={styles.optional}>(optional)</span><input type="datetime-local" value={closes} onChange={(event) => setCloses(event.target.value)} /></label></div>
+          <p className={styles.muted}>All times are in {school.timezone}. Due dates don’t close access.</p>
+        </section></aside>
+      </div><div className={styles.editorFooter}><span className={styles.muted}>{locked ? "Update the details for this reading." : "Your class can start reading after you publish."}</span><div className={styles.row}>{!locked && <button type="button" disabled={!classIds.length || !versionIds.length || !title.trim()} onClick={() => void save("draft")}>Save draft</button>}<button type="submit" className={styles.primary} disabled={!classIds.length || !versionIds.length || !title.trim()}>{busy ? "Saving…" : locked ? "Save changes" : "Publish assignment"} <UiIcon name="arrow" /></button></div></div></fieldset>
     </form>}
   </main>;
 }

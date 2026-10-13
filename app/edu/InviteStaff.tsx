@@ -4,6 +4,7 @@ import { useEdu } from "./EduProvider";
 import { eduFetch } from "./client";
 import { MAX_STAFF_ROWS, MAX_STAFF_FILE_BYTES, normalizeStaff, parseStaffRecords, staffIssues, safeClipboardCell, type StaffRecord } from "./staffImport";
 import styles from "./edu.module.css";
+import UiIcon from "./UiIcon";
 
 type Row = StaffRecord & { id: string };
 type Created = StaffRecord & { id: string; url: string; expiresAt: string; status: string };
@@ -57,8 +58,8 @@ export default function InviteStaff({ schoolId, onCreated }: { schoolId: string;
     try { await navigator.clipboard.writeText(text); setCopied(id); }
     catch { setError("Select and copy the invitation links below."); }
   }
-  return <section className={styles.card} aria-labelledby="invite-staff-title"><h2 id="invite-staff-title">Invite staff</h2>
-    <p className={styles.muted}>Enter names and emails, paste a spreadsheet, or import a CSV/text file. Review the rows, then create the invitations.</p>
+  return <section className={styles.card} aria-labelledby="invite-staff-title"><div className={styles.sectionHeading}><div><span className={styles.sectionEyebrow}>Build your team</span><h2 id="invite-staff-title">Invite staff</h2></div></div>
+    <p className={styles.muted}>Add people below, paste a spreadsheet, or import a file.</p>
     {error && <p role="alert" className={styles.error}>{error}</p>}
     <form noValidate className={styles.form} onSubmit={async (event) => {
       event.preventDefault(); setReview(true); setError(""); setCopied("");
@@ -74,8 +75,8 @@ export default function InviteStaff({ schoolId, onCreated }: { schoolId: string;
       finally { setBusy(false); }
     }}>
       <fieldset disabled={busy} className={styles.staffFieldset}>
-        <div className={styles.staffToolbar}><label>Role for this batch<select aria-label="Staff invitation role" value={role} onChange={(event) => setRole(event.target.value)}><option value="teacher">Teacher</option><option value="admin">Administrator</option></select></label>
-          <button type="button" onClick={() => fileInput.current?.click()}>Import CSV / text</button>
+        <div className={styles.staffToolbar}><label>Invite as<select aria-label="Staff invitation role" value={role} onChange={(event) => setRole(event.target.value)}><option value="teacher">Teacher</option><option value="admin">Administrator</option></select></label>
+          <button type="button" onClick={() => fileInput.current?.click()}><UiIcon name="upload" /> Import CSV / text</button>
           <input ref={fileInput} hidden type="file" accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values" aria-label="Import staff file" onChange={async (event) => {
             const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
             setError("");
@@ -92,9 +93,9 @@ export default function InviteStaff({ schoolId, onCreated }: { schoolId: string;
             <button type="button" aria-label={`Remove staff row ${index + 1}`} onClick={() => setRows((current) => current.length === 1 ? [blank()] : current.filter((item) => item.id !== row.id))}>×</button>
           </div>)}
         </div>
-        <div className={styles.row}><button type="button" disabled={rows.length >= MAX_STAFF_ROWS} onClick={() => setRows((current) => [...current, blank()])}>Add row</button><span className={styles.muted}>{count} staff {count === 1 ? "member" : "members"} · up to 100 per batch</span></div>
+        <div className={styles.row}><button type="button" className={styles.subtleButton} disabled={rows.length >= MAX_STAFF_ROWS} onClick={() => setRows((current) => [...current, blank()])}><UiIcon name="plus" /> Add row</button><span className={styles.muted}>{count} {count === 1 ? "person" : "people"} · up to 100 at a time</span></div>
       </fieldset>
-      <button className={styles.primary} disabled={busy || count === 0}>{busy ? "Creating invitations…" : `Create ${count || "staff"} ${count === 1 ? "invitation" : "invitations"}`}</button>
+      <button className={styles.primary} disabled={busy || count === 0}><UiIcon name="link" />{busy ? "Creating invitations…" : `Create ${count || "staff"} ${count === 1 ? "invitation" : "invitations"}`}</button>
     </form>
     {created.length > 0 && <div className={styles.staffResults}><div className={styles.row}><h3>{created.length} invitations created</h3><button onClick={() => void copy(["Name\tEmail\tInvitation link", ...created.map((row) => [row.name, row.email, row.url].map(safeClipboardCell).join("\t"))].join("\n"), "all")}>{copied === "all" ? "Copied" : "Copy all links"}</button></div>
       <p className={styles.muted}>Send each person their email-bound link. Invitations expire after seven days.</p>

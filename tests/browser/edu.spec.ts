@@ -75,7 +75,7 @@ test("student opens hosted original PDF, listens, saves position, and reloads wi
   await signIn(context);
   const state = await setup(page);
   await page.goto(`/edu/assignments/${assignmentId}`);
-  await page.getByRole("link", { name: `Read ${document.title}`, exact: true }).click();
+  await page.getByRole("link", { name: "Open reader", exact: false }).click();
   await openTools(page);
   await expect(page.getByRole("navigation", { name: "Original document pages" })).toContainText("Page 1 of 1");
   await expect(page.locator('[class*="textLayer"]')).toContainText("The original school PDF");
@@ -94,16 +94,67 @@ test("student opens hosted original PDF, listens, saves position, and reloads wi
   expect(await page.evaluate(() => localStorage.getItem("freereaderTelemetryQueue"))).toBeNull();
 });
 
-test("teacher dashboard exposes authoring while students see only assigned reading", async ({ page, context }) => {
+test("teacher dashboard prioritizes readings and keeps class creation out of the way", async ({ page, context }, testInfo) => {
   await signIn(context);
   await setup(page, "teacher");
   await page.goto("/edu");
   await expect(page.getByRole("heading", { name: "Example school" })).toBeVisible();
   await expect(page.getByRole("link", { name: "New assignment" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Manage" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Class name" })).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath("teacher-dashboard.png"), fullPage: true });
   await page.getByRole("link", { name: "New assignment" }).click();
   await expect(page.getByRole("heading", { name: "Create reading assignment" })).toBeVisible();
   await expect(page.getByLabel("Upload documents")).toBeVisible();
   await expect(page.getByText("All times are in America/New_York.", { exact: false })).toBeVisible();
+});
+
+test("teacher manages an existing student link with a clear copy, rotate, and revoke flow", async ({ page, context }, testInfo) => {
+  await signIn(context); await setup(page, "teacher");
+  let link: string | null = "https://example.school/edu/shared/first-link";
+  await page.route(`**/api/edu/assignments/${assignmentId}/share`, (route) => {
+    const method = route.request().method();
+    if (method === "POST") link = route.request().postDataJSON()?.regenerate ? "https://example.school/edu/shared/new-link" : "https://example.school/edu/shared/created-link";
+    if (method === "DELETE") link = null;
+    return route.fulfill({ json: { share: { enabled: !!link, url: link } } });
+  });
+  await page.goto(`/edu/assignments/${assignmentId}`);
+  await expect(page.getByRole("heading", { name: "Share with students" })).toBeVisible();
+  await expect(page.getByLabel("Student reading link")).toHaveValue("https://example.school/edu/shared/first-link");
+  await expect(page.getByRole("button", { name: "Copy link" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Generate a new link" })).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath("manage-assignment.png"), fullPage: true });
+  await page.getByText("Link settings").click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Generate a new link" }).click();
+  await expect(page.getByLabel("Student reading link")).toHaveValue("https://example.school/edu/shared/new-link");
+  await page.reload();
+  await expect(page.getByLabel("Student reading link")).toHaveValue("https://example.school/edu/shared/new-link");
+  await page.getByText("Link settings").click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Turn off link" }).click();
+  await expect(page.getByRole("button", { name: "Create student link" })).toBeVisible();
+  await page.getByRole("button", { name: "Create student link" }).click();
+  await expect(page.getByLabel("Student reading link")).toHaveValue("https://example.school/edu/shared/created-link");
+});
+
+test("class roster explains optional accounts and calendar keeps the assignment in view", async ({ page, context }) => {
+  await signIn(context); await setup(page, "teacher");
+  await page.route(`**/api/edu/classes/${classId}`, (route) => route.fulfill({ json: { id: classId, schoolId, name: "English", term: "Fall", role: "teacher", students: [], teachers: [] } }));
+  await page.goto("/edu");
+  await page.getByRole("link", { name: "English Fall" }).click();
+  await expect(page.getByRole("heading", { name: "Class roster" })).toBeVisible();
+  await expect(page.getByText("Students can still read assignments from a shared link.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create student invitation" })).toBeHidden();
+  await page.getByText("Invite for account access").click();
+  await expect(page.getByRole("button", { name: "Create student invitation" })).toBeVisible();
+  await page.getByRole("link", { name: "Calendar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Reading calendar" })).toBeVisible();
+  const previous = await page.getByLabel("Month", { exact: true }).inputValue();
+  await page.getByRole("button", { name: "Next month" }).click();
+  await expect(page.getByLabel("Month", { exact: true })).not.toHaveValue(previous);
+  await page.getByRole("button", { name: "Previous month" }).click();
+  await expect(page.getByLabel("Month", { exact: true })).toHaveValue(previous);
 });
 
 test("teacher uploads original plus parsed reading copy and publishes an assignment with verified version references", async ({ page, context }) => {
@@ -153,7 +204,7 @@ test("teacher uploads original plus parsed reading copy and publishes an assignm
   });
   await page.goto("/edu/assignments/new");
   await page.getByLabel("Title", { exact: true }).fill("Week one");
-  await page.getByRole("checkbox", { name: "English", exact: true }).check();
+  await page.getByRole("checkbox", { name: "English", exact: false }).check();
   await page.getByLabel("Upload documents").setInputFiles({ name: "lesson.txt", mimeType: "text/plain", buffer: file });
   await expect(page.getByText("Documents uploaded and verified.")).toBeVisible();
   await page.getByRole("button", { name: "Publish assignment", exact: true }).click();
@@ -176,7 +227,7 @@ test("untrusted school reading text cannot execute markup and consumer capture/s
     originalUrl: new URL("/edu-test-original", route.request().url()).href, readingUrl: new URL("/edu-test-reading", route.request().url()).href,
     originalSha256: hash(original), readingSha256: hash(reading), progress: null } }));
   await page.goto(`/edu/assignments/${assignmentId}`);
-  await page.getByRole("link", { name: `Read ${document.title}`, exact: true }).click();
+  await page.getByRole("link", { name: "Open reader", exact: false }).click();
   await openTools(page);
   await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).toHaveText(payload);
@@ -192,7 +243,7 @@ async function openTools(page: Page) {
   if (await toggle.isVisible()) await toggle.click();
 }
 
-test("staff grid reviews pasted/imported rows and creates one named invitation per recipient", async ({ page, context }) => {
+test("staff grid reviews pasted/imported rows and creates one named invitation per recipient", async ({ page, context }, testInfo) => {
   await signIn(context); await setup(page, "admin");
   let submitted: { records: { name: string; email: string }[]; role: string } | null = null;
   const result = () => submitted;
@@ -202,6 +253,7 @@ test("staff grid reviews pasted/imported rows and creates one named invitation p
     return route.fulfill({ status: 201, json: { invitations: submitted!.records.map((record, index) => ({ ...record, id: String(index), url: `https://school.test/invite/${index}`, status: "pending", expiresAt: "2026-10-20T00:00:00Z" })) } });
   });
   await page.goto("/edu/admin");
+  await page.screenshot({ path: testInfo.outputPath("school-administration.png"), fullPage: true });
   await page.getByLabel("Staff name 1", { exact: true }).evaluate((input) => {
     const clipboard = new DataTransfer(); clipboard.setData("text/plain", "Alice Smith\talice@school.test\nBob Jones\tbob@school.test");
     input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true, cancelable: true }));

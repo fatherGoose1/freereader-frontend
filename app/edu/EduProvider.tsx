@@ -9,6 +9,7 @@ import type { School } from "./model";
 import styles from "./edu.module.css";
 import { recordEduEvent, flushEduEvents } from "./telemetry";
 import { pauseConsumerAnalyticsForEdu } from "../../lib/edu-analytics-boundary";
+import UiIcon from "./UiIcon";
 
 type EduContext = { session: Session | null; ready: boolean; schools: School[]; school: School | null; userId: string;
   selectSchool: (id: string) => void; refresh: () => Promise<void>; path: (route?: string) => string };
@@ -82,6 +83,7 @@ export default function EduProvider({ children, host }: { children: React.ReactN
     } catch (error) { setError((error as Error).message); }
   }
   const school = schools.find((school) => school.id === schoolId) ?? null;
+  const readingActive = pathname === "/" || pathname === "/edu" || /\/(assignments|classes)(?:\/|$)/.test(pathname);
   useEffect(() => {
     if (!session || !school) return;
     const key = `${session.user.id}:${school.id}`;
@@ -94,13 +96,17 @@ export default function EduProvider({ children, host }: { children: React.ReactN
   return <Context.Provider value={{ session, ready, schools, school, userId: session?.user.id ?? "", selectSchool: setSchoolId, refresh, path }}>
     {fullScreenReader && (publicReading || session) ? <div className={styles.readerSurface} data-freereader-product="edu">{publicReading ? children : <div key={session!.user.id}>{children}</div>}</div> : <div className={styles.app} data-freereader-product="edu">
       <header className={styles.header}>
-        <Link href={path()} className={styles.brand}>FreeReader <span>EDU</span></Link>
-        {session && <nav aria-label="School navigation"><Link href={path()}>Assignments</Link><Link href={path("calendar")}>Calendar</Link>{school?.role === "admin" && <Link href={path("admin")}>Administration</Link>}</nav>}
-        <div className={styles.row}>{schools.length > 1 && <select aria-label="School" value={schoolId} onChange={(event) => { setSchoolId(event.target.value); router.push(path()); }}>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select>}
-          {session && <button onClick={async () => { const { error } = await eduClient().auth.signOut({ scope: "local" }); if (error) setError(error.message); }}>Sign out</button>}</div>
+        <div className={styles.headerInner}>
+          <Link href={path()} className={styles.brand} aria-label="FreeReader EDU home"><span className={styles.brandMark} aria-hidden="true"><i /><i /><i /><i /></span><span>FreeReader <small>EDU</small></span></Link>
+          {session && <nav aria-label="School navigation"><Link href={path()} className={readingActive ? styles.navActive : ""} aria-current={readingActive ? "page" : undefined}>Readings</Link><Link href={path("calendar")} className={pathname.endsWith("/calendar") ? styles.navActive : ""} aria-current={pathname.endsWith("/calendar") ? "page" : undefined}>Calendar</Link>{school?.role === "admin" && <Link href={path("admin")} className={pathname.endsWith("/admin") ? styles.navActive : ""} aria-current={pathname.endsWith("/admin") ? "page" : undefined}>School</Link>}</nav>}
+          <div className={styles.headerAccount}>
+            {schools.length > 1 && <select aria-label="School" value={schoolId} onChange={(event) => { setSchoolId(event.target.value); router.push(path()); }}>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select>}
+            {session && <details className={styles.accountMenu}><summary aria-label="Account menu"><span className={styles.avatar}>{(session.user.email?.[0] ?? "U").toUpperCase()}</span><UiIcon name="chevron" /></summary><div className={styles.accountPanel}><span className={styles.muted}>{session.user.email}</span><button onClick={async () => { const { error } = await eduClient().auth.signOut({ scope: "local" }); if (error) setError(error.message); }}>Sign out</button></div></details>}
+          </div>
+        </div>
       </header>
       {error && <div className={styles.error} role="alert">{error}{session && <button onClick={() => void refresh().catch((error) => setError(error.message))}>Retry</button>}</div>}
-      {!ready ? <main className={styles.main}><p role="status">Loading your school account…</p></main> : !session ? <main className={styles.main}><section className={styles.card}><h1>Reading support for your school</h1><p>Sign in with your school Google account to open assignments, read documents, and listen to them.</p><button className={styles.primary} onClick={() => void signIn()}>Sign in with Google</button></section></main> : <div key={session.user.id}>{children}</div>}
+      {!ready ? <main className={styles.main}><p role="status">Loading your school account…</p></main> : !session ? <main className={styles.main}><section className={`${styles.card} ${styles.signInCard}`}><div className={styles.featureIcon}><UiIcon name="book" /></div><h1>Your reading space</h1><p className={styles.muted}>Sign in to see your school readings and classes.</p><button className={styles.primary} onClick={() => void signIn()}>Sign in with Google <UiIcon name="arrow" /></button></section></main> : <div key={session.user.id}>{children}</div>}
     </div>}
   </Context.Provider>;
 }
