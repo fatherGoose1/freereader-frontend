@@ -43,6 +43,7 @@ import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
 import { matchWordTimings, wordAtTime, type SpokenWord, type TimedSpokenWord, type WordTiming } from "./spokenWord";
+import { useEReaderWordHighlight } from "./eReaderWordHighlight";
 
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
@@ -100,11 +101,6 @@ function wordCount(book: LibraryBook): number {
 function formatBytes(bytes: number): string {
   if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1_000))} KB`;
   return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
-}
-
-function renderPassage(text: string, word?: SpokenWord) {
-  if (!word) return text;
-  return <>{text.slice(0, word.start)}<span className={styles.spokenWord}>{text.slice(word.start, word.start + word.length)}</span>{text.slice(word.start + word.length)}</>;
 }
 
 function BookCover({ book, index }: { book: LibraryBook; index: number }) {
@@ -210,6 +206,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [mobileToolsExpanded, setMobileToolsExpanded] = useState(false);
   const [mobilePlayerExpanded, setMobilePlayerExpanded] = useState(false);
   const eReaderViewport = useRef<HTMLDivElement>(null);
+  const eReaderText = useRef<HTMLDivElement>(null);
   const [readingView, setReadingView] = useState<ReadingView>("native");
   const [nativeSource, setNativeSource] = useState<{ bookId: string; source: Blob | null } | null>(null);
   const [attachingSource, setAttachingSource] = useState(false);
@@ -1370,9 +1367,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
   }
 
+  const activeWord = highlightSpokenWords && playing && selected && spoken?.bookId === selected.id
+    && spoken.index === selected.blocks[selected.position.blockIndex]?.index ? spoken.word : undefined;
+  const supportsNativeView = selected?.format === "epub" || selected?.format === "pdf";
+  const eReaderWordOverlay = useEReaderWordHighlight(eReaderText,
+    supportsNativeView && readingView === "native" ? undefined : activeWord,
+    selected?.position.blockIndex, selected?.id, page.start, textSize);
+
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
-    const activeWord = highlightSpokenWords && playing && spoken?.bookId === selected.id && spoken.index === block?.index ? spoken.word : undefined;
     const chapter = selected.chapters[block?.chapterIndex] ?? selected.chapters[0];
     const bookProgress = readingProgress(selected, audioProgress);
     const isModelDownload = message.startsWith("Downloading voice model");
@@ -1457,12 +1460,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </div>
               : <>
             <div ref={eReaderViewport} className={supportsNative ? styles.eReaderViewport : undefined}>
-            <div className={`${styles.readingText} ${supportsNative ? styles.eReaderPaper : ""}`} style={{ fontSize: textSize }}>
+            <div ref={eReaderText} className={`${styles.readingText} ${supportsNative ? styles.eReaderPaper : ""}`} style={{ fontSize: textSize }}>
               {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
                 item.isHeading
-                  ? <h2 key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{renderPassage(item.text, item.index === block?.index ? activeWord : undefined)}</h2>
-                  : <p key={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{renderPassage(item.text, item.index === block?.index ? activeWord : undefined)}</p>
+                  ? <h2 key={item.index} data-block-index={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</h2>
+                  : <p key={item.index} data-block-index={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
               ))}
+              {eReaderWordOverlay && <div className={styles.eReaderWordOverlay} data-ereader-word={eReaderWordOverlay.text} aria-hidden="true">
+                {eReaderWordOverlay.rects.map((rect, index) => <span key={index} style={rect} />)}
+              </div>}
             </div>
             </div>
             <nav className={styles.pageNavigation} aria-label="Reading pages">

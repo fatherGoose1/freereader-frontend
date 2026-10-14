@@ -82,6 +82,10 @@ async function openControls(page: Page, expandPlayer = false) {
   if (expandPlayer && await player.isVisible()) await player.click();
 }
 
+async function eReaderSpokenWord(page: Page) {
+  return page.evaluate(() => document.querySelector('article [data-ereader-word]')?.getAttribute("data-ereader-word") ?? "");
+}
+
 test("EPUB preserves publisher styling and images, follows chapters, and switches views without stopping playback", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
@@ -166,9 +170,9 @@ test("the spoken word advances inside the highlighted passage in both native and
   await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration * 0.7; });
   await expect.poll(() => word.evaluate((element) => element.outerHTML)).not.toBe(firstWord);
   await page.getByRole("button", { name: "E-reader", exact: true }).click();
-  await expect(page.locator('article [aria-current="true"] [class*="spokenWord"]')).toHaveCount(1);
+  await expect.poll(() => eReaderSpokenWord(page)).not.toBe("");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await expect(page.locator('article [class*="spokenWord"]')).toHaveCount(0);
+  await expect.poll(() => eReaderSpokenWord(page)).toBe("");
   await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(word).toHaveCount(0);
   await expect(passage).toHaveCount(1);
@@ -194,16 +198,15 @@ test("word highlighting can be switched off without stopping audio and stays off
   await expect(toggle).toBeChecked();
   await page.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
-  const word = page.locator('article [class*="spokenWord"]');
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
-  await expect(word).toHaveCount(1);
+  await expect.poll(() => eReaderSpokenWord(page)).not.toBe("");
   const source = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await toggle.uncheck();
-  await expect(word).toHaveCount(0);
+  await expect.poll(() => eReaderSpokenWord(page)).toBe("");
   await expect(page.locator('article [aria-current="true"]')).toBeVisible();
   await toggle.check();
-  await expect(word).toHaveCount(1);
+  await expect.poll(() => eReaderSpokenWord(page)).not.toBe("");
   await toggle.uncheck();
   expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc)).toBe(source);
   await page.getByRole("button", { name: "Done" }).click();
@@ -235,7 +238,7 @@ test("spoken words remain highlighted across punctuation joined by an em dash", 
   await page.locator("audio").evaluate((audio: HTMLAudioElement, { index, count }) => {
     audio.currentTime = 8 + (index - 1) * 12 / Math.max(1, count - 1) + .02;
   }, { index: how, count: words.length });
-  await expect(page.locator('article [aria-current="true"] [class*="spokenWord"]')).toHaveText("How");
+  await expect.poll(() => eReaderSpokenWord(page)).toBe("How");
 });
 
 test("a different model plays with passage highlighting only", async ({ page }) => {
@@ -264,7 +267,64 @@ test("non-English Kokoro keeps passage-only highlighting", async ({ page }) => {
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   await expect(page.locator('article [aria-current="true"]')).toBeVisible();
-  await expect(page.locator('article [class*="spokenWord"]')).toHaveCount(0);
+  await expect.poll(() => eReaderSpokenWord(page)).toBe("");
+});
+
+test("e-reader word highlighting never changes line wrapping", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Reproduces a Chromium wrap change at a fixed paragraph width");
+  await setup(page);
+  const text = "Office files often include fields, difficult ligatures, apostrophes, and punctuation.—Perhaps that changes where words land. ".repeat(3);
+  await page.locator("button:visible").filter({ hasText: "Insert Text" }).click();
+  await page.getByLabel("Title (optional)").fill("Stable e-reader layout");
+  await page.getByLabel("Text", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "Add to Library", exact: true }).click();
+  const passage = page.locator('article p[aria-current="true"]');
+  await expect(passage).toBeVisible();
+  await passage.evaluate((element: HTMLElement) => { element.style.width = "372px"; });
+  const wordPosition = () => passage.evaluate((element) => {
+    const node = element.firstChild!;
+    const start = node.textContent!.indexOf("land.");
+    if (node.nodeType !== Node.TEXT_NODE || start < 0) return null;
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 4);
+    const rect = range.getBoundingClientRect();
+    const origin = element.getBoundingClientRect();
+    return { left: rect.left - origin.left, top: rect.top - origin.top, children: element.childNodes.length };
+  });
+  const before = await wordPosition();
+  expect(before).not.toBeNull();
+
+  const speechRequest = page.waitForRequest((request) => request.url().endsWith("/api/tts") && request.postDataJSON()?.word_timings === true);
+  await openControls(page, true);
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const { texts } = (await speechRequest).postDataJSON() as { texts: string[] };
+  const words = spokenWords(texts[0]);
+  const perhaps = words.findIndex((word) => texts[0].slice(word.start, word.start + word.length).startsWith("Perhaps"));
+  expect(perhaps).toBeGreaterThan(0);
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement, { index, count }) => {
+    audio.currentTime = 8 + (index - 1) * 12 / Math.max(1, count - 1) + .02;
+  }, { index: perhaps, count: words.length });
+  await expect.poll(() => eReaderSpokenWord(page)).toBe("Perhaps");
+  const highlight = page.locator('article [data-ereader-word="Perhaps"] span').first();
+  await expect(highlight).toBeVisible();
+  expect(await highlight.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(170, 186, 255)");
+  const painted = await highlight.boundingBox();
+  const textRect = await passage.evaluate((element) => {
+    const start = element.firstChild!.textContent!.indexOf("Perhaps");
+    const range = document.createRange();
+    range.setStart(element.firstChild!, start);
+    range.setEnd(element.firstChild!, start + "Perhaps".length);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.x, y: rect.y };
+  });
+  expect(painted).not.toBeNull();
+  expect(Math.abs(painted!.x - textRect.x)).toBeLessThan(1);
+  expect(Math.abs(painted!.y - textRect.y)).toBeLessThan(1);
+  expect(await wordPosition()).toEqual(before);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  expect(await wordPosition()).toEqual(before);
 });
 
 test("PDF shows a stronger word overlay only while speaking", async ({ page }) => {
