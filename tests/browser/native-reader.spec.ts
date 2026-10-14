@@ -217,6 +217,45 @@ test("word highlighting can be switched off without stopping audio and stays off
   await expect(toggle).not.toBeChecked();
 });
 
+test("short spoken words are highlighted between sparse audio timeupdate events", async ({ page }) => {
+  await setup(page);
+  const text = "I am in on at to be or we go.";
+  await page.route("**/api/tts", async (route) => {
+    const archive = new JSZip();
+    archive.file("0.m4a", wav());
+    archive.file("0.json", JSON.stringify(spokenWords(text).map((_, index) =>
+      [index, 1 + index * .12, 1 + (index + 1) * .12])));
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }),
+      headers: { "X-Audio-Durations": "20" } });
+  });
+  const mobileAdd = page.getByRole("button", { name: "Add reading", exact: true });
+  if (await mobileAdd.isVisible()) await mobileAdd.click();
+  await page.locator("button:visible").filter({ hasText: "Insert Text" }).click();
+  await page.getByLabel("Title (optional)").fill("Short Word Test");
+  await page.getByLabel("Text", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "Add to Library", exact: true }).click();
+  await openControls(page, true);
+  await page.locator("article p").filter({ hasText: text }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  const highlighted = await page.evaluate(async () => {
+    const audio = document.querySelector("audio")!;
+    const seen = new Set<string>();
+    const observe = () => {
+      const word = document.querySelector('article [data-ereader-word]')?.getAttribute("data-ereader-word");
+      if (word) seen.add(word);
+    };
+    audio.currentTime = .9;
+    const until = performance.now() + 1800;
+    while (performance.now() < until) {
+      await new Promise(requestAnimationFrame);
+      observe();
+    }
+    return [...seen];
+  });
+  expect(highlighted).toEqual(expect.arrayContaining(["I", "am", "in", "on", "at", "to", "be", "or", "we", "go"]));
+});
+
 test("spoken words remain highlighted across punctuation joined by an em dash", async ({ page }) => {
   await setup(page);
   const text = "But at any rate he might answer questions.—How am I to get in?” she repeated, aloud.";

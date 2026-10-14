@@ -282,6 +282,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const dialogTrigger = useRef<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const activeAudio = useRef<ActiveAudio | null>(null);
+  const wordFrame = useRef<number | null>(null);
+  const lastWord = useRef<{ source: ActiveAudio; start: number } | null>(null);
   const audioUrl = useRef<string | null>(null);
   const pendingAudio = useRef(new Map<string, PendingAudio>());
   const playbackEpoch = useRef(0);
@@ -298,6 +300,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     try { setHighlightSpokenWords(localStorage.getItem(WORD_HIGHLIGHT_PREFERENCE) !== "false"); }
     catch { /* Keep the on-by-default setting when browser storage is unavailable. */ }
   }, []);
+  useEffect(() => {
+    if (highlightSpokenWords && playing) startWordTracking();
+    else {
+      stopWordTracking();
+      lastWord.current = null;
+      setSpoken(null);
+    }
+    return stopWordTracking;
+  }, [highlightSpokenWords, playing, selected?.id, selected?.position.blockIndex]);
   useEffect(() => { setImportErrorMessage(""); }, [panel]);
   useEffect(() => {
     if (!previewBook) return;
@@ -957,6 +968,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     playbackEpoch.current += 1;
     generationEpoch.current += 1;
     wantsPlayback.current = false;
+    stopWordTracking();
+    lastWord.current = null;
     audioRef.current?.pause();
     setPlaying(false);
     setSpoken(null);
@@ -1158,11 +1171,36 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   function updateSpokenWord() {
     const current = currentAudio();
-    if (!current || current.audio.paused || !wantsPlayback.current) return;
+    if (!highlightSpokenWords || !current || current.audio.paused || !wantsPlayback.current) return;
     const { audio, book, source } = current;
     const word = wordAtTime(source.words, audio.currentTime);
-    setSpoken((previous) => word ? previous?.bookId === book.id && previous.index === source.index
-      && previous.word.start === word.start ? previous : { bookId: book.id, index: source.index, word } : null);
+    if (lastWord.current?.source === source && lastWord.current.start === word?.start) return;
+    if (!word && !lastWord.current) return;
+    lastWord.current = word ? { source, start: word.start } : null;
+    setSpoken(word ? { bookId: book.id, index: source.index, word } : null);
+  }
+
+  function stopWordTracking() {
+    if (wordFrame.current !== null) cancelAnimationFrame(wordFrame.current);
+    wordFrame.current = null;
+  }
+
+  function onAudioPaused() {
+    stopWordTracking();
+    lastWord.current = null;
+    setSpoken(null);
+  }
+
+  function startWordTracking() {
+    if (wordFrame.current !== null || !highlightSpokenWords) return;
+    const tick = () => {
+      wordFrame.current = null;
+      const current = currentAudio();
+      if (!current || !wantsPlayback.current || current.audio.paused || !current.source.words.length) return;
+      updateSpokenWord();
+      wordFrame.current = requestAnimationFrame(tick);
+    };
+    tick();
   }
 
   async function onEnded() {
@@ -1388,7 +1426,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const floatingPdfControls = selected.format === "pdf" && !!originalSource;
     return (
       <main className={`${styles.appShell} ${styles.readingShell} ${initialBook && !managed ? styles.embeddedReader : ""}`} data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
-        <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onSeeked={updateSpokenWord} onPlaying={updateSpokenWord} onEnded={onEnded} onError={() => {
+        <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onSeeked={updateSpokenWord} onPlaying={startWordTracking} onPause={onAudioPaused} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
           resetPlayback();
