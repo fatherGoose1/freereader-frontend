@@ -23,6 +23,16 @@ test("only validated model timings highlight words; unsupported or unmatched tex
   assert.equal(wordAtTime([], 1), undefined);
 });
 
+test("curly quotations and an em dash keep every word aligned in the Duchess passage", () => {
+  const passage = "“Ah, well! It means much the same thing,” said the Duchess, digging her sharp little chin into Alice’s shoulder as she added, “and the moral of that is—‘Take care of the sense, and the sounds will take care of themselves.’”";
+  const spoken = normalizeForSpeech(passage);
+  const words = spokenWords(spoken);
+  const matches = matchWordTimings(passage, spoken, words.map((_, index) => [index, index * .2, (index + 1) * .2]));
+  assert.equal(matches.length, words.length);
+  assert.deepEqual(matches.map(({ word }) => passage.slice(word.start, word.start + word.length)).slice(16, 31),
+    ["into", "Alice’s", "shoulder", "as", "she", "added", "and", "the", "moral", "of", "that", "is", "Take", "care", "of"]);
+});
+
 test("word timings stay mapped after an em dash joins two displayed words", () => {
   const text = "He was looking up into the sky all the time he was speaking, and this Alice thought decidedly uncivil. “But perhaps he can’t help it,” she said to herself; “his eyes are so very nearly at the top of his head. But at any rate he might answer questions.—How am I to get in?” she repeated, aloud.";
   const spoken = normalizeForSpeech(text);

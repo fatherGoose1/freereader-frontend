@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
@@ -9,7 +9,6 @@ import { READING_CHUNK_REVISION, rechunkPdfBook } from "./readingChunks";
 import { PDF_NARRATION_REVISION, pdfTextFingerprint, refreshPdfNarration } from "./pdfNarration";
 import { asImportError, failureCategory, importFailureProperties, ImportError, type ImportFileType, type ImportStage } from "./importErrors";
 import { fileTypeHint, IMPORT_ACCEPT } from "./importFormats";
-import { readingPageStarts } from "./pagination";
 import {
   getAudio as getLocalAudio,
   getWordTimings,
@@ -43,7 +42,7 @@ import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
 import { matchWordTimings, wordAtTime, type SpokenWord, type TimedSpokenWord, type WordTiming } from "./spokenWord";
-import { useEReaderWordHighlight } from "./eReaderWordHighlight";
+import ContinuousReader from "./ContinuousReader";
 
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
@@ -205,8 +204,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [textSize, setTextSize] = useState(20);
   const [mobileToolsExpanded, setMobileToolsExpanded] = useState(false);
   const [mobilePlayerExpanded, setMobilePlayerExpanded] = useState(false);
-  const eReaderViewport = useRef<HTMLDivElement>(null);
-  const eReaderText = useRef<HTMLDivElement>(null);
   const [readingView, setReadingView] = useState<ReadingView>("native");
   const [nativeSource, setNativeSource] = useState<{ bookId: string; source: Blob | null } | null>(null);
   const [attachingSource, setAttachingSource] = useState(false);
@@ -215,6 +212,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [organizingBook, setOrganizingBook] = useState<LibraryBook | null>(null);
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
   const [selected, setSelected] = useState<LibraryBook | null>(initialBook ?? null);
+  const [navigationJump, setNavigationJump] = useState<{ bookId: string; index: number; revision: number } | null>(null);
+  const navigationJumpRevision = useRef(0);
   // Async media events must use the latest cursor, including changes before React renders.
   const selectedRef = useRef<LibraryBook | null>(initialBook ?? null);
   const bookOpenEpoch = useRef(0);
@@ -294,8 +293,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const audioPrimed = useRef(false);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
-  const PAGE_CHAR_LIMIT = 900;
-  const [page, setPage] = useState({ bookId: "", start: 0 });
   useEffect(() => {
     try { setHighlightSpokenWords(localStorage.getItem(WORD_HIGHLIGHT_PREFERENCE) !== "false"); }
     catch { /* Keep the on-by-default setting when browser storage is unavailable. */ }
@@ -340,25 +337,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }, [previewGutenberg]);
   const narrationLanguage = selected ? languageForBook(selected) : "en";
   const narrationVoice = voiceForLanguage(voice, narrationLanguage);
-  const pageStarts = useMemo(() => readingPageStarts(selected?.blocks ?? [], PAGE_CHAR_LIMIT), [selected?.id]);
-
-  useEffect(() => {
-    if (!selected) return;
-    let start = 0;
-    for (const candidate of pageStarts) {
-      if (candidate <= selected.position.blockIndex) start = candidate;
-      else break;
-    }
-    setPage((current) => current.bookId === selected.id && current.start === start
-      ? current
-      : { bookId: selected.id, start });
-  }, [selected?.id, selected?.position.blockIndex, pageStarts]);
-
-  useEffect(() => {
-    if (readingView !== "ereader" || !selected || !["epub", "pdf"].includes(selected.format)) return;
-    eReaderViewport.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [readingView, selected?.id, selected?.position.blockIndex, page.start, textSize]);
-
   useEffect(() => {
     if (!settingsRevision) return;
     const resume = resumeAfterSettings.current;
@@ -1228,6 +1206,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   function goToBlock(blockIndex: number) {
     const selected = selectedRef.current;
     if (!selected || !selected.blocks[blockIndex]) return;
+    setNavigationJump({ bookId: selected.id, index: blockIndex, revision: ++navigationJumpRevision.current });
     if (wantsPlayback.current) void playBlock(selected, blockIndex);
     else {
       resetPlayback();
@@ -1407,10 +1386,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   const activeWord = highlightSpokenWords && playing && selected && spoken?.bookId === selected.id
     && spoken.index === selected.blocks[selected.position.blockIndex]?.index ? spoken.word : undefined;
-  const supportsNativeView = selected?.format === "epub" || selected?.format === "pdf";
-  const eReaderWordOverlay = useEReaderWordHighlight(eReaderText,
-    supportsNativeView && readingView === "native" ? undefined : activeWord,
-    selected?.position.blockIndex, selected?.id, page.start, textSize);
 
   if (selected) {
     const block = selected.blocks[selected.position.blockIndex];
@@ -1418,7 +1393,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const bookProgress = readingProgress(selected, audioProgress);
     const isModelDownload = message.startsWith("Downloading voice model");
     const modelDownloadSize = isModelDownload ? message.match(/\(([^)]+ MB)\)$/)?.[1] : undefined;
-    const pageIndex = Math.max(0, pageStarts.indexOf(page.start));
     const supportsNative = selected.format === "epub" || selected.format === "pdf";
     const sourceLoaded = nativeSource?.bookId === selected.id;
     const originalSource = sourceLoaded ? nativeSource.source : null;
@@ -1459,7 +1433,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         </div>
         {accountNotice}
         {syncBar}
-        <div className={`${styles.readerGrid} ${supportsNative ? styles.nativeGrid : ""}`} inert={panel === "voice"}>
+        <div className={`${styles.readerGrid} ${styles.nativeGrid}`} inert={panel === "voice"}>
           <aside className={styles.chapterRail}>
             <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
             <span className={styles.kicker}>Contents</span>
@@ -1472,7 +1446,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               >{item.title}</button>
             ))}
           </aside>
-          <article className={`${styles.readingPane} ${supportsNative ? styles.nativePane : ""} ${floatingPdfControls ? styles.pdfPane : ""}`}>
+          <article className={`${styles.readingPane} ${styles.nativePane} ${floatingPdfControls ? styles.pdfPane : ""}`}>
             <button type="button" className={styles.mobileToolsToggle} aria-label={mobileToolsExpanded ? "Collapse reading tools" : "Expand reading tools"} aria-expanded={mobileToolsExpanded} aria-controls="reader-reading-tools" onClick={() => setMobileToolsExpanded((expanded) => !expanded)}><ReaderIcon name={mobileToolsExpanded ? "close" : "more"} /></button>
             <div id="reader-reading-tools" className={styles.readingToolbar}>
               {supportsNative ? <div className={styles.viewToggle} role="group" aria-label="Reading view">
@@ -1496,25 +1470,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                   {sourceError && <p role="alert">{sourceError}</p>}
                 </>}
               </div>
-              : <>
-            <div ref={eReaderViewport} className={supportsNative ? styles.eReaderViewport : undefined}>
-            <div ref={eReaderText} className={`${styles.readingText} ${supportsNative ? styles.eReaderPaper : ""}`} style={{ fontSize: textSize }}>
-              {selected.blocks.slice(page.start, pageStarts.find((candidate) => candidate > page.start) ?? selected.blocks.length).map((item) => (
-                item.isHeading
-                  ? <h2 key={item.index} data-block-index={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</h2>
-                  : <p key={item.index} data-block-index={item.index} aria-current={item.index === selected.position.blockIndex ? "true" : undefined} className={item.index === selected.position.blockIndex ? styles.currentBlock : ""} onClick={() => goToBlock(item.index)}>{item.text}</p>
-              ))}
-              {eReaderWordOverlay && <div className={styles.eReaderWordOverlay} data-ereader-word={eReaderWordOverlay.text} aria-hidden="true">
-                {eReaderWordOverlay.rects.map((rect, index) => <span key={index} style={rect} />)}
-              </div>}
-            </div>
-            </div>
-            <nav className={styles.pageNavigation} aria-label="Reading pages">
-              <button disabled={pageIndex === 0} onClick={() => goToBlock(pageStarts[pageIndex - 1])}><ReaderIcon name="back" /> Previous</button>
-              <span>Page {pageIndex + 1} of {pageStarts.length}</span>
-              <button disabled={pageIndex >= pageStarts.length - 1} onClick={() => goToBlock(pageStarts[pageIndex + 1])}>Next <ReaderIcon name="arrow" /></button>
-            </nav>
-            </>}
+              : <ContinuousReader key={selected.id} book={selected} textSize={textSize} spokenWord={activeWord} onNavigate={goToBlock} paper={supportsNative}
+                  navigationJump={navigationJump?.bookId === selected.id && navigationJump.index === selected.position.blockIndex ? navigationJump : null} />}
           </article>
         </div>
         {ttsProgress !== undefined && (

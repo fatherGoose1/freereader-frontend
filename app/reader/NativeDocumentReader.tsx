@@ -141,6 +141,8 @@ function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }:
             return;
           }
           const matches = [...locations].filter(([, target]) => target.section === contents.sectionIndex);
+          const element = (event.target as Element).closest("h1,h2,h3,h4,h5,h6,p,li");
+          let nearest: { index: number; distance: number } | undefined;
           for (const [index, target] of matches) {
             const range = contents.range(target.cfi);
             if ([...range.getClientRects()].some((rect) => event.clientX >= rect.left && event.clientX <= rect.right
@@ -148,7 +150,16 @@ function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }:
               navigate.current(index);
               return;
             }
+            // EPUB paragraphs can span several narration blocks, and a tap in
+            // their whitespace is still a request to start in that section.
+            if (!element?.contains(range.startContainer)) continue;
+            for (const rect of range.getClientRects()) {
+              const distance = Math.abs(event.clientY - Math.max(rect.top, Math.min(event.clientY, rect.bottom)))
+                + Math.abs(event.clientX - Math.max(rect.left, Math.min(event.clientX, rect.right)));
+              if (!nearest || distance < nearest.distance) nearest = { index, distance };
+            }
           }
+          if (nearest) navigate.current(nearest.index);
         }, true);
       });
       rendition.on("relocated", (value: Rendition["location"]) => {
@@ -418,10 +429,19 @@ function PdfPage({ pdf, book, pageNumber, width, height, fitHeight, textSize, sp
   return <div className={styles.pdfPage} ref={pageElement}>
     <canvas ref={canvas} aria-label={`Original PDF page ${pageNumber}`} />
     <div ref={layer} className={styles.textLayer} onClick={(event) => {
+      let nearest: { index: number; distance: number } | undefined;
       for (const [index, fragments] of ranges.current) {
-        if (fragments.some((range) => [...range.getClientRects()].some((rect) => event.clientX >= rect.left && event.clientX <= rect.right
-          && event.clientY >= rect.top && event.clientY <= rect.bottom))) { onNavigate(index); break; }
+        for (const range of fragments) for (const rect of range.getClientRects()) {
+          if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) {
+            onNavigate(index);
+            return;
+          }
+          if (event.clientY < rect.top - 8 || event.clientY > rect.bottom + 8) continue;
+          const distance = Math.abs(event.clientX - Math.max(rect.left, Math.min(event.clientX, rect.right)));
+          if (!nearest || distance < nearest.distance) nearest = { index, distance };
+        }
       }
+      if (nearest) onNavigate(nearest.index);
     }} />
     <div className={styles.highlights} aria-label={active ? "Current passage" : undefined} aria-current={active ? "true" : undefined}>
       {rects.map((rect, index) => <span key={index} style={rect} />)}

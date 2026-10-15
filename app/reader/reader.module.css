@@ -183,18 +183,26 @@
 .readingText h2 { margin: 24px 0; font-family: Georgia, serif; font-size: 1.5em; font-weight: 500; line-height: 1.3; }
 .readingText p { margin: 0 0 1.3em; color: #3d4655; font-family: Georgia, "Times New Roman", serif; font-size: inherit; line-height: 1.85; cursor: pointer; border-radius: 4px; }
 .readingText :is(p, h2):hover { background: #f4f6fc; }
-.readingText .currentBlock { color: #254895; background: #edf2ff; box-shadow: -4px 0 #8ca7ed; }
-.eReaderWordOverlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: multiply; }
-.eReaderWordOverlay span { position: absolute; background: #aabaff; border-radius: 4px; opacity: .7; }
+.readingText .currentBlock { color: #254895; background: #edf2ff; }
 .viewToggle { display: flex; gap: 3px; padding: 3px; background: #f1f4fa; border-radius: 8px; }
 .viewToggle button { min-height: 36px; padding: 7px 12px; color: #66758e; background: transparent; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; }
 .viewToggle button[aria-pressed="true"] { color: #254895; background: white; box-shadow: 0 1px 4px #24365c14; }
 .readingShell .nativeGrid { grid-template-columns: 190px minmax(0, 1fr); align-items: stretch; width: calc(100% - 40px); gap: 24px; overflow: hidden; padding: 16px 0; }
 .readingShell .nativePane { display: flex; flex-direction: column; padding: 0; overflow: hidden; height: 100%; }
 .nativePane .readingToolbar { flex: none; padding: 10px 16px; }
-.eReaderViewport { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; }
-.nativePane .readingText.eReaderPaper { width: min(100%, 760px); min-height: 100%; margin: 0 auto; padding: 28px 40px; background: #fff; box-shadow: 0 2px 12px #17253e18; }
-.nativePane > .pageNavigation { flex: none; padding: 12px 16px; }
+.eReaderArea { position: relative; display: flex; flex: 1; min-height: 0; }
+.eReaderViewport { flex: 1; min-height: 0; overflow: auto; overflow-anchor: none; padding: 12px 16px; }
+.eReaderViewport:focus-visible { outline: 2px solid #8ba7ff; outline-offset: -2px; }
+.resumeFollow { position: absolute; z-index: 6; right: 28px; bottom: 20px; min-height: 44px; padding: 10px 16px; color: #fff; background: #365bd6; border: 1px solid #294bbe; border-radius: 999px; box-shadow: 0 4px 16px #17253e38; font-size: 13px; font-weight: 600; cursor: pointer; }
+.resumeFollow:hover { background: #294bbe; }
+.resumeFollow:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 2px; }
+.eReaderViewport .readingText { margin: 0 auto; }
+.nativePane .readingText.eReaderPaper { width: min(100%, 760px); min-height: 100%; padding: 28px 40px; background: #fff; box-shadow: 0 2px 12px #17253e18; }
+.eReaderBlock { padding-bottom: 1.3em; }
+.eReaderHeading { padding: 24px 0; }
+.readingText .eReaderBlock p, .readingText .eReaderHeading h2 { position: relative; margin: 0; }
+.readingText .wordHighlights { position: absolute; inset: 0; pointer-events: none; }
+.readingText .spokenWord { position: absolute; overflow: hidden; color: #172f73; background: #aabaff; border-radius: 2px; white-space: pre; pointer-events: none; }
 .nativeNotice { overflow: auto; padding: 32px 24px; color: #66758e; text-align: center; font-size: 13px; line-height: 1.7; }
 .nativeNotice strong { color: #3d4655; }
 .nativeNotice button { min-height: 44px; padding: 10px 16px; color: #254895; background: #edf2ff; border: 1px solid #dfe5f0; border-radius: 8px; }
@@ -202,11 +210,9 @@
   .readingShell .nativeGrid { grid-template-columns: minmax(0, 1fr); width: calc(100% - 24px); gap: 0; padding: 12px 0; }
   .nativeGrid .chapterRail { display: none; }
   .nativePane .readingToolbar { padding: 8px; gap: 6px; }
+  .resumeFollow { right: 12px; bottom: 12px; }
   .viewToggle button { padding: 7px 8px; font-size: 11px; }
 }
-.pageNavigation { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 18px; border-top: 1px solid #edf0f5; }
-.pageNavigation button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 9px 10px; color: #536b9b; background: #f6f8fc; border: 1px solid #e8edf7; border-radius: 8px; font-size: 12px; }
-.pageNavigation span { color: #7c8799; font-size: 11px; }
 
 /* Playback has its own steady home at the bottom of the reader. */
 .player { position: fixed; z-index: 20; bottom: 18px; left: 50%; width: min(940px, calc(100% - 40px)); padding: 15px 24px 12px; color: var(--app-label); background: #fffffffa; border: 1px solid #dfe5f0; border-radius: 16px; box-shadow: 0 8px 40px #24365c1c; backdrop-filter: blur(20px); transform: translateX(-50%); }
@@ -395,9 +401,6 @@
   .readingToolbar > span { font-size: 10px; }
   .readingText { margin-top: 26px; }
   .readingText p { line-height: 1.75; }
-  .pageNavigation button { gap: 4px; padding-inline: 8px; font-size: 11px; }
-  .pageNavigation button svg { width: 16px; }
-  .pageNavigation span { font-size: 10px; }
   .player { bottom: 0; width: 100%; padding: 12px 16px max(10px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
   .readingShell .player { margin-bottom: 0; }
   .playerRow { gap: 8px; }
@@ -422,11 +425,6 @@
 .pdfPane .viewToggle { position: absolute; top: 0; left: 0; flex-direction: column; max-width: 112px; background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
 .pdfPane .textSizing { position: absolute; top: 0; right: 0; flex-direction: column; gap: 6px; pointer-events: auto; }
 .pdfPane .eReaderViewport { padding: 12px 84px 12px 132px; }
-.pdfPane > .pageNavigation { position: absolute; z-index: 4; inset: 0; display: block; padding: 0; border: 0; pointer-events: none; }
-.pdfPane > .pageNavigation button { position: absolute; top: 50%; transform: translateY(-50%); background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
-.pdfPane > .pageNavigation button:first-child { left: 12px; }
-.pdfPane > .pageNavigation button:last-child { right: 12px; }
-.pdfPane > .pageNavigation span { position: absolute; bottom: 12px; left: 12px; max-width: 112px; padding: 6px 8px; background: #ffffffdc; border-radius: 8px; line-height: 1.5; }
 @media (max-width: 800px) {
   .pdfPane .readingToolbar { inset: 8px; }
   .pdfPane .viewToggle { padding: 2px; }
@@ -434,10 +432,6 @@
   .pdfPane .textSizing button { min-width: 36px; min-height: 36px; }
   .nativePane .readingText.eReaderPaper { padding: 20px 16px; }
   .pdfPane .eReaderViewport { padding: 8px 48px 8px 68px; }
-  .pdfPane > .pageNavigation button { top: auto; bottom: 8px; width: 36px; min-height: 36px; justify-content: center; padding: 8px; font-size: 0; transform: none; }
-  .pdfPane > .pageNavigation button:first-child { left: 8px; }
-  .pdfPane > .pageNavigation button:last-child { right: 8px; }
-  .pdfPane > .pageNavigation span { bottom: 8px; left: 50%; max-width: calc(100% - 104px); font-size: 10px; white-space: nowrap; transform: translateX(-50%); }
 }
 
 /* Mobile disclosures reclaim space without changing the desktop reader. */
@@ -461,10 +455,6 @@
   .mobileCoffee svg { width: 18px; height: 18px; }
   .mobileSupportButton { color: #fff; background: #365bd6; font-size: 18px; font-weight: 700; }
   .readingShell .pdfPane .eReaderViewport { padding: 4px; }
-  .readingShell .pageNavigation { position: absolute; z-index: 5; inset: auto 6px 8px auto; display: flex; flex-direction: column; gap: 4px; width: 88px; padding: 6px; background: #fffffff2; border: 1px solid #dfe5f0; border-radius: 9px; pointer-events: auto; }
-  .readingShell[data-mobile-tools-expanded="false"] .pageNavigation { display: none; }
-  .readingShell .pageNavigation button { position: static; width: 100%; min-height: 32px; padding: 4px; font-size: 10px; transform: none; }
-  .readingShell .pageNavigation span { position: static; max-width: none; padding: 2px; font-size: 9px; white-space: normal; transform: none; text-align: center; }
   .readingShell .player { width: 100%; padding: 6px 12px max(6px, env(safe-area-inset-bottom)); margin-bottom: 0; border-radius: 12px 12px 0 0; }
   .mobilePlayerBar { display: flex; align-items: center; gap: 8px; min-height: 38px; }
   .mobilePlayerBar > span { flex: 1; color: #77839a; font-size: 11px; }

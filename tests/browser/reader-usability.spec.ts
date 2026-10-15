@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import JSZip from "jszip";
+import { spokenWords } from "../../app/reader/spokenWord";
 
 const paragraph = "Reading gives us a little time to pause and discover a different perspective. A good book can turn an ordinary afternoon into something memorable. ";
 
@@ -81,15 +83,26 @@ test("library entry points, search, sorting, and folders are usable", async ({ p
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
 });
 
-test("page navigation, text sizing, settings and resume preserve the reading position", async ({ page }, testInfo) => {
-  await upload(page, "A Quiet Afternoon", 4);
+test("continuous scrolling, text sizing, settings and resume preserve the reading position", async ({ page }, testInfo) => {
+  await upload(page, "A Quiet Afternoon", 8);
   await page.getByRole("button", { name: /^html A Quiet Afternoon/ }).click();
   await openControls(page);
-  const pages = page.getByRole("navigation", { name: "Reading pages" });
-  await expect(pages.getByRole("button", { name: "Previous" })).toBeDisabled();
-  await pages.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(pages).toContainText("Page 2 of");
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  await expect(page.getByRole("navigation", { name: "Reading pages" })).toHaveCount(0);
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const chapter = page.getByLabel("Choose chapter");
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 4" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 4" }).click();
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 4");
+  await expect(page.locator('article [aria-current="true"]')).toHaveCSS("box-shadow", "none");
+  await expect.poll(() => viewport.evaluate((element) => {
+    const current = element.querySelector('[aria-current="true"]')!.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return Math.round(100 * Math.abs((current.top + current.bottom) / 2 - (bounds.top + bounds.bottom) / 2) / bounds.height);
+  })).toBeLessThan(25);
   const position = await page.locator('article [aria-current="true"]').textContent();
+  await viewport.evaluate((element) => { element.scrollTop += 250; });
+  await expect(page.locator('article [aria-current="true"]')).toHaveText(position!);
   const originalSize = await page.locator("article p").first().evaluate((p) => getComputedStyle(p).fontSize);
   await page.getByRole("button", { name: "Increase text size" }).click();
   await expect(page.locator("article p").first()).not.toHaveCSS("font-size", originalSize);
@@ -105,8 +118,291 @@ test("page navigation, text sizing, settings and resume preserve the reading pos
   await page.getByRole("button", { name: "Continue reading", exact: true }).click();
   await openControls(page);
   await expect(page.locator('article [aria-current="true"]')).toHaveText(position!);
-  await expect(pages).toContainText("Page 2 of");
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop > 0)).toBe(true);
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
+});
+
+test("long documents scroll to the end without mounting every passage", async ({ page }) => {
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Long reading.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Long reading</title><body>${Array.from({ length: 350 }, (_, index) => `<p>Passage ${index}: ${paragraph}</p>`).join("")}</body></html>`),
+  });
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  await expect(viewport).toBeVisible();
+  await expect.poll(() => viewport.evaluate((element) => element.clientHeight > 0 && element.scrollHeight > element.clientHeight)).toBe(true);
+  await expect.poll(() => viewport.locator("[data-block-index]").count()).toBeLessThan(100);
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => viewport.locator("p").last().textContent()).toContain("Passage 349:");
+  await expect.poll(() => viewport.locator("[data-block-index]").count()).toBeLessThan(100);
+  await viewport.evaluate((element) => { element.scrollTop = 0; });
+  await expect.poll(() => viewport.locator("p").first().textContent()).toContain("Passage 0:");
+});
+
+test("resume centered scrolling immediately returns from far away and restores following", async ({ page }) => {
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Long follow.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Long follow</title><body>${Array.from({ length: 350 }, (_, index) => `<p>Passage ${index}: ${paragraph}</p>`).join("")}</body></html>`),
+  });
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  await expect.poll(() => viewport.evaluate((element) => element.clientHeight > 0 && element.scrollHeight > element.clientHeight)).toBe(true);
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  const resume = page.getByRole("button", { name: "Resume centered scrolling" });
+  await expect(resume).toBeVisible();
+  await resume.click();
+  expect(await viewport.evaluate((element) => element.scrollTop <= element.clientHeight)).toBe(true);
+  await expect(resume).toHaveCount(0);
+  await expect.poll(() => viewport.locator('p[aria-current="true"]').textContent()).toContain("Passage 0:");
+  const centered = await viewport.evaluate((element) => element.scrollTop);
+  await page.waitForTimeout(220);
+  expect(Math.abs((await viewport.evaluate((element) => element.scrollTop)) - centered)).toBeLessThan(20);
+});
+
+test("playback follows passages smoothly while explicit selections snap immediately", async ({ page }) => {
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const archive = new JSZip();
+    texts.forEach((text, index) => {
+      archive.file(`${index}.m4a`, playableWav());
+      archive.file(`${index}.json`, JSON.stringify(spokenWords(text).map((_, word) => [word, word * 0.15, word * 0.15 + 0.15])));
+    });
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+  });
+  await upload(page, "Smooth follow", 5);
+  await page.getByRole("button", { name: /^html Smooth follow/ }).click();
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const chapter = page.getByLabel("Choose chapter");
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 3" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 3" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.duration > 0)).toBe(true);
+  const current = await viewport.locator('[aria-current="true"]').textContent();
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration - 0.05; });
+  const positions = await viewport.evaluate((element) => new Promise<number[]>((resolve) => {
+    const values: number[] = [];
+    const until = performance.now() + 650;
+    const sample = () => {
+      values.push(element.scrollTop);
+      if (performance.now() < until) requestAnimationFrame(sample);
+      else resolve(values);
+    };
+    requestAnimationFrame(sample);
+  }));
+  expect(Math.max(...positions) - Math.min(...positions)).toBeGreaterThan(40);
+  expect(new Set(positions.map((position) => Math.round(position / 5))).size).toBeGreaterThan(5);
+  await expect.poll(() => viewport.locator('[aria-current="true"]').textContent()).not.toBe(current);
+
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 4" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 4" }).click();
+  await expect.poll(() => viewport.evaluate((element) => {
+    const current = element.querySelector('[aria-current="true"]')?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return current ? Math.abs((current.top + current.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
+  })).toBeLessThan(0.25);
+});
+
+test("manual scrolling stays put until follow resumes, while chapter selections snap into place", async ({ page }, testInfo) => {
+  await upload(page, "Free scrolling", 8);
+  await page.getByRole("button", { name: /^html Free scrolling/ }).click();
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  const resume = page.getByRole("button", { name: "Resume centered scrolling" });
+  await expect(resume).toHaveCount(0);
+  const chapter = page.getByLabel("Choose chapter");
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 4" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 4" }).click();
+  await expect.poll(() => viewport.evaluate((element) => {
+    const current = element.querySelector('[aria-current="true"]')?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return current ? Math.abs((current.top + current.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
+  })).toBeLessThan(0.25);
+  await expect(resume).toHaveCount(0);
+
+  if (testInfo.project.name === "desktop-chromium") {
+    await viewport.hover();
+    await page.mouse.wheel(0, 240);
+  } else await viewport.evaluate((element) => { element.scrollTop += 240; });
+  await expect(resume).toBeVisible();
+  const parked = await viewport.evaluate((element) => element.scrollTop);
+  await page.waitForTimeout(500);
+  expect(Math.abs((await viewport.evaluate((element) => element.scrollTop)) - parked)).toBeLessThan(35);
+  await expect(resume).toBeVisible();
+
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 6" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 6" }).click();
+  await expect.poll(() => viewport.evaluate((element) => {
+    const current = element.querySelector('[aria-current="true"]')?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return current ? Math.abs((current.top + current.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
+  })).toBeLessThan(0.25);
+  await expect(resume).toBeVisible();
+
+  await viewport.evaluate((element) => { element.scrollTop += 200; });
+  await expect(resume).toBeVisible();
+
+  await resume.click();
+  await expect(resume).toHaveCount(0);
+  await expect.poll(() => viewport.evaluate((element) => {
+    const current = element.querySelector('[aria-current="true"]')?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return current ? Math.abs((current.top + current.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
+  })).toBeLessThan(0.25);
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 5" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 5" }).click();
+  await expect(resume).toHaveCount(0);
+});
+
+test("spoken-word highlighting continues while manual scrolling disables word follow", async ({ page }) => {
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const archive = new JSZip();
+    texts.forEach((text, index) => {
+      archive.file(`${index}.m4a`, playableWav());
+      archive.file(`${index}.json`, JSON.stringify(spokenWords(text).map((_, word) => [word, word * 0.15, word * 0.15 + 0.15])));
+    });
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+  });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Listening aside.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Listening aside</title><body>${Array.from({ length: 8 }, () => `<p>${paragraph.repeat(5)}</p>`).join("")}</body></html>`),
+  });
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const highlighted = () => page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0]);
+  await expect.poll(highlighted).toBeTruthy();
+  const resume = page.getByRole("button", { name: "Resume centered scrolling" });
+  await viewport.evaluate((element) => { element.scrollTop += 250; });
+  await expect(resume).toBeVisible();
+  const parked = await viewport.evaluate((element) => element.scrollTop);
+  const previousWord = await highlighted();
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = 7; });
+  await expect.poll(highlighted).not.toBe(previousWord);
+  await page.waitForTimeout(300);
+  expect(Math.abs((await viewport.evaluate((element) => element.scrollTop)) - parked)).toBeLessThan(35);
+  await expect(resume).toBeVisible();
+  const previousSource = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration - 0.05; });
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc)).not.toBe(previousSource);
+  expect(Math.abs((await viewport.evaluate((element) => element.scrollTop)) - parked)).toBeLessThan(35);
+  await resume.click();
+  await expect(resume).toHaveCount(0);
+  await expect.poll(() => viewport.evaluate((element) => {
+    const word = (Array.from(CSS.highlights.get("freereader-spoken-word") ?? [])[0] as Range | undefined)?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return word ? Math.abs((word.top + word.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
+  })).toBeLessThan(0.3);
+});
+
+test("spoken-word highlighting does not reflow lines", async ({ page }) => {
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const archive = new JSZip();
+    texts.forEach((text, index) => {
+      archive.file(`${index}.m4a`, playableWav());
+      archive.file(`${index}.json`, JSON.stringify(spokenWords(text).map((_, word) => [word, word * 0.15, word * 0.15 + 0.15])));
+    });
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+  });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Steady lines.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Steady lines</title><body><p>${paragraph.repeat(5)}</p></body></html>`),
+  });
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const passage = page.locator('article p[aria-current="true"]');
+  const highlighted = () => page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0]);
+  await expect.poll(highlighted).toBeTruthy();
+  await expect(passage).toHaveCSS("background-color", "rgb(237, 242, 255)");
+  expect(await passage.evaluate((element) => getComputedStyle(element, "::highlight(freereader-spoken-word)").backgroundColor)).toBe("rgb(170, 186, 255)");
+  const geometry = () => passage.evaluate((element) => {
+    const range = document.createRange();
+    range.setStart(element.firstChild!, 30);
+    range.setEnd(element.firstChild!, 45);
+    return { height: element.getBoundingClientRect().height, line: range.getBoundingClientRect().top - element.getBoundingClientRect().top, text: element.firstChild!.textContent };
+  });
+  const before = await geometry();
+  const initialHighlight = await highlighted();
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = 7; });
+  await expect.poll(highlighted).not.toBe(initialHighlight);
+  expect(await geometry()).toEqual(before);
+});
+
+test("short words receive their own highlights during normal playback", async ({ page }) => {
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const archive = new JSZip();
+    texts.forEach((text, index) => {
+      archive.file(`${index}.m4a`, playableWav());
+      archive.file(`${index}.json`, JSON.stringify(spokenWords(text).map((_, word) => [word, word * 0.08, word * 0.08 + 0.08])));
+    });
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+  });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Short words.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Short words</title><body><p>${"We go to a small place. I am in it. ".repeat(12)}</p></body></html>`),
+  });
+  await page.evaluate(() => {
+    const observed = window as unknown as { highlightedWords: string[] };
+    observed.highlightedWords = [];
+    const capture = () => {
+      const word = Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0];
+      if (word && observed.highlightedWords.at(-1) !== word) observed.highlightedWords.push(word);
+      requestAnimationFrame(capture);
+    };
+    requestAnimationFrame(capture);
+  });
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  for (const word of ["to", "a", "I", "in"]) {
+    await expect.poll(() => page.evaluate(() => (window as unknown as { highlightedWords: string[] }).highlightedWords)).toContain(word);
+  }
+});
+
+test("the Duchess quotation highlights words across curly quotes and an em dash", async ({ page }) => {
+  const passage = "“Ah, well! It means much the same thing,” said the Duchess, digging her sharp little chin into Alice’s shoulder as she added, “and the moral of that is—‘Take care of the sense, and the sounds will take care of themselves.’”";
+  let spokenText = "";
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    spokenText = texts[0];
+    const archive = new JSZip();
+    archive.file("0.m4a", playableWav());
+    archive.file("0.json", JSON.stringify(spokenWords(spokenText).map((_, index) => [index, index * .3, (index + 1) * .3])));
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": "20" } });
+  });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Duchess.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Duchess</title><body><p>${passage}</p></body></html>`),
+  });
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => spokenText.length).toBeGreaterThan(0);
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  const words = spokenWords(spokenText);
+  for (const target of ["Alice’s", "is,", "Take", "themselves.’”"]) {
+    const index = words.findIndex((word) => spokenText.slice(word.start, word.start + word.length).includes(target));
+    expect(index).toBeGreaterThanOrEqual(0);
+    await page.locator("audio").evaluate((audio: HTMLAudioElement, time) => { audio.currentTime = time; }, index * .3 + .05);
+    await expect.poll(() => page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0] ?? "")).toBe(target.replace(/[^\p{L}\p{N}]+$/gu, ""));
+  }
+});
+
+test("older browsers still highlight short words without changing text layout", async ({ page }) => {
+  await page.evaluate(() => { Object.defineProperty(CSS, "highlights", { configurable: true, value: undefined }); });
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const archive = new JSZip();
+    texts.forEach((text, index) => {
+      archive.file(`${index}.m4a`, playableWav());
+      archive.file(`${index}.json`, JSON.stringify(spokenWords(text).map((_, word) => [word, word * 0.2, word * 0.2 + 0.2])));
+    });
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+  });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Short word fallback.html", mimeType: "text/html",
+    buffer: Buffer.from(`<html><title>Short word fallback</title><body><p>${"We go to a small place. ".repeat(12)}</p></body></html>`),
+  });
+  const passage = page.locator('article p[aria-current="true"]');
+  const height = await passage.evaluate((element) => element.getBoundingClientRect().height);
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = 0.7; });
+  await expect(passage.locator('[class*="spokenWord"]')).toHaveText("a");
+  expect(await passage.evaluate((element) => element.getBoundingClientRect().height)).toBe(height);
 });
 
 test("voice settings generate at the chosen 0.5–3.0 speaking speed without player speed or quality controls", async ({ page }) => {

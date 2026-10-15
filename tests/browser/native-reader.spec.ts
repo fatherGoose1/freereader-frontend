@@ -83,7 +83,7 @@ async function openControls(page: Page, expandPlayer = false) {
 }
 
 async function eReaderSpokenWord(page: Page) {
-  return page.evaluate(() => document.querySelector('article [data-ereader-word]')?.getAttribute("data-ereader-word") ?? "");
+  return page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0] ?? "");
 }
 
 test("EPUB preserves publisher styling and images, follows chapters, and switches views without stopping playback", async ({ page }, testInfo) => {
@@ -153,6 +153,59 @@ test("PDF renders original pages with selectable text, highlights, navigation an
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
 });
 
+test("clicking text in Original EPUB selects its passage for the E-reader", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  const frame = page.frameLocator("article iframe").first();
+  await expect(frame.locator("#original-paragraph")).toBeVisible();
+  await frame.locator("#original-paragraph").click({ position: { x: 80, y: 12 } });
+  await openControls(page);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article p[aria-current="true"]')).toContainText("Once there were four children");
+});
+
+test("tapping an Original EPUB paragraph outside its glyphs selects that section", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  await openControls(page);
+  await chooseChapter(page, "Chapter Two");
+  const collapse = page.getByRole("button", { name: "Collapse reading tools" });
+  if (await collapse.isVisible()) await collapse.click();
+  const paragraph = page.frameLocator("article iframe").first().getByText("Another chapter opens with a different paragraph");
+  await expect(paragraph).toBeVisible();
+  const box = await paragraph.boundingBox();
+  await paragraph.click({ position: { x: box!.width - 8, y: box!.height / 2 } });
+  await openControls(page);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article p[aria-current="true"]')).toContainText("Another chapter opens");
+});
+
+test("clicking text in Original PDF selects its passage for the E-reader", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
+  const secondPage = page.locator('article [class*="textLayer"]').filter({ hasText: "Second page text" });
+  await expect(secondPage).toContainText("Second page text");
+  await secondPage.getByText("Second page text is highlighted in the original PDF.").click();
+  await openControls(page);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article p[aria-current="true"]')).toHaveText("Second page text is highlighted in the original PDF.");
+});
+
+test("clicking alongside text in Original PDF selects that line's section", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Both source pages must be visible in the same spread");
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
+  const firstPage = page.locator('article [class*="textLayer"]').filter({ hasText: "Original PDF page one" });
+  const secondPage = page.locator('article [class*="textLayer"]').filter({ hasText: "Second page text" });
+  await secondPage.getByText("Second page text is highlighted in the original PDF.").click();
+  const bounds = await firstPage.boundingBox();
+  const line = await firstPage.getByText("Original PDF page one keeps its typography and placement.").boundingBox();
+  await firstPage.click({ position: { x: bounds!.width - 20, y: line!.y - bounds!.y + line!.height / 2 } });
+  await openControls(page);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('article p[aria-current="true"]')).toHaveText("Original PDF page one keeps its typography and placement.");
+});
+
 test("the spoken word advances inside the highlighted passage in both native and E-reader views", async ({ page }) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
@@ -170,9 +223,9 @@ test("the spoken word advances inside the highlighted passage in both native and
   await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration * 0.7; });
   await expect.poll(() => word.evaluate((element) => element.outerHTML)).not.toBe(firstWord);
   await page.getByRole("button", { name: "E-reader", exact: true }).click();
-  await expect.poll(() => eReaderSpokenWord(page)).not.toBe("");
+  await expect.poll(() => page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString()).length)).toBe(1);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await expect.poll(() => eReaderSpokenWord(page)).toBe("");
+  await expect.poll(() => page.evaluate(() => CSS.highlights.has("freereader-spoken-word"))).toBe(false);
   await page.getByRole("button", { name: "Original", exact: true }).click();
   await expect(word).toHaveCount(0);
   await expect(passage).toHaveCount(1);
@@ -242,7 +295,7 @@ test("short spoken words are highlighted between sparse audio timeupdate events"
     const audio = document.querySelector("audio")!;
     const seen = new Set<string>();
     const observe = () => {
-      const word = document.querySelector('article [data-ereader-word]')?.getAttribute("data-ereader-word");
+      const word = Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0];
       if (word) seen.add(word);
     };
     audio.currentTime = .9;
@@ -346,10 +399,8 @@ test("e-reader word highlighting never changes line wrapping", async ({ page }, 
     audio.currentTime = 8 + (index - 1) * 12 / Math.max(1, count - 1) + .02;
   }, { index: perhaps, count: words.length });
   await expect.poll(() => eReaderSpokenWord(page)).toBe("Perhaps");
-  const highlight = page.locator('article [data-ereader-word="Perhaps"] span').first();
-  await expect(highlight).toBeVisible();
-  expect(await highlight.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(170, 186, 255)");
-  const painted = await highlight.boundingBox();
+  expect(await passage.evaluate((element) => getComputedStyle(element, "::highlight(freereader-spoken-word)").backgroundColor)).toBe("rgb(170, 186, 255)");
+  const painted = await page.evaluate(() => (Array.from(CSS.highlights.get("freereader-spoken-word") ?? [])[0] as Range).getBoundingClientRect().toJSON());
   const textRect = await passage.evaluate((element) => {
     const start = element.firstChild!.textContent!.indexOf("Perhaps");
     const range = document.createRange();
@@ -358,9 +409,8 @@ test("e-reader word highlighting never changes line wrapping", async ({ page }, 
     const rect = range.getBoundingClientRect();
     return { x: rect.x, y: rect.y };
   });
-  expect(painted).not.toBeNull();
-  expect(Math.abs(painted!.x - textRect.x)).toBeLessThan(1);
-  expect(Math.abs(painted!.y - textRect.y)).toBeLessThan(1);
+  expect(Math.abs(painted.x - textRect.x)).toBeLessThan(1);
+  expect(Math.abs(painted.y - textRect.y)).toBeLessThan(1);
   expect(await wordPosition()).toEqual(before);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   expect(await wordPosition()).toEqual(before);
