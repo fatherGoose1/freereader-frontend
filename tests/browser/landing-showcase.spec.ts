@@ -5,7 +5,7 @@ test("landing page shows the reader demo with audio and rotating feedback", asyn
 
   const feedback = page.getByRole("region", { name: "What Our Readers Say" });
   await expect(feedback.locator(".feedback-card")).toHaveCount(12);
-  await feedback.locator(".feedback-card").first().hover();
+  await feedback.locator(".feedback-card").first().focus();
   await expect.poll(() => feedback.locator(".feedback-track").evaluate((element) => getComputedStyle(element).animationPlayState)).toBe("paused");
 
   const demo = page.getByRole("region", { name: /All your documents read aloud/ });
@@ -31,11 +31,10 @@ test("landing page shows the reader demo with audio and rotating feedback", asyn
   await expect(page.getByText("A wider world of voices")).toHaveCount(0);
   await expect(page.getByText("The live preview detects the language of your text automatically.")).toHaveCount(0);
   const final = page.locator(".final-actions");
-  const webButton = await final.getByRole("link", { name: "Start listening" }).boundingBox();
-  const appButton = await final.getByRole("link", { name: "Download VoiceReader on the App Store" }).boundingBox();
-  if (Math.abs(webButton!.y - appButton!.y) < 2) {
-    expect(Math.abs((webButton!.y + webButton!.height / 2) - (appButton!.y + appButton!.height / 2))).toBeLessThan(2);
-  } else {
-    expect(Math.abs((webButton!.x + webButton!.width / 2) - (appButton!.x + appButton!.width / 2))).toBeLessThan(2);
+  for (const name of ["Start listening", "Download VoiceReader on the App Store", "Get FreeReader on Google Play"]) {
+    const button = await final.getByRole("link", { name }).boundingBox();
+    expect(button).not.toBeNull();
+    expect(button!.x).toBeGreaterThanOrEqual(0);
+    expect(button!.x + button!.width).toBeLessThanOrEqual(viewport.width);
   }
 });

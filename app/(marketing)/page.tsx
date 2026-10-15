@@ -1,7 +1,7 @@
 import Link from "next/link";
 import CtaButton from "../components/CtaButton";
 import HeroDemo from "../components/HeroDemo";
-import AppStoreButton from "../components/AppStoreButton";
+import AppDownloadButtons from "../components/AppDownloadButtons";
 import LandingDemoVideo from "../components/LandingDemoVideo";
 import FeedbackCarousel from "../components/FeedbackCarousel";
 import ReadingSupportSection from "../components/ReadingSupportSection";
@@ -39,7 +39,7 @@ export default function Home() {
             </p>
             <div className="hero-actions">
               <Link className="button audiobook-cta" href="/reader/audiobooks">Open audiobook reader <ArrowIcon /><span className="always-free-badge">Always free</span></Link>
-              <AppStoreButton />
+              <AppDownloadButtons />
             </div>
             <div className="hero-assurances" aria-label="FreeReader product highlights">
               <span><CheckIcon /> 100% free</span>
@@ -90,10 +90,10 @@ export default function Home() {
         <div className="wrap final-cta-inner">
           <span className="eyebrow">Ready when you are</span>
           <h2>Give your words a voice.</h2>
-          <p>Listen to books for free in your browser or take VoiceReader with you on iPhone.</p>
+          <p>Listen to books for free in your browser or take VoiceReader with you on iPhone and Android.</p>
           <div className="final-actions">
             <Link className="button" href="/reader/audiobooks">Start listening <ArrowIcon /></Link>
-            <AppStoreButton />
+            <AppDownloadButtons />
           </div>
         </div>
       </section>

@@ -193,6 +193,15 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .app-store-button span { display: flex; flex-direction: column; line-height: 1.1; }
 .app-store-button small { font-size: 10px; font-weight: 500; }
 .app-store-button strong { font-size: 18px; font-weight: 650; }
+.app-downloads { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; max-width: 100%; }
+.app-download { position: relative; display: inline-flex; }
+.app-download-qr { position: absolute; z-index: 20; bottom: calc(100% + 12px); left: 50%; display: none; width: 202px; padding: 14px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 13px; box-shadow: var(--shadow-lg); text-align: center; pointer-events: none; transform: translateX(-50%); }
+.app-download-qr::after { position: absolute; bottom: -7px; left: calc(50% - 7px); width: 14px; height: 14px; background: #fff; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); content: ""; transform: rotate(45deg); }
+.app-download-qr-image { padding: 6px; background: #fff; }
+.app-download-qr-image svg { display: block; width: 100%; height: auto; }
+.app-download-qr span { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.app-download:focus-within .app-download-qr { display: block; }
+@media (hover: hover) { .app-download:hover .app-download-qr { display: block; } }
 .hero-assurances {
   display: flex;
   flex-wrap: wrap;
@@ -350,7 +359,7 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .final-cta p { margin: 0 auto 20px; color: var(--muted); font-size: 17px; }
 .final-actions { justify-content: center; }
 .final-cta .button { min-width: 205px; }
-.final-actions .app-store-button { justify-content: center; min-width: 205px; }
+.final-actions .app-store-button { justify-content: center; min-width: 175px; }
 
 /* Footer */
 footer { padding: 75px 0 24px; color: var(--ink); background: #fff; border-top: 1px solid var(--line); }
