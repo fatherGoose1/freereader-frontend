@@ -43,7 +43,7 @@ test("guests see the upgrade notice and pricing dialog in the library and reader
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   await expect(notice).toContainText("Get FreeReader Gold");
   await expect(notice).toContainText("Faster generation");
-  await expect(notice).toContainText("Dedicated servers for your audio generation");
+  await expect(notice).toContainText("A reserved Gold slot when shared generation is busy");
   await expect(notice).toContainText("Enhanced audio");
   await expect(notice).toContainText("Device syncing");
   await expect(notice.getByRole("button", { name: "See Gold plans" })).toBeVisible();

@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   }
   if (body.engine) upstreamBody.engine = body.engine;
   // Subscribers request the higher-quality stream. The backend maps this to
-  // 96 kbps versus its 32 kbps default; unknown values are ignored.
+  // 96 kbps versus its 40 kbps default; unknown values are ignored.
   if (body.quality === "enhanced") upstreamBody.quality = "enhanced";
   if (body.word_timings === true) upstreamBody.word_timings = true;
   if (typeof body.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);

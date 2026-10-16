@@ -880,9 +880,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const pdfRevision = book.pdfNarrationRevision ? `-pdf${book.pdfNarrationRevision}` : "";
     // Older Kokoro audio has no timing sidecar; regenerate it once for word cues.
     const wordRevision = language === "en" && route.model.startsWith("kokoro") ? "-words1" : "";
-    // Separate and version both tiers so existing 48 kbps clips cannot mask
-    // newly generated 32 kbps audio or cross the free/Gold boundary.
-    const qualityTier = enhanced ? "-96k-v1" : "-32k-v1";
+    // Separate and version both tiers so older 32/48 kbps clips cannot mask
+    // newly generated 40 kbps audio or cross the free/Gold boundary.
+    const qualityTier = enhanced ? "-96k-v1" : "-40k-v1";
     const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}${wordRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}${qualityTier}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
