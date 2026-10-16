@@ -242,6 +242,12 @@ export type SyncResult = {
   uploaded: number;
   downloaded: number;
   localOnly: number;
+  localOnlyReasons: {
+    documentLimit: number;
+    documentTooLarge: number;
+    differentAccount: number;
+  };
+  documentLimit: number;
 };
 
 export async function synchronizeLibrary(
@@ -261,6 +267,7 @@ export async function synchronizeLibrary(
   let uploaded = 0;
   let downloaded = 0;
   let localOnly = 0;
+  const localOnlyReasons = { documentLimit: 0, documentTooLarge: 0, differentAccount: 0 };
 
   for (const folder of localFolders) {
     if (allRecords.some((record) => record.kind === "folder" && record.itemId === folder.id && record.ownerId !== ownerId)) {
@@ -304,6 +311,7 @@ export async function synchronizeLibrary(
   for (const book of localBooks) {
     if (allRecords.some((record) => record.kind === "document" && record.itemId === book.id && record.ownerId !== ownerId)) {
       localOnly += 1;
+      localOnlyReasons.differentAccount += 1;
       continue;
     }
     const remote = remoteDocuments.get(book.id);
@@ -322,6 +330,8 @@ export async function synchronizeLibrary(
       } catch (error) {
         if (error instanceof AccountSyncError && ["document_limit_reached", "document_too_large"].includes(error.code)) {
           localOnly += 1;
+          if (error.code === "document_limit_reached") localOnlyReasons.documentLimit += 1;
+          else localOnlyReasons.documentTooLarge += 1;
           continue;
         }
         throw error;
@@ -375,5 +385,6 @@ export async function synchronizeLibrary(
     books.push(downloadedBook);
     downloaded += 1;
   }
-  return { books: await listBooks(), folders: await listFolders(), uploaded, downloaded, localOnly };
+  return { books: await listBooks(), folders: await listFolders(), uploaded, downloaded, localOnly, localOnlyReasons,
+    documentLimit: manifest.documentLimit };
 }

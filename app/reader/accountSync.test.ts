@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { decodeCloudDocument, encodeCloudDocument, synchronizeLibrary } from "./accountSync";
 import { indexedDB as fakeIndexedDB } from "fake-indexeddb";
-import { listBooks, saveBook } from "./storage";
+import { listBooks, saveAccountSyncRecord, saveBook } from "./storage";
+import { syncLimitMessage } from "./syncStatus";
 import type { LibraryBook } from "./types";
 
 test("cloud documents gzip content and keep progress in its separate record", async () => {
@@ -122,4 +123,45 @@ test("active-book sync skips other books and does not re-upload equivalent times
   await synchronizeLibrary("token", "active-owner", await listBooks(), [], activeId);
   assert.equal(requests.length, 1);
   assert.ok(requests[0].endsWith("/manifest"));
+});
+
+test("sync distinguishes the cloud count, compressed size, and different-account cases", async (t) => {
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
+  const now = new Date().toISOString();
+  const book = (title: string): LibraryBook => ({
+    id: crypto.randomUUID(), title, format: "txt", sourceName: `${title}.txt`, size: 12,
+    createdAt: now, updatedAt: now, chapters: [],
+    blocks: [{ index: 0, text: "Book content", chapterIndex: 0, isHeading: false }],
+    position: { blockIndex: 0, offsetSeconds: 0, speed: 1 },
+  });
+  const atLimit = book("At limit");
+  const tooLarge = book("Too large");
+  const otherAccount = book("Other account");
+  await Promise.all([saveBook(atLimit), saveBook(tooLarge), saveBook(otherAccount)]);
+  await saveAccountSyncRecord({ key: `previous-owner:document:${otherAccount.id}`, ownerId: "previous-owner",
+    kind: "document", itemId: otherAccount.id, revision: 1, contentUpdatedAt: now, syncedAt: now });
+  const requests: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.endsWith("/manifest")) return Response.json({ schemaVersion: 1, documentLimit: 100,
+      maxDocumentBytes: 10485760, folders: [], documents: [], progress: [] });
+    if (init?.method === "PUT" && path.endsWith(`/documents/${atLimit.id}`)) {
+      return Response.json({ error: "document_limit_reached" }, { status: 409 });
+    }
+    if (init?.method === "PUT" && path.endsWith(`/documents/${tooLarge.id}`)) {
+      return Response.json({ error: "document_too_large" }, { status: 413 });
+    }
+    throw new Error(`Unexpected sync request: ${path}`);
+  });
+
+  const result = await synchronizeLibrary("token", "current-owner", [atLimit, tooLarge, otherAccount], []);
+  assert.equal(result.localOnly, 3);
+  assert.deepEqual(result.localOnlyReasons, { documentLimit: 1, documentTooLarge: 1, differentAccount: 1 });
+  assert.equal(result.uploaded, 0);
+  assert.equal(requests.length, 3);
+  assert.equal(syncLimitMessage(result),
+    "Your account has reached its 100-book cloud limit; 1 book remains on this device. "
+    + "1 book exceeds the 10 MiB compressed-book limit and remains on this device. "
+    + "1 book was previously synced under a different account on this device and cannot sync to this account.");
 });

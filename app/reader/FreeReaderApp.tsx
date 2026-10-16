@@ -37,6 +37,7 @@ import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
 import { supabaseClient } from "./supabase";
 import { synchronizeLibrary } from "./accountSync";
+import { syncLimitMessage } from "./syncStatus";
 import { fetchUsage, linkInstallation } from "./usage";
 import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
 import { startCheckout } from "./billing";
@@ -250,6 +251,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     try { setAccountNoticeDismissed(localStorage.getItem("freereader-library-reminder-dismissed") === "true"); } catch { /* Storage may be restricted. */ }
   }, []);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "saved" | "limited" | "error">("idle");
+  const [syncLimitDetail, setSyncLimitDetail] = useState("");
   const [localRevision, setLocalRevision] = useState(0);
   const [syncAttempt, setSyncAttempt] = useState(0);
   const [plan, setPlan] = useState<string>("free");
@@ -453,6 +455,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               setSelected(updated);
             }
           } else setLocalRevision(localRevisionRef.current);
+          setSyncLimitDetail(result.localOnly ? syncLimitMessage(result) : "");
           setSyncStatus(result.localOnly ? "limited" : "saved");
         }
       } catch {
@@ -496,7 +499,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   );
   const syncBar = session && !managed && (enhanced
     ? <div className={styles.syncBar} role="status">
-      <span>{syncStatus === "syncing" ? "Syncing your library…" : syncStatus === "error" ? "Library sync failed. Your changes are still on this device." : syncStatus === "limited" ? "Some books could not sync and remain on this device (account storage limit)." : syncStatus === "saved" ? "Library and progress synced to your account" : "Signed in"}</span>
+      <span>{syncStatus === "syncing" ? "Syncing your library…" : syncStatus === "error" ? "Library sync failed. Your changes are still on this device." : syncStatus === "limited" ? syncLimitDetail : syncStatus === "saved" ? "Library and progress synced to your account" : "Signed in"}</span>
       {syncStatus === "error" && <button type="button" onClick={() => setSyncAttempt((attempt) => attempt + 1)}>Retry sync</button>}
     </div>
     : <div className={styles.syncBar} role="status">
