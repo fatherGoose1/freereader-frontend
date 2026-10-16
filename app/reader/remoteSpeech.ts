@@ -93,8 +93,7 @@ export class RemoteSpeechClient {
         body.voice = options.voice;
         body.steps = options.steps;
         if (options.engine) body.engine = options.engine;
-        // The backend will encode enhanced listening at 96 kbps and use 48 kbps
-        // by default once the corresponding backend change is deployed.
+        // The backend encodes enhanced listening at 96 kbps and defaults to 32 kbps.
         if (options.enhanced) body.quality = "enhanced";
         const voiceName = options.voice ? voiceDisplayName(options.voice) : undefined;
         if (voiceName) body.voice_name = voiceName;
