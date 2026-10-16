@@ -37,7 +37,11 @@ import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
 import { supabaseClient } from "./supabase";
 import { synchronizeLibrary } from "./accountSync";
-import { linkInstallation } from "./usage";
+import { fetchUsage, linkInstallation } from "./usage";
+import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
+import { startCheckout } from "./billing";
+import GoldDialog from "./GoldDialog";
+import ReaderAccountMenu from "./ReaderAccountMenu";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
@@ -248,6 +252,12 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "saved" | "limited" | "error">("idle");
   const [localRevision, setLocalRevision] = useState(0);
   const [syncAttempt, setSyncAttempt] = useState(0);
+  const [plan, setPlan] = useState<string>("free");
+  const [planReady, setPlanReady] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeInterval, setUpgradeInterval] = useState<EnhancedInterval>("yearly");
+  const [upgradeError, setUpgradeError] = useState("");
+  const enhanced = isEnhancedPlan(plan);
   const localRevisionRef = useRef(0);
   const syncRunning = useRef(false);
   const [importErrorMessage, setImportErrorMessage] = useState("");
@@ -372,8 +382,55 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     return () => data.subscription.unsubscribe();
   }, []);
 
+  // The plan decides both syncing and audio quality, so resolve it before showing
+  // the upgrade notice or starting any sync. Anonymous readers stay on "free".
   useEffect(() => {
-    if (managed || !libraryLoaded || !session) return;
+    if (managed || !session) { setPlan("free"); setPlanReady(true); return; }
+    let cancelled = false;
+    setPlanReady(false);
+    fetchUsage(session.access_token)
+      .then((summary) => { if (!cancelled) setPlan(summary.plan); })
+      .catch(() => { if (!cancelled) setPlan("free"); })
+      .finally(() => { if (!cancelled) setPlanReady(true); });
+    return () => { cancelled = true; };
+  }, [managed, session]);
+
+  // Continue Gold checkout after the Google round trip started from the upgrade notice.
+  useEffect(() => {
+    if (managed || !session) return;
+    let queued: string | null = null;
+    try { queued = sessionStorage.getItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
+    const url = new URL(window.location.href);
+    if (!queued) queued = url.searchParams.get("upgrade");
+    if (!isEnhancedPlan(queued)) return;
+    try { sessionStorage.removeItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
+    if (url.searchParams.has("upgrade")) {
+      url.searchParams.delete("upgrade");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+    const interval = queued === ENHANCED_PLANS.monthly ? "monthly" : "yearly";
+    void startCheckout(session.access_token, queued)
+      .then((url) => window.location.assign(url))
+      .catch(() => {
+        setUpgradeInterval(interval);
+        setUpgradeError("Couldn't open checkout. Please try again.");
+        setUpgradeOpen(true);
+      });
+  }, [managed, session]);
+
+  useEffect(() => {
+    if (managed || !authReady || session) return;
+    let queued: string | null = null;
+    try { queued = sessionStorage.getItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
+    if (!isEnhancedPlan(queued)) return;
+    try { sessionStorage.removeItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
+    setUpgradeInterval(queued === ENHANCED_PLANS.monthly ? "monthly" : "yearly");
+    setUpgradeError("Google sign-in didn't finish. Sign in and try again.");
+    setUpgradeOpen(true);
+  }, [managed, authReady, session]);
+
+  useEffect(() => {
+    if (managed || !libraryLoaded || !session || !enhanced) return;
     let cancelled = false;
     const sync = async () => {
       if (cancelled) return;
@@ -407,16 +464,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const timer = window.setTimeout(() => void sync(), localRevision ? 2_000 : 0);
     const interval = window.setInterval(() => void sync(), 60_000);
     return () => { cancelled = true; clearTimeout(timer); clearInterval(interval); };
-  }, [libraryLoaded, session, localRevision, syncAttempt]);
-
-  async function signIn() {
-    const supabase = supabaseClient();
-    if (!supabase) { setMessage("Google sign-in is unavailable right now."); return; }
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google", options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
-    });
-    if (error) setMessage("Sign-in could not be started. Try again.");
-  }
+  }, [libraryLoaded, session, localRevision, syncAttempt, enhanced]);
 
   async function signOut() {
     const { error } = await supabaseClient()!.auth.signOut();
@@ -424,21 +472,45 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     else setSyncStatus("idle");
   }
 
-  const accountNotice = !initialBook && authReady && !session && !accountNoticeDismissed && (
-    <section className={styles.accountNotice} aria-label="Save your library">
-      <div><strong>Keep your library and progress</strong><p>Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.</p></div>
-      <button type="button" onClick={() => void signIn()}>Sign in with Google</button>
-      <button type="button" className={styles.accountNoticeDismiss} aria-label="Dismiss library reminder" onClick={() => {
+  const accountNotice = !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
+    <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
+      <div>
+        <div className={styles.accountNoticeHeading}><strong>Get {ENHANCED_TIER_NAME}</strong></div>
+        <ul className={styles.accountNoticeFeatures}>
+          {ENHANCED_FEATURES.map((feature) => (
+            <li key={feature.title}>
+              <span className={styles.accountNoticeStar} aria-hidden="true">✦</span>
+              <span><b>{feature.title}:</b> <span>{feature.detail}</span></span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className={styles.accountNoticeActions}>
+        <button type="button" onClick={() => setUpgradeOpen(true)}>See Gold plans <ReaderIcon name="arrow" /></button>
+      </div>
+      <button type="button" className={styles.accountNoticeDismiss} aria-label="Dismiss upgrade reminder" onClick={() => {
         setAccountNoticeDismissed(true);
         try { localStorage.setItem("freereader-library-reminder-dismissed", "true"); } catch { /* Dismissal still works in memory. */ }
       }}>×</button>
     </section>
   );
-  const syncBar = session && <div className={styles.syncBar} role="status">
-    <span>{syncStatus === "syncing" ? "Syncing your library…" : syncStatus === "error" ? "Library sync failed. Your changes are still on this device." : syncStatus === "limited" ? "Some books could not sync and remain on this device (account storage limit)." : syncStatus === "saved" ? "Library and progress synced to your account" : "Signed in"}</span>
-    {syncStatus === "error" && <button type="button" onClick={() => setSyncAttempt((attempt) => attempt + 1)}>Retry sync</button>}
-    <button type="button" onClick={() => void signOut()}>Sign out</button>
-  </div>;
+  const syncBar = session && !managed && (enhanced
+    ? <div className={styles.syncBar} role="status">
+      <span>{syncStatus === "syncing" ? "Syncing your library…" : syncStatus === "error" ? "Library sync failed. Your changes are still on this device." : syncStatus === "limited" ? "Some books could not sync and remain on this device (account storage limit)." : syncStatus === "saved" ? "Library and progress synced to your account" : "Signed in"}</span>
+      {syncStatus === "error" && <button type="button" onClick={() => setSyncAttempt((attempt) => attempt + 1)}>Retry sync</button>}
+    </div>
+    : <div className={styles.syncBar} role="status">
+      <span>Signed in. Your library stays on this device until you upgrade.</span>
+      <button type="button" onClick={() => setUpgradeOpen(true)}>Upgrade</button>
+    </div>);
+  const accountButton = !managed && session && planReady && <ReaderAccountMenu session={session} plan={plan}
+    onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
+  const upgradeFab = !managed && planReady && !enhanced && !upgradeOpen && (
+    <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
+      <ReaderIcon name="headphones" /><span>Upgrade</span>
+    </button>
+  );
+  const upgradeDialog = upgradeOpen && <GoldDialog session={session} initialInterval={upgradeInterval} initialError={upgradeError} onClose={() => { setUpgradeOpen(false); setUpgradeError(""); }} />;
 
   useEffect(() => {
     if (managed) {
@@ -805,7 +877,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const pdfRevision = book.pdfNarrationRevision ? `-pdf${book.pdfNarrationRevision}` : "";
     // Older Kokoro audio has no timing sidecar; regenerate it once for word cues.
     const wordRevision = language === "en" && route.model.startsWith("kokoro") ? "-words1" : "";
-    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}${wordRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}`;
+    // Enhanced (subscriber) audio is a distinct, higher-quality stream; free audio
+    // keeps the original cache key so switching tiers never serves the wrong clip.
+    const qualityTier = enhanced ? "-96k-v1" : "-48k-v1";
+    const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}${wordRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}${qualityTier}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
 
@@ -880,7 +955,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       const master = synthesizeBatch(
         batch.map((item) => item.text),
         batch.map((item) => item.isHeading),
-        selectedVoice, steps, onStatus, speechRate, language, () => request.isCurrent(),
+        selectedVoice, steps, onStatus, speechRate, language, () => request.isCurrent(), "audiobook", enhanced,
       ).then(async ({ parts, route: actualRoute }) => {
         if (parts.length !== batch.length) throw new Error("Speech batch size did not match the request.");
         audioPrimed.current = true;
@@ -906,7 +981,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
 
     const promise = synthesize(block.text, selectedVoice, steps, onStatus, block.isHeading, speechRate, language,
-      () => request.isCurrent()).then(async ({ blob, duration, provider, generationStartedAt, wordTimings, route: actualRoute }) => {
+      () => request.isCurrent(), "audiobook", undefined, enhanced).then(async ({ blob, duration, provider, generationStartedAt, wordTimings, route: actualRoute }) => {
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
       const partKey = audioCacheKey(book, index, actualRoute);
       if (wordTimings) await saveWordTimings(partKey, wordTimings);
@@ -1429,6 +1504,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 </select>
               </label>
             )}
+            {accountButton}
           </div>
         </div>
         {accountNotice}
@@ -1455,7 +1531,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
               {!managed && <div className={styles.mobileSupportActions}>
-                <a className={styles.mobileCoffee} href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer" aria-label="Support FreeReader" title="Support FreeReader"><ReaderIcon name="coffee" /></a>
+                {planReady && !enhanced && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="headphones" /></button>}
                 <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
               </div>}
             </div>
@@ -1542,6 +1618,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </div>
           </div>
         )}
+        {upgradeFab}
+        {upgradeDialog}
       </main>
     );
   }
@@ -1576,8 +1654,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
         </Link>
         <div className={styles.actions}>
-          {authReady && !session && <button type="button" className={styles.librarySignIn} onClick={() => void signIn()}>Sign in to save your library</button>}
+          {authReady && planReady && !enhanced && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}
           <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
+          {accountButton}
           <input ref={fileInputRef} hidden type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
@@ -1593,7 +1672,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             <div>
               <h1>Your library</h1>
             </div>
-            <span className={styles.storageBadge}><span className={styles.localDot} />Listening for free</span>
+            <span className={styles.storageBadge}><span className={styles.localDot} />{enhanced ? `${ENHANCED_TIER_NAME} audio on` : "Listening for free"}</span>
           </div>
           {!activeFolderId && !search && continueBook && (
             <section className={styles.continueCard} aria-label="Continue reading">
@@ -1728,7 +1807,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 {busy ? "Adding" : "Add to Library"}
               </button>
             </div>
-            <div className={styles.modalPrivacy}>Pasted text is stored in this browser{session ? " and synced to your account" : " until you sign in to sync it"}.</div>
+            <div className={styles.modalPrivacy}>Pasted text is stored in this browser{enhanced ? " and synced to your account" : ""}.</div>
           </form>
         </div>
       )}
@@ -1777,7 +1856,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             <label className={styles.fieldLabel}>Article or document URL<input autoFocus type="url" placeholder="https://example.com/article" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
             {importErrorMessage && <p role="alert">{importErrorMessage}</p>}
             <div className={styles.modalActions}><button type="button" onClick={() => setPanel(null)}>Cancel</button><button className={styles.primaryAction} disabled={busy}>{busy && <span className={styles.addSpinner} aria-label="Importing" />}{busy ? "Importing" : "Import link"}</button></div>
-            <div className={styles.modalPrivacy}>Imported content is stored in this browser{session ? " and synced to your account" : " until you sign in to sync it"}.</div>
+            <div className={styles.modalPrivacy}>Imported content is stored in this browser{enhanced ? " and synced to your account" : ""}.</div>
           </form>
         </div>
       )}
@@ -1853,6 +1932,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </div>
         </div>
       )}
+      {upgradeFab}
+      {upgradeDialog}
     </main>
   );
 }

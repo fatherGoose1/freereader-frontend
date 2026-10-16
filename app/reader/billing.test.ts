@@ -22,6 +22,20 @@ test("Premium displays the Stripe price and requests Premium checkout", async (t
   assert.deepEqual(JSON.parse(calls[1].body ?? ""), { plan: "premium" });
 });
 
+test("Gold yearly and monthly checkout use their own plan ids", async (t) => {
+  const calls: Array<{ url: string; body?: string }> = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), body: init?.body as string | undefined });
+    return calls.length === 1
+      ? Response.json({ amount_cents: 1200, currency: "usd", interval: "year" })
+      : Response.json({ url: "https://checkout.stripe.com/c/pay/gold" });
+  });
+  assert.equal((await fetchPlanPrice("gold_yearly")).interval, "year");
+  assert.ok(calls[0].url.endsWith("/billing/price?plan=gold_yearly"));
+  assert.equal(await startCheckout("access-token", "gold_monthly"), "https://checkout.stripe.com/c/pay/gold");
+  assert.deepEqual(JSON.parse(calls[1].body ?? ""), { plan: "gold_monthly" });
+});
+
 test("billing actions request a hosted Stripe URL for the signed-in user", async (t) => {
   const requests: Array<{ path: string; authorization: string | null }> = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {

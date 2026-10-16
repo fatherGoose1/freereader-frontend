@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as {
     text?: unknown; texts?: unknown; speed?: unknown;
-    language?: unknown; detectLanguage?: unknown; voice?: unknown; voiceName?: unknown; steps?: unknown; engine?: unknown; word_timings?: unknown;
+    language?: unknown; detectLanguage?: unknown; voice?: unknown; voiceName?: unknown; steps?: unknown; engine?: unknown; word_timings?: unknown; quality?: unknown;
   } | null;
   if (!body || typeof body.speed !== "number" || !Number.isFinite(body.speed)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
@@ -36,6 +36,9 @@ export async function POST(request: Request) {
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }
   if (body.engine) upstreamBody.engine = body.engine;
+  // Subscribers request the higher-quality stream. The backend will map this to
+  // 96 kbps versus its planned 48 kbps default; unknown values are ignored.
+  if (body.quality === "enhanced") upstreamBody.quality = "enhanced";
   if (body.word_timings === true) upstreamBody.word_timings = true;
   if (typeof body.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);
   const backend = process.env.KOKO_BACKEND_URL
@@ -44,6 +47,11 @@ export async function POST(request: Request) {
   if (!token) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
   const upstreamContext = (request.headers.get("x-freereader-context") ?? "").slice(0, 2048);
   const upstreamUser = (request.headers.get("x-freereader-user-token") ?? "").slice(0, 4096);
+  // The backend must verify this token and the Gold entitlement before
+  // honoring quality=enhanced; a request body or client header alone is not proof.
+  if (body.quality === "enhanced" && !upstreamUser) {
+    return NextResponse.json({ error: "sign_in_required" }, { status: 401 });
+  }
 
   let response: Response;
   const controller = new AbortController();

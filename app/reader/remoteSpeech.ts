@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import type { TtsStatus } from "./tts";
 import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
-import { currentAccessToken } from "./authToken";
+import { currentAccessToken, currentSessionAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
 import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isQwenVoice, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
@@ -10,7 +10,7 @@ import type { SpeechResult } from "./mobileSpeech";
 import { parseWordTimings } from "./spokenWord";
 
 type BatchItem = { text: string; isHeading: boolean };
-type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic"; source?: TelemetrySource; instruct?: string };
+type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic"; source?: TelemetrySource; instruct?: string; enhanced?: boolean };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (payload?.error === "usage_limit_reached") {
@@ -18,6 +18,7 @@ function unavailableMessage(response: Response, payload: { error?: unknown } | n
   }
   if (payload?.error === "sign_in_required") return "Sign in to generate narration. Audiobook listening stays free.";
   if (payload?.error === "premium_required") return "A Pro or Premium subscription is required to use premium voices.";
+  if (payload?.error === "enhanced_audio_required") return "FreeReader Gold is required for enhanced audio. Refresh your account and try again.";
   if (payload?.error === "premium_voice_limit_reached") return "You have used your monthly premium voice allowance. Try a standard voice or upgrade your plan.";
   if (payload?.error === "voice_not_owned") return "This cloned voice belongs to another account.";
   if (typeof payload?.error === "string" && payload.error) return payload.error;
@@ -92,10 +93,15 @@ export class RemoteSpeechClient {
         body.voice = options.voice;
         body.steps = options.steps;
         if (options.engine) body.engine = options.engine;
+        // The backend will encode enhanced listening at 96 kbps and use 48 kbps
+        // by default once the corresponding backend change is deployed.
+        if (options.enhanced) body.quality = "enhanced";
         const voiceName = options.voice ? voiceDisplayName(options.voice) : undefined;
         if (voiceName) body.voice_name = voiceName;
       }
-      const userToken = options?.source === "youtube_narration" ? currentAccessToken() : null;
+      const userToken = options?.enhanced ? await currentSessionAccessToken()
+        : options?.source === "youtube_narration" ? currentAccessToken() : null;
+      if (options?.enhanced && !userToken) throw new Error("Sign in to use enhanced audio.");
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: {

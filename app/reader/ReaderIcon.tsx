@@ -19,7 +19,6 @@ const paths = {
   more: "M5 12h.01M12 12h.01M19 12h.01",
   chevronUp: "m6 15 6-6 6 6",
   chevronDown: "m6 9 6 6 6-6",
-  coffee: "M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Zm13 1h2a2 2 0 0 1 0 4h-2M8 3v2m5-2v2M3 21h15",
 } as const;
 
 export default function ReaderIcon({ name }: { name: keyof typeof paths }) {

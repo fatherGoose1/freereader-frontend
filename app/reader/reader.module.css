@@ -39,6 +39,8 @@
 
 /* A single, predictable workspace header. */
 .libraryHero {
+  position: relative;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -60,15 +62,42 @@
 .actions { display: flex; align-items: center; gap: 12px; max-width: 100%; margin-left: auto; }
 .librarySignIn { min-height: 44px; padding: 10px 18px; color: var(--app-label); background: #fff; border: 1px solid var(--border); border-radius: 9px; font-weight: 500; }
 .librarySignIn:hover { background: var(--app-grouped); }
-.accountNotice { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(620px, calc(100% - 32px)); margin: 14px auto 0; padding: 14px 44px 14px 16px; color: #46536b; background: #f5f7fc; border: 1px solid #dfe7f5; border-radius: 12px; box-shadow: 0 0 0 3px #f2ca6650, 0 0 28px #f2ca6680, 0 8px 24px #24365c12; }
-.accountNotice > div { padding-right: 24px; }
-.accountNotice strong { display: block; font-size: 14px; }
+.accountNotice { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 18px; width: min(620px, calc(100% - 32px)); margin: 14px auto 0; padding: 18px 44px 18px 20px; color: #58421c; background: linear-gradient(120deg, #fffcf5, #fff3d9); border: 1px solid #d3a343; border-radius: 14px; box-shadow: 0 0 0 3px #d7a93f70, 0 0 34px #c9962d80, 0 10px 28px #7350132b; }
+.accountNotice > div:first-of-type { min-width: 0; }
+.accountNoticeHeading { padding-right: 16px; }
+.accountNoticeHeading strong { color: #503812; font-size: 19px; font-weight: 750; line-height: 1.25; letter-spacing: -.025em; }
 .accountNotice p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; }
-.accountNotice button { flex: none; min-height: 38px; padding: 8px 12px; color: #365bd6; background: #fff; border: 1px solid #c9d7f6; border-radius: 8px; font-size: 12px; font-weight: 650; }
-.accountNotice button:hover { background: #e9efff; }
-.accountNotice .accountNoticeDismiss { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 30px; min-height: 30px; padding: 0; color: #66758e; background: transparent; border: 0; font-size: 22px; font-weight: 400; line-height: 1; }
+.accountNotice button { flex: none; min-height: 46px; padding: 10px 15px; color: #48300a; background: #edc468; border: 1px solid #b3832e; border-radius: 9px; box-shadow: 0 3px 9px #9d752435; font-size: 13px; font-weight: 750; }
+.accountNotice button:hover { background: #f6d992; }
+.accountNotice .accountNoticeDismiss { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 30px; min-height: 30px; padding: 0; color: #66758e; background: transparent; border: 0; box-shadow: none; font-size: 22px; font-weight: 400; line-height: 1; }
+.accountNoticeFeatures { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.accountNoticeFeatures li { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; }
+.accountNoticeStar { flex: none; color: #b88828; font-size: 21px; line-height: 1; }
+.accountNoticeFeatures b { color: #5b400f; font-weight: 650; }
+.accountNoticeFeatures li > span:last-child { color: #735d37; }
+.accountNoticeActions { display: flex; align-items: center; flex: none; }
+.accountNoticeActions button { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.accountNoticeActions svg { width: 17px; height: 17px; }
+.accountNotice .accountNoticeDismiss:hover { background: #fae8bf; }
+.upgradeFab { position: fixed; z-index: 30; right: 20px; bottom: calc(max(20px, env(safe-area-inset-bottom)) + 56px); display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 0 14px; color: #35250a; background: #e9bc56; border: 1px solid #ad7b20; border-radius: 24px; box-shadow: 0 0 0 2px #fff4cd, 0 8px 28px #8c661c66; font-size: 13px; font-weight: 700; }
+.upgradeFab:hover { background: #f4d17f; }
+.upgradeFab svg { width: 20px; height: 20px; }
+.readingShell .upgradeFab { bottom: 216px; }
 .syncBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px max(28px, calc((100vw - 1160px) / 2)); color: #425578; background: #eaf0fc; font-size: 12px; }
 .syncBar button { padding: 6px 10px; color: #365bd6; background: transparent; border: 0; border-radius: 6px; }
+.accountMenu { position: relative; flex: none; }
+.accountCircle { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; color: #536584; background: #fff; border: 1px solid #dce3ef; border-radius: 50%; }
+.accountCircle:hover { background: #f2f5fb; }
+.goldAccountCircle { color: #68480f; background: #fff3d5; border-color: #d3a343; box-shadow: 0 0 0 2px #d7a93f52; }
+.goldAccountCircle:hover { background: #ffeab5; }
+.accountPopover { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; display: grid; gap: 8px; width: min(288px, calc(100vw - 24px)); padding: 16px; color: var(--app-label); background: #fff; border: 1px solid #d9b76b; border-radius: 12px; box-shadow: 0 12px 32px #372c1b33; text-align: left; }
+.accountPopover strong { font-size: 14px; }
+.accountPopover small, .accountEmail { color: #697386; font-size: 12px; line-height: 1.45; }
+.accountEmail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountPopover button { width: 100%; min-height: 38px; padding: 8px 10px; color: #58401a; background: #fff7e7; border: 1px solid #e8d5a7; border-radius: 8px; font-size: 13px; text-align: left; }
+.accountPopover button:hover:not(:disabled) { background: #ffedc1; }
+.accountPopover button:last-child { margin-top: 6px; color: #536584; background: #f5f7fc; border-color: #dce3ef; }
+.accountError { margin: 0; color: #b3261e; font-size: 12px; }
 
 /* Library: entry points first, then the collection. */
 .libraryLayout { width: min(1160px, calc(100% - 56px)); margin: auto; padding: 44px 0 36px; }
@@ -251,6 +280,26 @@
 .modalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .modalActions button:not(.primaryAction), .catalogSearch button, .catalogList button, .catalog > button { min-height: 44px; padding: 10px 16px; color: #536584; background: #f5f7fc; border: 1px solid var(--border); border-radius: 8px; font-weight: 500; }
 .modalPrivacy { margin-top: 22px; padding-top: 16px; color: #7f8c9e; border-top: 1px solid #edf0f5; font-size: 11px; text-align: center; }
+.goldModal { position: relative; width: min(440px, 100%); border-color: #d9b76b; box-shadow: 0 0 0 2px #d7a93f50, 0 24px 80px #674d1b40; }
+.goldClose { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: #76603a; background: transparent; border: 0; border-radius: 8px; }
+.goldClose:hover { background: #fff4d8; }
+.goldFeatures { display: grid; gap: 14px; margin: 20px 0 0; padding: 0; list-style: none; }
+.goldFeatures li { display: flex; align-items: flex-start; gap: 12px; }
+.goldCheck { flex: none; display: grid; place-items: center; width: 26px; height: 26px; color: #865d0e; background: #fff0ca; border-radius: 50%; }
+.goldCheck svg { width: 14px; height: 14px; }
+.goldFeatures strong { display: block; color: var(--app-label); font-size: 14px; }
+.goldFeatures small { display: block; margin-top: 2px; color: #7f8c9e; font-size: 12px; }
+.goldToggle { display: flex; gap: 6px; margin-top: 22px; padding: 4px; background: #fff7e7; border: 1px solid #e8d5a7; border-radius: 10px; }
+.goldToggle button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; color: #6b5733; background: transparent; border: 0; border-radius: 7px; font-size: 13px; font-weight: 600; }
+.goldToggle button[aria-pressed="true"] { color: #5b400f; background: #fff; box-shadow: 0 1px 4px #8c661c30; }
+.goldToggle small { color: #865d0e; font-size: 11px; font-weight: 700; }
+.goldPrice { display: flex; align-items: baseline; gap: 10px; margin: 20px 0 4px; }
+.goldPrice strong { color: var(--app-label); font-size: 40px; line-height: 1; }
+.goldPrice span { color: #6b7a92; font-size: 13px; }
+.goldError { margin: 12px 0 0; color: #b3261e; font-size: 12px; }
+.goldCta { display: flex; justify-content: center; width: 100%; margin-top: 18px; color: #35250a; background: #e9bc56; }
+.goldCta:hover:not(:disabled) { background: #f4d17f; }
+.goldNote { display: block; margin-top: 10px; color: #8390a3; font-size: 11px; text-align: center; }
 .rightsNotice, .catalogRights { padding: 14px 16px; color: #53627c; background: #f5f7fc; border: 1px solid #e1e7f2; border-radius: 9px; font-size: 12px; line-height: 1.6; }
 .rightsNotice { margin: 16px 0 0; }
 .catalogRights { margin: 0 0 16px; }
@@ -348,10 +397,11 @@
   .continueCard > button { margin-left: 82px; }
 }
 @media (max-width: 560px) {
-  .accountNotice { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 16px; }
-  .accountNotice strong { font-size: 14px; }
+  .accountNotice { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; }
+  .accountNoticeHeading { padding-right: 28px; }
+  .accountNoticeHeading strong { font-size: 18px; }
   .accountNotice p { font-size: 12px; }
-  .accountNotice button { align-self: flex-start; }
+  .accountNoticeActions button { justify-content: center; width: 100%; }
   .syncBar { padding-inline: 16px; }
   .libraryHero { min-height: 72px; padding: 14px 16px; gap: 10px; }
   .libraryBrand { gap: 8px; font-size: 17px; }
@@ -360,8 +410,7 @@
   .actions { gap: 5px; }
   .actions:has(.librarySignIn) { width: 100%; }
   .librarySignIn { flex: 1; min-width: 0; padding: 9px 12px; font-size: 12px; }
-  .accountButton { padding: 8px; }
-  .accountButton span { display: none; }
+  .accountCircle { width: 38px; height: 38px; }
   .actions .primaryAction { flex: none; padding: 9px 12px; font-size: 12px; }
   .actions .primaryAction svg { width: 16px; }
   .libraryLayout { width: calc(100% - 32px); padding-top: 28px; }
@@ -436,6 +485,8 @@
 
 /* Mobile disclosures reclaim space without changing the desktop reader. */
 @media (max-width: 800px) {
+  .upgradeFab { right: 14px; }
+  .readingShell .upgradeFab { display: none; }
   .readingShell .readerTop { display: flex; justify-content: space-between; gap: 8px; min-height: 44px; padding: max(4px, env(safe-area-inset-top)) 8px 4px; }
   .readingShell .readerTitle { display: none; }
   .readingShell .readerTop .textButton, .readingShell .chapterPicker { min-height: 34px; padding: 6px 8px; }
@@ -450,9 +501,9 @@
   .readingShell .readingToolbar .textSizing { position: static; flex-direction: row; justify-content: center; gap: 4px; }
   .readingShell .readingToolbar .textSizing button { min-width: 32px; min-height: 32px; padding: 3px; font-size: 12px; }
   .readingShell .mobileSupportActions { display: flex; justify-content: center; gap: 4px; }
-  .mobileCoffee, .mobileSupportButton { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; }
-  .mobileCoffee { color: #30230b; background: #ffdd72; }
-  .mobileCoffee svg { width: 18px; height: 18px; }
+  .mobileUpgrade, .mobileSupportButton { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; }
+  .mobileUpgrade { color: #35250a; background: #e9bc56; }
+  .mobileUpgrade svg { width: 18px; height: 18px; }
   .mobileSupportButton { color: #fff; background: #365bd6; font-size: 18px; font-weight: 700; }
   .readingShell .pdfPane .eReaderViewport { padding: 4px; }
   .readingShell .player { width: 100%; padding: 6px 12px max(6px, env(safe-area-inset-bottom)); margin-bottom: 0; border-radius: 12px 12px 0 0; }

@@ -1,10 +1,11 @@
 import { telemetryContext } from "./telemetry";
+import type { EnhancedPlanId } from "./enhanced";
 
 const API_BASE = (process.env.NEXT_PUBLIC_KOKO_BACKEND_URL
   ?? "https://koko-backend-production-c887.up.railway.app").replace(/\/$/, "");
 
 export interface UsageSummary {
-  plan: "free" | "pro" | "premium";
+  plan: "free" | "pro" | "premium" | EnhancedPlanId;
   period: string;
   budget_seconds: number;
   used_seconds: number;

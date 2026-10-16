@@ -66,18 +66,6 @@ export default function ReadingSupportSection() {
           </aside>
         </div>
 
-        <div className={styles.donation}>
-          <div>
-            <p>
-              FreeReader is a non-commercial, donation-funded product. Donations
-              help us keep the reader running and free for everyone who needs it.
-              You don’t need to donate to use it.
-            </p>
-          </div>
-          <a className="coffee-button" href="https://buymeacoffee.com/freereader" target="_blank" rel="noopener noreferrer">
-            Help keep FreeReader free
-          </a>
-        </div>
       </div>
     </section>
   );

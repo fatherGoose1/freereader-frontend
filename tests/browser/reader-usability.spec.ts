@@ -1,6 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { loadEnvConfig } from "@next/env";
 import JSZip from "jszip";
 import { spokenWords } from "../../app/reader/spokenWord";
+
+loadEnvConfig(process.cwd());
 
 const paragraph = "Reading gives us a little time to pause and discover a different perspective. A good book can turn an ordinary afternoon into something memorable. ";
 
@@ -36,23 +39,92 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
-test("guests see the storage warning and Google sign-in in the library and reader", async ({ page }) => {
-  const notice = page.getByRole("region", { name: "Save your library" });
-  await expect(notice).toContainText("Your library and reading progress will stay until your browser clears its storage. Sign in to save it permanently.");
-  await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+test("guests see the upgrade notice and pricing dialog in the library and reader", async ({ page }, testInfo) => {
+  const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
+  await expect(notice).toContainText("Get FreeReader Gold");
+  await expect(notice).toContainText("Faster generation");
+  await expect(notice).toContainText("Dedicated servers for your audio generation");
+  await expect(notice).toContainText("Enhanced audio");
+  await expect(notice).toContainText("Device syncing");
+  await expect(notice.getByRole("button", { name: "See Gold plans" })).toBeVisible();
+  await notice.screenshot({ path: testInfo.outputPath("gold-upgrade-notice.png") });
   const bounds = await notice.boundingBox();
   const viewportWidth = await page.evaluate(() => window.innerWidth);
   expect(bounds!.width).toBeLessThan(viewportWidth);
   expect(Math.abs(bounds!.x + bounds!.width / 2 - viewportWidth / 2)).toBeLessThan(2);
+
+  // The notice opens the pricing dialog with yearly and monthly prices.
+  await notice.getByRole("button", { name: "See Gold plans" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("$1");
+  await expect(dialog).toContainText("billed $12 yearly");
+  await dialog.getByRole("button", { name: "Monthly" }).click();
+  await expect(dialog).toContainText("$4");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
   await openControls(page);
   await expect(notice).toBeVisible();
-  await expect(notice.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  await expect(notice.getByRole("button", { name: "See Gold plans" })).toBeVisible();
+  const upgrade = page.getByRole("button", { name: "Upgrade to FreeReader Gold" });
+  await expect(upgrade).toBeVisible();
+  await upgrade.click();
+  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toBeVisible();
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
+  await expect(page.locator('a[href*="buymeacoffee.com"]')).toHaveCount(0);
   await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
   await expect(page.getByText("Listen along")).toHaveCount(0);
   await expect(page.locator('[class*="readerTools"]').getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
   await expect(page.locator('[class*="playerRow"]').getByRole("button", { name: "Voice", exact: true })).toBeVisible();
+});
+
+test("an OAuth fallback to the homepage returns to the reader with the chosen billing interval", async ({ page }) => {
+  await page.evaluate(() => sessionStorage.setItem("freereaderUpgradePlan", "gold_monthly"));
+  await page.goto("/");
+  await page.waitForURL("**/reader/audiobooks");
+  const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
+  await expect(dialog).toContainText("Google sign-in didn't finish");
+  await expect(dialog).toContainText("$4");
+});
+
+test("a Gold subscriber manages billing from the account circle in the library and reader", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  const session = {
+    access_token: "gold-test-token", refresh_token: "gold-test-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user: { id: "11111111-1111-4111-8111-111111111111", email: "reader@example.com", aud: "authenticated", role: "authenticated",
+      app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() },
+  };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: session.user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
+  await page.route("**/api/v1/freereader/sync/**", (route) => route.fulfill({ status: 403, json: { error: "sync_unavailable" } }));
+  const portalRequests: string[] = [];
+  await page.route("**/api/v1/freereader/billing/portal", (route) => {
+    portalRequests.push(route.request().headers().authorization ?? "");
+    return route.fulfill({ status: 503, json: { error: "billing_not_configured" } });
+  });
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  const account = page.getByRole("button", { name: "Account settings" });
+  await expect(account).toBeVisible();
+  await expect(page.getByRole("button", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await account.click();
+  await expect(page.getByText("FreeReader Gold", { exact: true })).toBeVisible();
+  await expect(page.getByText("Yearly plan")).toBeVisible();
+  await page.getByRole("button", { name: "Manage subscription" }).click();
+  await expect(page.locator('[class*="accountPopover"]').getByRole("alert")).toContainText("Couldn't open Stripe billing");
+  expect(portalRequests).toEqual(["Bearer gold-test-token"]);
+  await page.getByRole("button", { name: "Account settings" }).click();
+  await upload(page, "Gold reader");
+  await page.getByRole("button", { name: /^html Gold reader/ }).click();
+  await expect(account).toBeVisible();
+  await account.click();
+  await expect(page.getByRole("button", { name: "Manage subscription" })).toBeVisible();
 });
 
 test("library entry points, search, sorting, and folders are usable", async ({ page }, testInfo) => {
@@ -406,7 +478,7 @@ test("older browsers still highlight short words without changing text layout", 
 });
 
 test("voice settings generate at the chosen 0.5–3.0 speaking speed without player speed or quality controls", async ({ page }) => {
-  const requests: Array<{ speed: number; engine?: string }> = [];
+  const requests: Array<{ speed: number; engine?: string; quality?: string }> = [];
   await page.route("**/api/tts", (route) => {
     requests.push(route.request().postDataJSON());
     return route.fulfill({ status: 503, json: { error: "Try again" } });
@@ -429,6 +501,7 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests[0].speed).toBe(3);
+  expect(requests[0].quality).toBeUndefined();
 
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await dialog.getByLabel("Voice").selectOption("F4");
@@ -439,6 +512,7 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toMatchObject({ speed: 0.5, engine: "supertonic" });
+  expect(requests[1].quality).toBeUndefined();
 });
 
 test("changing voice during first generation starts the new voice without another Listen click", async ({ page }) => {

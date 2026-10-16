@@ -105,6 +105,41 @@ test("English Supertonic requests tell the backend which model to use", async (t
   assert.equal(fetch.mock.callCount(), 1);
 });
 
+test("enhanced requests forward the higher-quality stream and unknown values are dropped", async (t) => {
+  const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
+  process.env.FREEREADER_TTS_API_TOKEN = "test-token";
+  t.after(() => {
+    if (originalToken === undefined) delete process.env.FREEREADER_TTS_API_TOKEN;
+    else process.env.FREEREADER_TTS_API_TOKEN = originalToken;
+  });
+  const bodies: unknown[] = [];
+  t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    assert.equal(new Headers(init?.headers).get("X-FreeReader-User-Token"), bodies.length === 1 ? "subscriber-token" : null);
+    return new Response(new Uint8Array([1]), { headers: { "Content-Type": "audio/mp4" } });
+  });
+
+  const enhanced = await POST(new Request("http://localhost/api/tts", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "subscriber-token" },
+    body: JSON.stringify({ text: "Hello reader.", speed: 1, voice: "af_heart", quality: "enhanced" }),
+  }));
+  const standard = await POST(new Request("http://localhost/api/tts", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: "Hello reader.", speed: 1, voice: "af_heart", quality: "standard" }),
+  }));
+
+  assert.equal(enhanced.status, 200);
+  assert.equal(standard.status, 200);
+  assert.equal((bodies[0] as { quality?: string }).quality, "enhanced");
+  assert.ok(!("quality" in (bodies[1] as Record<string, unknown>)));
+  const anonymous = await POST(new Request("http://localhost/api/tts", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: "Hello reader.", speed: 1, quality: "enhanced" }),
+  }));
+  assert.equal(anonymous.status, 401);
+  assert.equal(bodies.length, 2);
+});
+
 test("reader word timings request preserves the audio-and-timings archive", async (t) => {
   const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
   process.env.FREEREADER_TTS_API_TOKEN = "test-token";

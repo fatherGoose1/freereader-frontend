@@ -28,7 +28,7 @@ export default function PrivacyPolicy() {
       <p>
         The VoiceReader iOS App and the anonymous path in FreeReader do not
         require an account. Your local library is stored on your device;
-        without web sign-in, it is not synced to your account. Locally stored
+        without a Gold subscription, it is not synced to your account. Locally stored
         information includes:
       </p>
       <ul>
@@ -50,11 +50,11 @@ export default function PrivacyPolicy() {
 
       <h2>3. Account sign-in and library sync</h2>
       <p>
-        You may sign in with Google through Supabase to sync your audiobook library
-        or use video narration plans. If you sign in, we receive your Google
+        You may sign in with Google through Supabase for a Gold subscription
+        or to use video narration. If you sign in, we receive your Google
         account identifier, email address, and basic profile information made
-        available by Google. The web reader syncs your parsed documents, folders,
-        and reading progress to your account while you are signed in. Video
+        available by Google. With an active Gold subscription, the web reader syncs your parsed documents, folders,
+        and reading progress to your account. Video
         narration sends script passages to our speech service to generate audio.
       </p>
       <p>Synced audiobook data may include:</p>

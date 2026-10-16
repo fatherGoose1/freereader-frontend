@@ -17,8 +17,7 @@
   letter-spacing: -.035em;
 }
 
-.copy p,
-.donation p {
+.copy p {
   color: #535b67;
   font-size: 16px;
   line-height: 1.75;
@@ -96,25 +95,6 @@
   line-height: 1.7;
 }
 
-.donation {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
-  margin-top: 52px;
-  padding-top: 32px;
-  border-top: 1px solid #ded8c9;
-}
-
-.donation p {
-  max-width: 700px;
-  margin: 0;
-}
-
-.donation > a {
-  flex: none;
-}
-
 .section a:focus-visible {
   outline: 3px solid var(--forest);
   outline-offset: 4px;
@@ -137,10 +117,4 @@
     font-size: 34px;
   }
 
-  .donation {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 22px;
-    margin-top: 36px;
-  }
 }

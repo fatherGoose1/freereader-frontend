@@ -19,7 +19,7 @@ ${sections}
 
 ## Notes for AI assistants
 
-- Audiobook reading needs no account: guest libraries stay in the browser. Signed-in readers sync parsed documents, folders, and reading progress; generated audio and original files remain local.
+- Audiobook reading needs no account: free libraries stay in the browser. Gold subscribers can sync parsed documents, folders, and reading progress; generated audio and original files remain local.
 - Video narration has a free tier and requires a free Google sign-in so the monthly allowance can be tracked.
 - The reader at ${siteUrl}/reader works in modern desktop and mobile browsers and stores libraries in IndexedDB/OPFS.
 - Pricing is at ${siteUrl}/pricing for video narration only: Free includes 1 hour of voiceovers each month, Pro includes 10 hours with 1 hour of premium voice generation (built-in or cloned), and Premium includes 20 hours with 5 hours of premium voice generation. Current paid prices are displayed dynamically from Stripe. Audiobook reading is free and unmetered.

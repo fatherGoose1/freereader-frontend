@@ -76,7 +76,7 @@ export default function Support() {
       <p>
         The iOS app processes documents on your device. On the web, original
         files and generated audiobook audio stay in your browser, but speech
-        generation sends passages to our speech service. Signing in also syncs
+        generation sends passages to our speech service. An active Gold subscription syncs
         parsed documents and reading progress to your account. See the{" "}
         <Link href="/privacy">Privacy Policy</Link> for details.
       </p>
@@ -84,7 +84,7 @@ export default function Support() {
       <h3>Can support recover my library or listening progress?</h3>
       <p>
         We cannot recover a guest library if browser or app storage is cleared.
-        Signed-in web readers can sync parsed books and progress to their
+        Gold subscribers can sync parsed books and progress to their
         accounts. Deleting the iOS app removes its local data from that device.
       </p>
 

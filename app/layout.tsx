@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import SupportWidget from "./components/SupportWidget";
+import GoldAuthReturn from "./components/GoldAuthReturn";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}<SupportWidget /></body>
+      <body>{children}<SupportWidget /><GoldAuthReturn /></body>
     </html>
   );
 }

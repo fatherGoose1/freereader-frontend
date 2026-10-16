@@ -124,7 +124,7 @@ export default function Terms() {
         backups, and any content you choose to import or submit.
         VoiceReader data and anonymous FreeReader libraries are stored locally;
         however, web speech generation sends the passages being narrated to
-        our speech service. If you sign in to the web audiobook reader, parsed
+        our speech service. If you have an active Gold subscription, parsed
         books, folders, and reading progress sync to your account. Generated
         audio and original source files are not synced. Local data may be lost
         if storage is cleared.
@@ -143,7 +143,7 @@ export default function Terms() {
         control the necessary rights, or have a lawful basis or all necessary
         permissions and licenses, to provide that material and authorize its
         use with the features you choose. This includes the right to have us
-        receive and process text, store and sync parsed content if you sign in,
+        receive and process text, store and sync parsed content if you subscribe to Gold,
         and generate and play spoken audio. You also represent and warrant that
         your use of the material and any generated audio will comply with
         applicable law and will not infringe anyone else&apos;s rights or violate
@@ -191,7 +191,7 @@ export default function Terms() {
       <p>
         Our <Link href="/privacy">Privacy Policy</Link> explains how the App and
         Website handle information and is incorporated into these Terms.
-        The signed-in web audiobook reader syncs parsed documents and reading
+        The web audiobook reader syncs Gold subscribers' parsed documents and reading
         progress to your account. The App and Website also process limited
         diagnostics and analytics as described in
         that policy.

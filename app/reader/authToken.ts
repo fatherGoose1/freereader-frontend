@@ -22,3 +22,12 @@ export function currentAccessToken(): string | null {
   initAuthToken();
   return token;
 }
+
+export async function currentSessionAccessToken(): Promise<string | null> {
+  initAuthToken();
+  const supabase = supabaseClient();
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  token = data.session?.access_token ?? null;
+  return token;
+}
