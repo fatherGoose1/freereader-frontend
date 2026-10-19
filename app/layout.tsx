@@ -6,11 +6,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.freereader.io"),
   title: {
-    default: "FreeReader — Text to speech for books and video narration",
+    default: "FreeReader — Text to speech for books and documents",
     template: "%s — FreeReader",
   },
   description:
-    "Turn books, documents, and articles into audiobooks, or create and export video voiceovers from scripts. Start free with FreeReader's text-to-speech tools in 32 languages.",
+    "Turn books, documents, and articles into audiobooks. Built for readers with dyslexia and ADHD. Start free with FreeReader's text-to-speech tools in 32 languages.",
   icons: { icon: "/icon.svg?v=3" },
   manifest: "/manifest.webmanifest",
 };
