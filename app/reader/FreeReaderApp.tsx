@@ -37,7 +37,6 @@ import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
 import { supabaseClient } from "./supabase";
 import { synchronizeLibrary } from "./accountSync";
-import { syncLimitMessage } from "./syncStatus";
 import { fetchUsage, linkInstallation } from "./usage";
 import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
 import { startCheckout } from "./billing";
@@ -250,10 +249,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   useEffect(() => {
     try { setAccountNoticeDismissed(localStorage.getItem("freereader-library-reminder-dismissed") === "true"); } catch { /* Storage may be restricted. */ }
   }, []);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "saved" | "limited" | "error">("idle");
-  const [syncLimitDetail, setSyncLimitDetail] = useState("");
   const [localRevision, setLocalRevision] = useState(0);
-  const [syncAttempt, setSyncAttempt] = useState(0);
   const [plan, setPlan] = useState<string>("free");
   const [planReady, setPlanReady] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -438,7 +434,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       if (cancelled) return;
       if (syncRunning.current) { window.setTimeout(() => void sync(), 1_000); return; }
       syncRunning.current = true;
-      setSyncStatus("syncing");
       const revision = localRevisionRef.current;
       try {
         const [storedBooks, storedFolders] = await Promise.all([listBooks(), listFolders()]);
@@ -455,11 +450,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               setSelected(updated);
             }
           } else setLocalRevision(localRevisionRef.current);
-          setSyncLimitDetail(result.localOnly ? syncLimitMessage(result) : "");
-          setSyncStatus(result.localOnly ? "limited" : "saved");
         }
       } catch {
-        if (!cancelled) setSyncStatus("error");
+        // Keep the local library available if syncing fails.
       } finally {
         syncRunning.current = false;
       }
@@ -467,12 +460,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const timer = window.setTimeout(() => void sync(), localRevision ? 2_000 : 0);
     const interval = window.setInterval(() => void sync(), 60_000);
     return () => { cancelled = true; clearTimeout(timer); clearInterval(interval); };
-  }, [libraryLoaded, session, localRevision, syncAttempt, enhanced]);
+  }, [libraryLoaded, session, localRevision, enhanced]);
 
   async function signOut() {
     const { error } = await supabaseClient()!.auth.signOut();
     if (error) setMessage("Could not sign out. Try again.");
-    else setSyncStatus("idle");
   }
 
   const accountNotice = !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
@@ -497,15 +489,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       }}>×</button>
     </section>
   );
-  const syncBar = session && !managed && (enhanced
-    ? <div className={styles.syncBar} role="status">
-      <span>{syncStatus === "syncing" ? "Syncing your library…" : syncStatus === "error" ? "Library sync failed. Your changes are still on this device." : syncStatus === "limited" ? syncLimitDetail : syncStatus === "saved" ? "Library and progress synced to your account" : "Signed in"}</span>
-      {syncStatus === "error" && <button type="button" onClick={() => setSyncAttempt((attempt) => attempt + 1)}>Retry sync</button>}
-    </div>
-    : <div className={styles.syncBar} role="status">
-      <span>Signed in. Your library stays on this device until you upgrade.</span>
-      <button type="button" onClick={() => setUpgradeOpen(true)}>Upgrade</button>
-    </div>);
   const accountButton = !managed && session && planReady && <ReaderAccountMenu session={session} plan={plan}
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
   const upgradeFab = !managed && planReady && !enhanced && !upgradeOpen && (
@@ -1511,7 +1494,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </div>
         </div>
         {accountNotice}
-        {syncBar}
         <div className={`${styles.readerGrid} ${styles.nativeGrid}`} inert={panel === "voice"}>
           <aside className={styles.chapterRail}>
             <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
@@ -1668,7 +1650,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         </div>
       </header>
       {accountNotice}
-      {syncBar}
       <div className={styles.libraryLayout} inert={!!panel || !!organizingBook}>
         <section className={styles.shelf}>
           <div className={styles.workspaceHeading}>

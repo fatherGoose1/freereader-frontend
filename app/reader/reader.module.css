@@ -83,8 +83,6 @@
 .upgradeFab:hover { background: #f4d17f; }
 .upgradeFab svg { width: 20px; height: 20px; }
 .readingShell .upgradeFab { bottom: 216px; }
-.syncBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px max(28px, calc((100vw - 1160px) / 2)); color: #425578; background: #eaf0fc; font-size: 12px; }
-.syncBar button { padding: 6px 10px; color: #365bd6; background: transparent; border: 0; border-radius: 6px; }
 .accountMenu { position: relative; flex: none; }
 .accountCircle { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; color: #536584; background: #fff; border: 1px solid #dce3ef; border-radius: 50%; }
 .accountCircle:hover { background: #f2f5fb; }
@@ -179,7 +177,7 @@
 .readingShell { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
 .readingShell.embeddedReader { min-height: 0; height: 100%; }
 .readingShell .readerTop { flex: none; }
-.readingShell .accountNotice, .readingShell .syncBar { flex: none; }
+.readingShell .accountNotice { flex: none; }
 .readingShell .readerGrid { flex: 1; min-height: 0; overflow-y: auto; align-items: start; padding-bottom: 24px; }
 .readingShell .chapterRail { top: 0; }
 .readingShell .readingPane { min-height: 0; }
@@ -402,7 +400,6 @@
   .accountNoticeHeading strong { font-size: 18px; }
   .accountNotice p { font-size: 12px; }
   .accountNoticeActions button { justify-content: center; width: 100%; }
-  .syncBar { padding-inline: 16px; }
   .libraryHero { min-height: 72px; padding: 14px 16px; gap: 10px; }
   .libraryBrand { gap: 8px; font-size: 17px; }
   .brandSubtitle { display: none; }
