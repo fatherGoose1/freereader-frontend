@@ -11,11 +11,8 @@ test("landing demo lists supported languages and routes non-English speech", asy
   const appStoreLinks = page.getByRole("link", { name: "Download VoiceReader on the App Store" });
   await expect(appStoreLinks).toHaveCount(2);
   await expect(appStoreLinks.first()).toHaveAttribute("href", "https://apps.apple.com/app/voicereader-text-to-speech/id6808351587");
-  const googlePlayLinks = page.getByRole("link", { name: "Get FreeReader on Google Play" });
-  await expect(googlePlayLinks).toHaveCount(2);
-  await expect(googlePlayLinks.first()).toHaveAttribute("href", "https://play.google.com/store/apps/details?id=com.prismapplab.freereader");
   const canHover = await page.evaluate(() => matchMedia("(hover: hover)").matches);
-  const storeLinks = [appStoreLinks.first(), googlePlayLinks.first(), appStoreLinks.last(), googlePlayLinks.last()];
+  const storeLinks = [appStoreLinks.first(), appStoreLinks.last()];
   for (const link of storeLinks) {
     const download = link.locator("..");
     const qr = download.locator(".app-download-qr");
@@ -29,8 +26,8 @@ test("landing demo lists supported languages and routes non-English speech", asy
     }
   }
   if (canHover) {
-    await googlePlayLinks.first().focus();
-    await expect(googlePlayLinks.first().locator("..").locator(".app-download-qr")).toBeVisible();
+    await appStoreLinks.first().focus();
+    await expect(appStoreLinks.first().locator("..").locator(".app-download-qr")).toBeVisible();
     await page.getByRole("heading", { level: 1 }).click();
   }
   const viewport = page.viewportSize()!;

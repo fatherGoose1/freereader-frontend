@@ -1,13 +1,11 @@
 import Link from "next/link";
 import CtaButton from "../components/CtaButton";
 import HeroDemo from "../components/HeroDemo";
+import HeroPhoneVideo from "../components/HeroPhoneVideo";
 import AppDownloadButtons from "../components/AppDownloadButtons";
-import LandingDemoVideo from "../components/LandingDemoVideo";
 import FeedbackCarousel from "../components/FeedbackCarousel";
 import ReadingSupportSection from "../components/ReadingSupportSection";
 import { SPEECH_LANGUAGES } from "../languages";
-
-const formats = ["EPUB", "PDF", "DOCX", "TXT", "HTML", "Markdown"];
 
 function ArrowIcon() {
   return (
@@ -47,8 +45,8 @@ export default function Home() {
               <span><CheckIcon /> No signup required</span>
             </div>
           </div>
-          <div className="hero-shot" aria-label="FreeReader live speech demo">
-            <HeroDemo />
+          <div className="hero-shot">
+            <HeroPhoneVideo />
           </div>
         </div>
       </section>
@@ -59,14 +57,8 @@ export default function Home() {
 
       <section className="section audiobook-story" id="how" aria-labelledby="audiobook-story-heading">
         <div className="wrap audiobook-story-layout">
-          <h2 id="audiobook-story-heading">All your documents<br />read aloud.</h2>
-          <LandingDemoVideo />
-          <div className="format-list demo-formats" aria-label="Compatible sources and formats">
-            <span>Free books</span>
-            {formats.map((format) => <span key={format}>{format}</span>)}
-            <span>Web articles</span>
-          </div>
-          <Link className="text-link audiobook-story-link" href="/reader/audiobooks">Open the audiobook reader <ArrowIcon /></Link>
+          <h2 id="audiobook-story-heading">Try it with any language</h2>
+          <HeroDemo />
         </div>
       </section>
 

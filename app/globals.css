@@ -213,18 +213,13 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 }
 .hero-assurances span { display: inline-flex; align-items: center; gap: 6px; }
 .hero-assurances svg { width: 14px; fill: none; stroke: var(--forest); stroke-width: 2; }
-.hero-shot { position: relative; width: min(480px, 100%); justify-self: end; }
-.demo-caption {
-  display: flex;
-  justify-content: space-between;
-  margin: 0 8px 12px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-}
-.demo-caption strong { color: var(--forest); }
+.hero-shot { position: relative; width: min(480px, 100%); padding-bottom: 26px; justify-self: end; }
+.hero-phone { display: block; width: min(100%, 400px); height: auto; aspect-ratio: 502 / 1028; margin-inline: auto; }
+.hero-phone-controls { position: absolute; right: 0; bottom: 0; display: flex; gap: 10px; }
+.hero-phone-controls button { display: grid; place-items: center; width: 52px; height: 52px; padding: 0; color: #fff; background: #202633eb; border: 1px solid #ffffff30; border-radius: 50%; box-shadow: 0 6px 18px #13172040; cursor: pointer; }
+.hero-phone-controls button:hover { background: #364763; }
+.hero-phone-controls button:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 3px; }
+.hero-phone-controls svg { width: 24px; height: 24px; }
 .hero-demo {
   padding: 22px;
   color: var(--ink);
@@ -320,28 +315,14 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .feedback-quote-mark { width: 23px; height: 23px; color: #e5bc63; }
 .feedback-card p { margin: 0; font-family: var(--sans); font-size: 14px; font-weight: 500; line-height: 1.55; letter-spacing: -.01em; }
 .feedback-marquee:has(.feedback-card:hover) .feedback-track, .feedback-marquee:focus-within .feedback-track { animation-play-state: paused; }
-.feedback-card:focus-visible, .landing-video-frame button:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 3px; }
+.feedback-card:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 3px; }
 @keyframes feedback-scroll { to { transform: translateX(-50%); } }
-.format-list { display: flex; align-items: center; justify-content: center; gap: 9px; flex-wrap: wrap; }
-.format-list span { padding: 7px 10px; color: var(--muted); background: #fff; border: 1px solid var(--line); border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
 
-/* Audiobook reader demo */
+/* Interactive language demo */
 .audiobook-story { background: var(--paper); }
 .audiobook-story-layout { display: grid; justify-items: center; gap: 28px; text-align: center; }
 .audiobook-story-layout h2 { margin-bottom: 6px; }
-.landing-video-frame { position: relative; width: min(100%, 1050px); padding: 8px; overflow: hidden; background: #202633; border: 1px solid #202633; border-radius: 20px; box-shadow: 0 24px 60px #1c346025; }
-.landing-video-frame video { display: block; width: 100%; aspect-ratio: 1878 / 1080; object-fit: cover; background: #f8fafc; border-radius: 12px; }
-.landing-video-controls { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 8px 12px; color: #243254; background: #fff; border: 1px solid #dce4f5; border-radius: 11px; }
-.landing-video-controls button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 7px; color: #243254; background: transparent; border: 0; border-radius: 6px; font-size: 12px; font-weight: 750; cursor: pointer; }
-.landing-video-controls button:hover { background: #e9efff; }
-.landing-video-controls svg { width: 18px; height: 18px; flex: none; }
-.landing-video-controls .landing-video-time { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.landing-video-controls input { appearance: none; width: 100%; min-width: 0; height: 5px; margin: 0; flex: 1; background: linear-gradient(to right, var(--forest) var(--demo-progress), #dce3f2 var(--demo-progress)); border-radius: 99px; cursor: pointer; }
-.landing-video-controls input::-webkit-slider-thumb { appearance: none; width: 13px; height: 13px; background: #fff; border: 2px solid var(--forest); border-radius: 50%; box-shadow: 0 1px 4px #24365c20; }
-.landing-video-controls input::-moz-range-thumb { width: 10px; height: 10px; background: #fff; border: 2px solid var(--forest); border-radius: 50%; box-shadow: 0 1px 4px #24365c20; }
-.landing-video-controls input:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 5px; }
-.demo-formats { max-width: 900px; }
-.audiobook-story-link { color: var(--forest); }
+.audiobook-story-layout .hero-demo { width: min(100%, 560px); text-align: left; }
 
 /* Languages and CTA */
 .language-section { background: #fff; }
@@ -458,12 +439,12 @@ footer .brand { color: var(--ink); }
   .hero-eyebrow { justify-content: center; }
   .hero-actions, .hero-assurances { justify-content: center; }
   .hero-shot { width: min(100%, 480px); justify-self: center; }
+  .hero-phone { width: min(100%, 350px); }
   .hero-demo-language-popover { right: -6px; grid-template-columns: repeat(2, 1fr); }
   .language-layout { grid-template-columns: 1fr; }
   .reader-feedback { padding-block: 34px; }
   .feedback-card { width: 270px; }
   .audiobook-story-layout { gap: 24px; }
-  .landing-video-frame video { aspect-ratio: 4 / 3; }
   .language-copy { position: static; }
   .language-layout { gap: 55px; }
   .language-list { grid-template-columns: repeat(2, 1fr); }
@@ -485,14 +466,7 @@ footer .brand { color: var(--ink); }
   .hero-demo { padding: 14px; }
   .hero-demo textarea { min-height: 145px; padding: 14px; font-size: 14px; }
   .hero-demo-language-popover ul { grid-template-columns: repeat(2, 1fr); }
-  .format-list span { font-size: 9px; }
   .feedback-card { width: 260px; padding: 16px 18px; }
-  .landing-video-frame { padding: 5px; border-radius: 14px; }
-  .landing-video-frame video { aspect-ratio: 1; border-radius: 9px; }
-  .landing-video-controls { gap: 7px; margin-top: 5px; padding: 5px 7px; }
-  .landing-video-controls button { min-height: 32px; padding: 4px 5px; }
-  .landing-video-controls button span { display: none; }
-  .landing-video-controls .landing-video-time { font-size: 10px; }
   .language-list { grid-template-columns: 1fr 1fr; }
   .language-list li { font-size: 10px; }
   .footer-bottom { display: block; }
