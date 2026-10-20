@@ -497,7 +497,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const accountNotice = !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
-        <div className={styles.accountNoticeHeading}><strong>Get {ENHANCED_TIER_NAME}</strong></div>
+        <div className={styles.accountNoticeHeading}><ReaderIcon name="crown" /><strong>Get {ENHANCED_TIER_NAME}</strong></div>
         <ul className={styles.accountNoticeFeatures}>
           {ENHANCED_FEATURES.map((feature) => (
             <li key={feature.title}>
@@ -520,7 +520,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
   const upgradeFab = !managed && planReady && !enhanced && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
-      <ReaderIcon name="headphones" /><span>Upgrade</span>
+      <ReaderIcon name="crown" /><span>Upgrade</span>
     </button>
   );
   const upgradeDialog = upgradeOpen && <GoldDialog session={session} initialInterval={upgradeInterval} initialError={upgradeError} onClose={() => { setUpgradeOpen(false); setUpgradeError(""); }} />;
@@ -1543,7 +1543,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </div> : <span>Tap a passage to listen from there</span>}
               <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
               {!managed && <div className={styles.mobileSupportActions}>
-                {planReady && !enhanced && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="headphones" /></button>}
+                {planReady && !enhanced && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="crown" /></button>}
                 <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
               </div>}
             </div>

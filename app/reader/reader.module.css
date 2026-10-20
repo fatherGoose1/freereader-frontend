@@ -64,7 +64,8 @@
 .librarySignIn:hover { background: var(--app-grouped); }
 .accountNotice { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 18px; width: min(620px, calc(100% - 32px)); margin: 14px auto 0; padding: 18px 44px 18px 20px; color: #58421c; background: linear-gradient(120deg, #fffcf5, #fff3d9); border: 1px solid #d3a343; border-radius: 14px; box-shadow: 0 0 0 3px #d7a93f70, 0 0 34px #c9962d80, 0 10px 28px #7350132b; }
 .accountNotice > div:first-of-type { min-width: 0; }
-.accountNoticeHeading { padding-right: 16px; }
+.accountNoticeHeading { display: flex; align-items: center; gap: 8px; padding-right: 16px; }
+.accountNoticeHeading svg { width: 22px; height: 22px; flex: none; color: #b88828; }
 .accountNoticeHeading strong { color: #503812; font-size: 19px; font-weight: 750; line-height: 1.25; letter-spacing: -.025em; }
 .accountNotice p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; }
 .accountNotice button { flex: none; min-height: 46px; padding: 10px 15px; color: #48300a; background: #edc468; border: 1px solid #b3832e; border-radius: 9px; box-shadow: 0 3px 9px #9d752435; font-size: 13px; font-weight: 750; }
@@ -72,7 +73,7 @@
 .accountNotice .accountNoticeDismiss { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 30px; min-height: 30px; padding: 0; color: #66758e; background: transparent; border: 0; box-shadow: none; font-size: 22px; font-weight: 400; line-height: 1; }
 .accountNoticeFeatures { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
 .accountNoticeFeatures li { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; }
-.accountNoticeStar { flex: none; color: #b88828; font-size: 21px; line-height: 1; }
+.accountNoticeStar { flex: none; margin-top: 1px; color: #b88828; font-size: 16px; line-height: 1; }
 .accountNoticeFeatures b { color: #5b400f; font-weight: 650; }
 .accountNoticeFeatures li > span:last-child { color: #735d37; }
 .accountNoticeActions { display: flex; align-items: center; flex: none; }
@@ -284,8 +285,8 @@
 .goldClose:hover { background: #fff4d8; }
 .goldFeatures { display: grid; gap: 14px; margin: 20px 0 0; padding: 0; list-style: none; }
 .goldFeatures li { display: flex; align-items: flex-start; gap: 12px; }
-.goldCheck { flex: none; display: grid; place-items: center; width: 26px; height: 26px; color: #865d0e; background: #fff0ca; border-radius: 50%; }
-.goldCheck svg { width: 14px; height: 14px; }
+.goldCrown { flex: none; display: grid; place-items: center; width: 26px; height: 26px; color: #865d0e; background: #fff0ca; border-radius: 50%; }
+.goldCrown svg { width: 16px; height: 16px; }
 .goldFeatures strong { display: block; color: var(--app-label); font-size: 14px; }
 .goldFeatures small { display: block; margin-top: 2px; color: #7f8c9e; font-size: 12px; }
 .goldToggle { display: flex; gap: 6px; margin-top: 22px; padding: 4px; background: #fff7e7; border: 1px solid #e8d5a7; border-radius: 10px; }

@@ -16,6 +16,7 @@ const paths = {
   close: "m6 6 12 12M6 18 18 6",
   user: "M8 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0M4 21v-3a8 8 0 0 1 16 0v3",
   headphones: "M4 14V11a8 8 0 0 1 16 0v3M4 12H2v8h5v-8Zm16 0h2v8h-5v-8Z",
+  crown: "M2 7l5 4 5-7 5 7 5-4-2 12H4L2 7Zm2.5 9h15",
   more: "M5 12h.01M12 12h.01M19 12h.01",
   chevronUp: "m6 15 6-6 6 6",
   chevronDown: "m6 9 6 6 6-6",

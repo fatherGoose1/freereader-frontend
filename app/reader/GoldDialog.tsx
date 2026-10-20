@@ -14,14 +14,6 @@ import {
 import ReaderIcon from "./ReaderIcon";
 import styles from "./reader.module.css";
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m4 10 4 4 8-9" />
-    </svg>
-  );
-}
-
 export default function GoldDialog({ session, onClose, initialInterval = "yearly", initialError = "" }: {
   session: Session | null; onClose: () => void; initialInterval?: EnhancedInterval; initialError?: string;
 }) {
@@ -74,7 +66,7 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
         <ul className={styles.goldFeatures}>
           {ENHANCED_FEATURES.map((feature) => (
             <li key={feature.title}>
-              <span className={styles.goldCheck}><CheckIcon /></span>
+              <span className={styles.goldCrown}><ReaderIcon name="crown" /></span>
               <span><strong>{feature.title}</strong><small>{feature.detail}</small></span>
             </li>
           ))}

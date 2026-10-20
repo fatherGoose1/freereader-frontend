@@ -36,7 +36,7 @@ export interface EnhancedFeature {
 }
 
 export const ENHANCED_FEATURES: readonly EnhancedFeature[] = [
-  { title: "Faster generation", detail: "A reserved Gold slot when shared generation is busy" },
-  { title: "Enhanced audio", detail: "Better-quality audio" },
-  { title: "Device syncing", detail: "Keep your books and progress synced between devices" },
+  { title: "Device syncing", detail: "Keep your books and progress synced between devices." },
+  { title: "Highest-quality audio", detail: "Hear your books and documents in clear, studio-level quality." },
+  { title: "Faster generation", detail: "Dedicated servers so you never have to wait for audio generation." },
 ];
