@@ -169,6 +169,7 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
   min-height: 600px;
   padding-block: 82px 90px;
 }
+.hero-copy { transform: translateY(-32px); }
 .hero-copy h1 { max-width: 680px; margin: 20px 0 25px; font-size: clamp(47px, 5.2vw, 76px); line-height: 1.06; }
 .hero-copy h1 em { color: var(--forest); font-style: normal; }
 .hero-copy .lead { max-width: 590px; margin: 0; color: var(--muted); }
@@ -434,7 +435,7 @@ footer .brand { color: var(--ink); }
   h2 { font-size: clamp(38px, 11vw, 52px); }
   .hero { grid-template-columns: 1fr; gap: 60px; min-height: 0; padding: 75px 0 85px; }
   .hero-copy h1 { font-size: clamp(43px, 10vw, 62px); }
-  .hero-copy { text-align: center; }
+  .hero-copy { text-align: center; transform: none; }
   .hero-copy .lead { margin-inline: auto; }
   .hero-eyebrow { justify-content: center; }
   .hero-actions, .hero-assurances { justify-content: center; }
