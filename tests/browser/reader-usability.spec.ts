@@ -194,6 +194,48 @@ test("continuous scrolling, text sizing, settings and resume preserve the readin
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", await page.evaluate(() => window.innerWidth));
 });
 
+test("switching reading fonts recenters the spoken word promptly without showing Resume", async ({ page }) => {
+  await page.route("**/api/tts", async (route) => {
+    const { texts } = route.request().postDataJSON() as { texts: string[] };
+    const archive = new JSZip();
+    texts.forEach((text, index) => {
+      archive.file(`${index}.m4a`, playableWav());
+      archive.file(`${index}.json`, JSON.stringify(spokenWords(text).map((_, word) => [word, word * 0.15, word * 0.15 + 0.15])));
+    });
+    await route.fulfill({ contentType: "application/zip", body: await archive.generateAsync({ type: "nodebuffer" }), headers: { "X-Audio-Durations": texts.map(() => "20").join(",") } });
+  });
+  await upload(page, "Font following", 8);
+  await page.getByRole("button", { name: /^html Font following/ }).click();
+  await openControls(page);
+  const chapter = page.getByLabel("Choose chapter");
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 4" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 4" }).click();
+  const viewport = page.locator('[class*="eReaderViewport"]');
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop > element.clientHeight)).toBe(true);
+  await viewport.locator("p").filter({ hasText: "Reading gives us a little time" }).first().click();
+  await expect(viewport.locator('p[aria-current="true"]')).toBeVisible();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => CSS.highlights.has("freereader-spoken-word"))).toBe(true);
+  const activeWordPosition = () => viewport.evaluate((element) => {
+    const word = (Array.from(CSS.highlights.get("freereader-spoken-word") ?? [])[0] as Range | undefined)?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return word ? Math.abs((word.top + word.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
+  });
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const toggle = page.getByRole("switch", { name: "OpenDyslexic font" });
+  const before = await viewport.locator('[aria-current="true"]').evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+  await toggle.check();
+  await expect.poll(activeWordPosition, { timeout: 3000 }).toBeLessThan(0.3);
+  await expect(page.getByRole("button", { name: "Resume centered scrolling" })).toHaveCount(0);
+  const after = await viewport.locator('[aria-current="true"]').evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+  expect(after / before).toBeCloseTo(0.85, 1);
+  await page.waitForTimeout(300);
+  await expect.poll(activeWordPosition, { timeout: 3000 }).toBeLessThan(0.3);
+  await toggle.uncheck();
+  await expect.poll(activeWordPosition, { timeout: 3000 }).toBeLessThan(0.3);
+  await expect(page.getByRole("button", { name: "Resume centered scrolling" })).toHaveCount(0);
+});
+
 test("long documents scroll to the end without mounting every passage", async ({ page }) => {
   await page.locator('input[type="file"]').setInputFiles({
     name: "Long reading.html", mimeType: "text/html",
@@ -249,7 +291,11 @@ test("playback follows passages smoothly while explicit selections snap immediat
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.duration > 0)).toBe(true);
   const current = await viewport.locator('[aria-current="true"]').textContent();
-  await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = audio.duration - 0.05; });
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => {
+    audio.currentTime = audio.duration;
+    // WebKit does not consistently dispatch ended when a test seeks to the last frame.
+    audio.dispatchEvent(new Event("ended"));
+  });
   const positions = await viewport.evaluate((element) => new Promise<number[]>((resolve) => {
     const values: number[] = [];
     const until = performance.now() + 650;

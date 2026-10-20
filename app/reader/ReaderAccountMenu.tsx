@@ -7,8 +7,8 @@ import { ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan } from "./enhanced";
 import ReaderIcon from "./ReaderIcon";
 import styles from "./reader.module.css";
 
-export default function ReaderAccountMenu({ session, plan, onUpgrade, onSignOut }: {
-  session: Session; plan: string; onUpgrade: () => void; onSignOut: () => void;
+export default function ReaderAccountMenu({ session, plan, billingSource, onUpgrade, onSignOut }: {
+  session: Session; plan: string; billingSource: "stripe" | "apple"; onUpgrade: () => void; onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,8 +51,10 @@ export default function ReaderAccountMenu({ session, plan, onUpgrade, onSignOut 
       <span className={styles.accountEmail}>{session.user.email ?? "Signed in"}</span>
       {gold ? <>
         <small>{plan === ENHANCED_PLANS.yearly ? "Yearly plan" : "Monthly plan"}</small>
-        <button type="button" disabled={busy} onClick={() => void manage()}>{busy ? "Opening Stripe…" : "Manage subscription"}</button>
-        <small>Change billing, switch plans, or cancel in Stripe.</small>
+        {billingSource === "apple" ? <small>Purchased through Apple. Manage or cancel your subscription in iPhone Settings → Subscriptions.</small> : <>
+          <button type="button" disabled={busy} onClick={() => void manage()}>{busy ? "Opening Stripe…" : "Manage subscription"}</button>
+          <small>Change billing, switch plans, or cancel in Stripe.</small>
+        </>}
       </> : <button type="button" onClick={() => { setOpen(false); onUpgrade(); }}>Upgrade to {ENHANCED_TIER_NAME}</button>}
       {error && <p role="alert" className={styles.accountError}>{error}</p>}
       <button type="button" onClick={() => { setOpen(false); onSignOut(); }}>Sign out</button>

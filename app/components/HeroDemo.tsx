@@ -7,7 +7,6 @@ import { normalizeCapitalization } from "../reader/speechText";
 const DEFAULT_TEXT =
   '"When you play the game of thrones you win or you die.”\n\n— George R.R. Martin';
 const MAX_LENGTH = 800;
-const SUPERTONIC_STEPS = 12;
 const SORTED_LANGUAGES = [...SPEECH_LANGUAGES]
   .sort(([, first], [, second]) => first.localeCompare(second, "en"));
 
@@ -55,14 +54,11 @@ export default function HeroDemo() {
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
-      const response = await fetch("/api/tts", {
+      const response = await fetch("/api/demo-tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: normalizeCapitalization(trimmed),
-          speed: 1,
-          detectLanguage: true,
-          steps: SUPERTONIC_STEPS,
         }),
         signal: controller.signal,
       });

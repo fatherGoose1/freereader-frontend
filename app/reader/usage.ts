@@ -6,6 +6,7 @@ const API_BASE = (process.env.NEXT_PUBLIC_KOKO_BACKEND_URL
 
 export interface UsageSummary {
   plan: "free" | "pro" | "premium" | EnhancedPlanId;
+  billing_source?: "stripe" | "apple";
   period: string;
   budget_seconds: number;
   used_seconds: number;

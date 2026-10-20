@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("landing demo lists supported languages and routes non-English speech", async ({ page }) => {
-  await page.route("**/api/tts", (route) => route.fulfill({
+  await page.route("**/api/demo-tts", (route) => route.fulfill({
     status: 200,
     contentType: "audio/mp4",
     body: "mock audio",
@@ -61,13 +61,10 @@ test("landing demo lists supported languages and routes non-English speech", asy
   await expect(menu).toBeHidden();
 
   await page.getByLabel("Sample text to narrate").fill("Bonjour l'ami");
-  const requestPromise = page.waitForRequest("**/api/tts");
+  const requestPromise = page.waitForRequest("**/api/demo-tts");
   await page.getByRole("button", { name: "Play the sample" }).click();
   const body = (await requestPromise).postDataJSON();
   expect(body).toEqual({
     text: "Bonjour l'ami",
-    speed: 1,
-    detectLanguage: true,
-    steps: 12,
   });
 });

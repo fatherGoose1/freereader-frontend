@@ -56,6 +56,7 @@ type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "p
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
 const WORD_HIGHLIGHT_PREFERENCE = "freereader-highlight-spoken-words";
+const OPEN_DYSLEXIC_PREFERENCE = "freereader-open-dyslexic";
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -251,6 +252,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }, []);
   const [localRevision, setLocalRevision] = useState(0);
   const [plan, setPlan] = useState<string>("free");
+  const [billingSource, setBillingSource] = useState<"stripe" | "apple">("stripe");
   const [planReady, setPlanReady] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [upgradeInterval, setUpgradeInterval] = useState<EnhancedInterval>("yearly");
@@ -282,6 +284,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const resumeAfterSettings = useRef<{ bookId: string; index: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [highlightSpokenWords, setHighlightSpokenWords] = useState(true);
+  const [openDyslexic, setOpenDyslexic] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [spoken, setSpoken] = useState<{ bookId: string; index: number; word: SpokenWord } | null>(null);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
@@ -304,6 +307,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   useEffect(() => {
     try { setHighlightSpokenWords(localStorage.getItem(WORD_HIGHLIGHT_PREFERENCE) !== "false"); }
     catch { /* Keep the on-by-default setting when browser storage is unavailable. */ }
+    try { setOpenDyslexic(localStorage.getItem(OPEN_DYSLEXIC_PREFERENCE) === "true"); }
+    catch { /* Keep the default font when browser storage is unavailable. */ }
   }, []);
   useEffect(() => {
     if (highlightSpokenWords && playing) startWordTracking();
@@ -383,11 +388,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   // The plan decides both syncing and audio quality, so resolve it before showing
   // the upgrade notice or starting any sync. Anonymous readers stay on "free".
   useEffect(() => {
-    if (managed || !session) { setPlan("free"); setPlanReady(true); return; }
+    if (managed || !session) { setPlan("free"); setBillingSource("stripe"); setPlanReady(true); return; }
     let cancelled = false;
     setPlanReady(false);
     fetchUsage(session.access_token)
-      .then((summary) => { if (!cancelled) setPlan(summary.plan); })
+      .then((summary) => { if (!cancelled) { setPlan(summary.plan); setBillingSource(summary.billing_source ?? "stripe"); } })
       .catch(() => { if (!cancelled) setPlan("free"); })
       .finally(() => { if (!cancelled) setPlanReady(true); });
     return () => { cancelled = true; };
@@ -489,7 +494,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       }}>×</button>
     </section>
   );
-  const accountButton = !managed && session && planReady && <ReaderAccountMenu session={session} plan={plan}
+  const accountButton = !managed && session && planReady && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
   const upgradeFab = !managed && planReady && !enhanced && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
@@ -1521,7 +1526,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </div>}
             </div>
             {showNative ? originalSource
-              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} spokenWord={activeWord} onNavigate={goToBlock} />
+              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} openDyslexic={openDyslexic} spokenWord={activeWord} onNavigate={goToBlock} />
               : <div className={styles.nativeNotice}>
                 {!sourceLoaded ? <p role="status">Opening original document…</p> : <>
                   <strong>Open this book in its original layout</strong>
@@ -1531,7 +1536,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                   {sourceError && <p role="alert">{sourceError}</p>}
                 </>}
               </div>
-              : <ContinuousReader key={selected.id} book={selected} textSize={textSize} spokenWord={activeWord} onNavigate={goToBlock} paper={supportsNative}
+              : <ContinuousReader key={selected.id} book={selected} textSize={textSize} openDyslexic={openDyslexic} spokenWord={activeWord} onNavigate={goToBlock} paper={supportsNative}
                   navigationJump={navigationJump?.bookId === selected.id && navigationJump.index === selected.position.blockIndex ? navigationJump : null} />}
           </article>
         </div>
@@ -1600,6 +1605,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 catch { /* The preference still applies to this session. */ }
               }} />
             </label>
+            <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>OpenDyslexic font</span>
+              <input type="checkbox" role="switch" checked={openDyslexic} onChange={(event) => {
+                const enabled = event.currentTarget.checked;
+                setOpenDyslexic(enabled);
+                try { localStorage.setItem(OPEN_DYSLEXIC_PREFERENCE, String(enabled)); }
+                catch { /* The preference still applies to this session. */ }
+              }} />
+            </label>
+            {selected.format === "pdf" && <small>Available in E-reader. Original PDF keeps the font embedded in the document.</small>}
           </div>
           </div>
         )}

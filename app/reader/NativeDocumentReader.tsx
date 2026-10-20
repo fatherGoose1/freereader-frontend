@@ -9,6 +9,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { LibraryBook } from "./types";
 import { indexNativeText, matchNativeBlocks, nativeRange, nativeWordRange, pdfPageForBlock, pdfWordRange, type NativeTextIndex } from "./nativeText";
 import type { SpokenWord } from "./spokenWord";
+import { OPEN_DYSLEXIC_SCALE } from "./readingFont";
 import ReaderIcon from "./ReaderIcon";
 import styles from "./nativeReader.module.css";
 
@@ -16,6 +17,7 @@ interface Props {
   book: LibraryBook;
   source: Blob;
   textSize: number;
+  openDyslexic: boolean;
   spokenWord?: SpokenWord;
   onNavigate: (index: number) => void;
 }
@@ -31,18 +33,25 @@ export default function NativeDocumentReader(props: Props) {
 type ReaderProps = Props & { onError: () => void };
 type EpubLocation = { cfi: string; section: number };
 
-function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }: ReaderProps) {
+function setEpubTextSize(rendition: Rendition, size: number, dyslexic: boolean) {
+  if (size === 20 && !dyslexic) (rendition.themes as Rendition["themes"] & { removeOverride: (name: string) => void }).removeOverride("font-size");
+  else rendition.themes.fontSize(`${size / 20 * (dyslexic ? OPEN_DYSLEXIC_SCALE : 1) * 100}%`);
+}
+
+function EpubReader({ book, source, textSize, openDyslexic, spokenWord, onNavigate, onError }: ReaderProps) {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<{ book: Book; rendition: Rendition; locations: Map<number, EpubLocation> } | null>(null);
   const cursor = useRef(book.position.blockIndex);
   const navigate = useRef(onNavigate);
   const follow = useRef<() => Promise<void>>(async () => {});
+  const realign = useRef<() => Promise<void>>(async () => {});
   const [ready, setReady] = useState(false);
   const [location, setLocation] = useState({ page: 1, total: 1, atStart: true, atEnd: false });
   const [moving, setMoving] = useState(false);
   const manualNavigation = useRef(false);
   const size = useRef(textSize);
   const word = useRef(spokenWord);
+  const fontCss = useRef("");
   cursor.current = book.position.blockIndex;
   word.current = spokenWord;
   navigate.current = onNavigate;
@@ -119,6 +128,12 @@ function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }:
       engine.current = active;
       rendition.hooks.content.register((contents: Contents) => {
         contents.document.documentElement.lang ||= book.language ?? "en";
+        if (fontCss.current) {
+          const style = contents.document.createElement("style");
+          style.id = "freereader-open-dyslexic";
+          style.textContent = fontCss.current;
+          contents.document.head.append(style);
+        }
         contents.document.addEventListener("click", (event) => {
           const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
           if (link) {
@@ -217,7 +232,11 @@ function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }:
         pendingFollow = pendingFollow.then(followPassage);
         return pendingFollow;
       };
-      if (size.current !== 20) rendition.themes.fontSize(`${size.current / 20 * 100}%`);
+      realign.current = () => {
+        lastFollowed = -1;
+        return follow.current();
+      };
+      if (size.current !== 20) setEpubTextSize(rendition, size.current, false);
       await follow.current();
       if (cancelled) return;
       setReady(true);
@@ -235,6 +254,7 @@ function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }:
       observer?.disconnect();
       engine.current = null;
       follow.current = async () => {};
+      realign.current = async () => {};
       // Opening/indexing can still be pending when a user switches views.
       // Destroy only after the in-flight setup has finished.
       if (setupFinished) epub?.destroy();
@@ -247,8 +267,64 @@ function EpubReader({ book, source, textSize, spokenWord, onNavigate, onError }:
   useEffect(() => {
     size.current = textSize;
     const rendition = engine.current?.rendition;
-    if (rendition) rendition.themes.fontSize(`${textSize / 20 * 100}%`);
+    if (rendition) {
+      setEpubTextSize(rendition, textSize, Boolean(fontCss.current));
+      void realign.current().catch(onError);
+    }
   }, [textSize]);
+  useEffect(() => {
+    if (!ready || !openDyslexic) return;
+    let cancelled = false;
+    const urls: string[] = [];
+    const install = async () => {
+      const faces = await Promise.all([
+        ["Regular", "400", "normal"], ["Bold", "700", "normal"],
+        ["Italic", "400", "italic"], ["BoldItalic", "700", "italic"],
+      ].map(async ([name, weight, style]) => {
+        const response = await fetch(`/fonts/OpenDyslexic-${name}.woff2`);
+        if (!response.ok) throw new Error("OpenDyslexic font unavailable");
+        const blob = await response.blob();
+        if (cancelled) return "";
+        const url = URL.createObjectURL(blob);
+        urls.push(url);
+        return `@font-face { font-family: "FreeReader OpenDyslexic"; src: url("${url}") format("woff2"); font-weight: ${weight}; font-style: ${style}; }`;
+      }));
+      if (cancelled) return;
+      fontCss.current = `${faces.join("\n")} body, body * { font-family: "FreeReader OpenDyslexic", sans-serif !important; }`;
+      const current = engine.current?.rendition;
+      for (const contents of (current?.getContents() ?? []) as Contents[]) {
+        let style = contents.document.getElementById("freereader-open-dyslexic");
+        if (!style) {
+          style = contents.document.createElement("style");
+          style.id = "freereader-open-dyslexic";
+          contents.document.head.append(style);
+        }
+        style.textContent = fontCss.current;
+        await contents.document.fonts.load('16px "FreeReader OpenDyslexic"');
+        await contents.document.fonts.ready;
+      }
+      if (!cancelled && current && host.current) {
+        setEpubTextSize(current, size.current, true);
+        current.resize(host.current.clientWidth, host.current.clientHeight);
+        await realign.current();
+      }
+    };
+    void install().catch(() => { /* Original EPUB retains its publisher font if the font cannot load. */ });
+    return () => {
+      cancelled = true;
+      const hadFont = Boolean(fontCss.current);
+      fontCss.current = "";
+      for (const contents of (engine.current?.rendition.getContents() ?? []) as Contents[]) {
+        contents.document.getElementById("freereader-open-dyslexic")?.remove();
+      }
+      for (const url of urls) URL.revokeObjectURL(url);
+      if (hadFont && engine.current && host.current) {
+        setEpubTextSize(engine.current.rendition, size.current, false);
+        engine.current.rendition.resize(host.current.clientWidth, host.current.clientHeight);
+        void realign.current().catch(onError);
+      }
+    };
+  }, [openDyslexic, ready]);
 
   async function turn(direction: "prev" | "next") {
     setMoving(true);
