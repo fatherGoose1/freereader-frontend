@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { LibraryBook } from "./types";
 import type { SpokenWord } from "./spokenWord";
 import { OPEN_DYSLEXIC_SCALE } from "./readingFont";
+import { readingColors, READING_BACKGROUNDS } from "./readingAppearance";
+import type { ReaderPreferences } from "./readerPreferences";
 import styles from "./reader.module.css";
 
 const OVERSCAN = 900;
@@ -24,10 +26,11 @@ function blockAt(offsets: number[], position: number): number {
   return Math.min(low, offsets.length - 2);
 }
 
-export default function ContinuousReader({ book, textSize, openDyslexic, spokenWord, onNavigate, paper, navigationJump }: {
+export default function ContinuousReader({ book, textSize, openDyslexic, appearance, spokenWord, onNavigate, paper, navigationJump }: {
   book: LibraryBook;
   textSize: number;
   openDyslexic: boolean;
+  appearance: Pick<ReaderPreferences, "lineSpacing" | "wordSpacing" | "readingBackground">;
   spokenWord?: SpokenWord;
   onNavigate: (index: number) => void;
   paper: boolean;
@@ -36,11 +39,14 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
   const viewport = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
   const renderedTextSize = textSize * (openDyslexic ? OPEN_DYSLEXIC_SCALE : 1);
+  const { lineSpacing, wordSpacing, readingBackground } = appearance;
+  const colors = readingColors(readingBackground);
   const heights = useRef(new Map<number, number>());
-  const measuredFor = useRef({ blocks: book.blocks, renderedTextSize });
-  if (measuredFor.current.blocks !== book.blocks || measuredFor.current.renderedTextSize !== renderedTextSize) {
+  const measuredFor = useRef({ blocks: book.blocks, renderedTextSize, lineSpacing, wordSpacing });
+  if (measuredFor.current.blocks !== book.blocks || measuredFor.current.renderedTextSize !== renderedTextSize
+    || measuredFor.current.lineSpacing !== lineSpacing || measuredFor.current.wordSpacing !== wordSpacing) {
     heights.current.clear();
-    measuredFor.current = { blocks: book.blocks, renderedTextSize };
+    measuredFor.current = { blocks: book.blocks, renderedTextSize, lineSpacing, wordSpacing };
   }
   const frame = useRef<number | null>(null);
   const animation = useRef<{ frame: number; target: number; lastTime: number; kind: "passage" | "word" } | null>(null);
@@ -53,7 +59,7 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
   const userScrollArmed = useRef(false);
   const lastScrollTop = useRef(0);
   const followedPassage = useRef("");
-  const previousFont = useRef({ textSize, openDyslexic });
+  const previousFont = useRef({ textSize, openDyslexic, lineSpacing, wordSpacing });
   const handledNavigationJump = useRef(0);
   const [showResume, setShowResume] = useState(false);
   const [layout, setLayout] = useState({ width: 600, revision: 0 });
@@ -61,14 +67,15 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
 
   const offsets = useMemo(() => {
     const result = [0];
-    const charsPerLine = Math.max(12, Math.floor(layout.width / (renderedTextSize * 0.52)));
+    const charsPerLine = Math.max(12, Math.floor(layout.width / (renderedTextSize * (0.52 + wordSpacing / 6))));
     for (const item of book.blocks) {
       const lines = Math.max(1, Math.ceil(item.text.length / charsPerLine));
-      const estimate = item.isHeading ? lines * renderedTextSize * 1.95 + 48 : lines * renderedTextSize * 1.85 + renderedTextSize * 1.3;
+      const estimate = item.isHeading ? lines * renderedTextSize * (lineSpacing ?? 1.95) + 48
+        : lines * renderedTextSize * (lineSpacing ?? 1.85) + renderedTextSize * 1.3;
       result.push(result[result.length - 1] + (heights.current.get(item.index) ?? estimate));
     }
     return result;
-  }, [book.blocks, layout, renderedTextSize]);
+  }, [book.blocks, layout, renderedTextSize, lineSpacing, wordSpacing]);
 
   function showAt(top: number) {
     const view = viewport.current;
@@ -189,8 +196,9 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
   }, []);
 
   useLayoutEffect(() => {
-    if (previousFont.current.textSize === textSize && previousFont.current.openDyslexic === openDyslexic) return;
-    previousFont.current = { textSize, openDyslexic };
+    if (previousFont.current.textSize === textSize && previousFont.current.openDyslexic === openDyslexic
+      && previousFont.current.lineSpacing === lineSpacing && previousFont.current.wordSpacing === wordSpacing) return;
+    previousFont.current = { textSize, openDyslexic, lineSpacing, wordSpacing };
     stopAnimation();
     following.current = true;
     setShowResume(false);
@@ -204,7 +212,7 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
     showAt(viewport.current?.scrollTop ?? 0);
   // Font changes are an explicit request to keep the narrated text in view.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [textSize, openDyslexic]);
+  }, [textSize, openDyslexic, lineSpacing, wordSpacing]);
 
   useEffect(() => {
     if (!openDyslexic) return;
@@ -289,7 +297,7 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
     });
     for (const row of sheet.current?.querySelectorAll<HTMLElement>("[data-block-index]") ?? []) observer.observe(row);
     return () => observer.disconnect();
-  }, [visible.start, visible.end, book.id, textSize, openDyslexic, offsets]);
+  }, [visible.start, visible.end, book.id, textSize, openDyslexic, lineSpacing, wordSpacing, offsets]);
 
   useEffect(() => {
     showAt(viewport.current?.scrollTop ?? 0);
@@ -335,25 +343,27 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
     if (center < bounds.top + bounds.height * 0.3 || center > bounds.bottom - bounds.height * 0.3) {
       scrollTo(view.scrollTop + center - (bounds.top + bounds.bottom) / 2, true, "word");
     }
-  }, [spokenWord?.start, book.position.blockIndex]);
+  }, [spokenWord?.start, book.position.blockIndex, lineSpacing, wordSpacing, readingBackground]);
 
   useEffect(() => {
     // The current CSS bundler cannot parse ::highlight(), so install this
     // browser-native style alongside the reader that owns the named range.
     const style = document.createElement("style");
-    style.textContent = `::highlight(${WORD_HIGHLIGHT}) { color: #172f73; background-color: #aabaff; }`;
+    const palette = READING_BACKGROUNDS[readingBackground];
+    style.textContent = `::highlight(${WORD_HIGHLIGHT}) { color: ${palette.wordText}; background-color: ${palette.word}; }`;
     document.head.append(style);
     return () => {
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       stopAnimation();
-      highlightRegistry()?.delete(WORD_HIGHLIGHT);
       style.remove();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [readingBackground]);
+
+  useEffect(() => () => { highlightRegistry()?.delete(WORD_HIGHLIGHT); }, []);
 
   return <div className={styles.eReaderArea}>
-    <div ref={viewport} className={styles.eReaderViewport} tabIndex={0}
+    <div ref={viewport} className={styles.eReaderViewport} tabIndex={0} style={colors}
       onWheel={beginManualScroll} onTouchStart={beginManualScroll}
       onPointerDown={(event) => { if (event.target === event.currentTarget) beginManualScroll(); }}
       onKeyDown={(event) => { if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) beginManualScroll(); }}
@@ -370,7 +380,8 @@ export default function ContinuousReader({ book, textSize, openDyslexic, spokenW
         userScrollArmed.current = false;
         showAt(top);
       }}>
-    <div ref={sheet} className={`${styles.readingText} ${paper ? styles.eReaderPaper : ""} ${openDyslexic ? styles.openDyslexic : ""}`} style={{ fontSize: renderedTextSize }}>
+    <div ref={sheet} className={`${styles.readingText} ${paper ? styles.eReaderPaper : ""} ${openDyslexic ? styles.openDyslexic : ""}`}
+      style={{ fontSize: renderedTextSize, wordSpacing: `${wordSpacing}em`, ...(lineSpacing !== null && { "--reading-line-spacing": lineSpacing }) } as CSSProperties}>
       <div aria-hidden="true" style={{ height: offsets[visible.start] }} />
       {book.blocks.slice(visible.start, visible.end).map((item) => <div key={item.index} data-block-index={item.index} className={item.isHeading ? styles.eReaderHeading : styles.eReaderBlock}>
         {item.isHeading

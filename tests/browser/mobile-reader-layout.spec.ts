@@ -38,7 +38,7 @@ test("mobile keeps the PDF wide and collapses the player and all side tools", as
   const closedHeight = (await page.locator("article").boundingBox())!.height;
   await page.getByRole("button", { name: "Expand player controls" }).click();
   await expect(page.locator("#reader-player-details")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Voice", exact: true })).toBeVisible();
+  await expect(page.locator("#reader-player-details").getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
   const expandedHeight = (await page.locator("article").boundingBox())!.height;
   expect(closedHeight).toBeGreaterThan(expandedHeight + 70);
   await page.getByRole("button", { name: "Collapse player controls" }).click();
@@ -49,8 +49,9 @@ test("mobile keeps the PDF wide and collapses the player and all side tools", as
   await expect(page.getByRole("navigation", { name: "Original document pages" })).toHaveCount(0);
   await page.getByRole("button", { name: "Expand reading tools" }).click();
   await expect(page.getByRole("button", { name: "Original", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Voice", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Font", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Support FreeReader" })).toBeVisible();
   const tools = (await page.locator("#reader-reading-tools").boundingBox())!;
   expect(tools.x).toBeGreaterThan(width - 110);
   await expect.poll(() => page.locator("article canvas").evaluate((canvas) => canvas.clientWidth)).toBeGreaterThan(width * 0.9);
@@ -65,7 +66,6 @@ test("mobile keeps the PDF wide and collapses the player and all side tools", as
   await page.screenshot({ path: testInfo.outputPath("compact-mobile-reader.png") });
   await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByRole("button", { name: "Contact support", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Support FreeReader" })).toBeVisible();
 });
 
 test("desktop retains its title, full player and existing side controls", async ({ page }, testInfo) => {
@@ -74,10 +74,38 @@ test("desktop retains its title, full player and existing side controls", async 
   await expect(page.locator('[class*="readerTitle"]')).toBeVisible();
   await expect(page.getByRole("button", { name: "Expand reading tools" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Expand player controls" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Voice", exact: true })).toBeVisible();
+  await expect(page.locator("#reader-reading-tools").getByRole("button", { name: "Voice", exact: true })).toBeVisible();
+  await expect(page.locator("#reader-reading-tools").getByRole("button", { name: "Font", exact: true })).toBeVisible();
   await expect(page.getByRole("slider", { name: "Book playback progress" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Original", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Contact support", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Support FreeReader" })).toBeVisible();
+  const controls = ["Font", "Voice", "Full screen", "Zoom out", "Zoom in"];
+  const boxes = await Promise.all(controls.map((name) => page.getByRole("button", { name, exact: true }).boundingBox()));
+  expect(boxes.every((box) => box && Math.abs(box.y - boxes[0]!.y) < 2)).toBe(true);
+  expect(boxes.map((box) => box!.x)).toEqual([...boxes.map((box) => box!.x)].sort((a, b) => a - b));
+  const background = await page.getByRole("button", { name: "Zoom in" }).evaluate((element) => getComputedStyle(element).backgroundColor);
+  for (const name of ["Font", "Voice", "Full screen"]) {
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCSS("background-color", background);
+  }
+  await page.locator('[class*="readingToolbarActions"]').screenshot({ path: testInfo.outputPath("toolbar-controls.png") });
+});
+
+test("full screen opens Original PDF without its surrounding chrome", async ({ page }, testInfo) => {
+  await openReader(page);
+  const tools = page.getByRole("button", { name: "Expand reading tools" });
+  if (await tools.isVisible()) await tools.click();
+  const before = (await page.locator("article").boundingBox())!;
+  await page.getByRole("button", { name: "Full screen" }).click();
+  await expect(page.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Contact support", exact: true })).toBeHidden();
+  await expect(page.getByRole("navigation", { name: "Original document pages" })).toBeVisible();
+  await expect(page.locator("#reader-reading-tools")).toBeHidden();
+  const expanded = (await page.locator("article").boundingBox())!;
+  expect(expanded.height).toBeGreaterThan(before.height + 40);
+  expect(expanded.width).toBeGreaterThan((await page.evaluate(() => innerWidth)) - 2);
+  await page.screenshot({ path: testInfo.outputPath("full-screen-reading.png") });
+  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await expect(page.getByRole("button", { name: "Original", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Contact support", exact: true })).toBeVisible();
 });

@@ -86,6 +86,96 @@ async function eReaderSpokenWord(page: Page) {
   return page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0] ?? "");
 }
 
+test("default reading view applies to new native books without replacing a book override", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  await openControls(page, true);
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.getByRole("button", { name: "E-reader", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "second.pdf", mimeType: "application/pdf", buffer: pdf() });
+  await openControls(page);
+  if (await page.evaluate(() => matchMedia("(max-width: 800px)").matches)) {
+    await expect(page.getByRole("button", { name: /reading tools/ })).toBeVisible();
+    const expand = page.getByRole("button", { name: "Expand reading tools" });
+    if (await expand.isVisible()) await expand.click();
+  }
+  await expect(page.getByRole("button", { name: "E-reader", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Original", exact: true }).click();
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: /^pdf / }).click();
+  await openControls(page);
+  if (await page.evaluate(() => matchMedia("(max-width: 800px)").matches)) {
+    await expect(page.getByRole("button", { name: /reading tools/ })).toBeVisible();
+    const expand = page.getByRole("button", { name: "Expand reading tools" });
+    if (await expand.isVisible()) await expand.click();
+  }
+  await expect(page.getByRole("button", { name: "Original", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Original EPUB applies spacing and tint without changing images or the current chapter", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  await openControls(page, true);
+  const frame = page.frameLocator("article iframe").first();
+  await expect(frame.locator("#original-paragraph")).toBeVisible();
+  const image = frame.locator('img[alt="Original illustration"]');
+  const original = await image.getAttribute("src");
+  const text = await frame.locator("#original-paragraph").textContent();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Font settings" });
+  await panel.getByRole("slider", { name: "Line spacing" }).focus();
+  await panel.getByRole("slider", { name: "Line spacing" }).press("End");
+  await panel.getByRole("slider", { name: "Word spacing" }).focus();
+  await panel.getByRole("slider", { name: "Word spacing" }).press("End");
+  await panel.getByRole("button", { name: "Warm Cream" }).click();
+  await panel.getByRole("button", { name: "Done" }).click();
+  await expect(frame.locator("body")).toHaveCSS("background-color", "rgb(255, 243, 223)");
+  await expect(frame.locator("#original-paragraph")).toHaveCSS("line-height", "40px");
+  await expect(frame.locator("#original-paragraph")).toHaveCSS("word-spacing", "4.8px");
+  await expect(frame.locator("#original-paragraph")).toHaveText(text!);
+  await expect(image).toHaveAttribute("src", original!);
+  await expect(image).toBeVisible();
+});
+
+test("full screen keeps Original EPUB on its chapter while narration continues", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
+  await openControls(page);
+  await chooseChapter(page, "Chapter Two");
+  const heading = page.frameLocator("article iframe").first().locator("h1");
+  await expect(heading).toHaveText("Chapter Two");
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await page.getByRole("button", { name: "Full screen" }).click();
+  await expect(heading).toHaveText("Chapter Two");
+  await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
+  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await expect(heading).toHaveText("Chapter Two");
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+});
+
+test("Original PDF keeps its page artwork while E-reader uses the chosen tint", async ({ page }) => {
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
+  await openControls(page, true);
+  const canvas = page.locator('article [class*="pdfPage"] canvas').first();
+  await expect(canvas).toBeVisible();
+  const samplePage = () => canvas.evaluate((element: HTMLCanvasElement) =>
+    Array.from(element.getContext("2d")!.getImageData(5, 5, 1, 1).data));
+  await expect.poll(samplePage).toEqual([255, 255, 255, 255]);
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Font settings" });
+  await expect(panel).toContainText("Original PDF pages keep their embedded appearance");
+  await panel.getByRole("button", { name: "Dark Mode" }).click();
+  await panel.getByRole("button", { name: "Done" }).click();
+  expect(await samplePage()).toEqual([255, 255, 255, 255]);
+  const expand = page.getByRole("button", { name: "Expand reading tools" });
+  if (await expand.isVisible()) await expand.click();
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect(page.locator('[class*="eReaderViewport"]')).toHaveCSS("background-color", "rgb(29, 36, 48)");
+});
+
 test("EPUB preserves publisher styling and images, follows chapters, and switches views without stopping playback", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
@@ -246,7 +336,7 @@ test("word highlighting can be switched off without stopping audio and stays off
   await page.getByRole("button", { name: "Add to Library", exact: true }).click();
   await openControls(page, true);
   await expect(page.locator('article [aria-current="true"]')).toBeVisible();
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   const toggle = page.getByRole("switch", { name: "Highlight spoken words" });
   await expect(toggle).toBeChecked();
   await page.getByRole("button", { name: "Done" }).click();
@@ -254,7 +344,7 @@ test("word highlighting can be switched off without stopping audio and stays off
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   await expect.poll(() => eReaderSpokenWord(page)).not.toBe("");
   const source = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   await toggle.uncheck();
   await expect.poll(() => eReaderSpokenWord(page)).toBe("");
   await expect(page.locator('article [aria-current="true"]')).toBeVisible();
@@ -266,7 +356,7 @@ test("word highlighting can be switched off without stopping audio and stays off
   await page.reload();
   await page.getByRole("button", { name: /^txt Toggle Highlight Test/ }).click();
   await openControls(page, true);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   await expect(toggle).not.toBeChecked();
 });
 
@@ -279,7 +369,7 @@ test("OpenDyslexic switches E-reader and Original EPUB text and persists without
   const heading = frame.locator("h1");
   await expect(heading).toHaveCSS("font-family", "Georgia, serif");
   await openControls(page, true);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   const toggle = page.getByRole("switch", { name: "OpenDyslexic font" });
   await expect(toggle).not.toBeChecked();
   await toggle.check();
@@ -294,7 +384,7 @@ test("OpenDyslexic switches E-reader and Original EPUB text and persists without
   await expect(frame.locator("h1")).toHaveText("Chapter Two");
   await expect(frame.locator("h1")).toHaveCSS("font-family", dyslexicFamily);
   const dyslexicSize = await frame.locator("h1").evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   await toggle.uncheck();
   await expect(frame.locator("h1")).toBeVisible();
   const regularSize = await frame.locator("h1").evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
@@ -306,7 +396,7 @@ test("OpenDyslexic switches E-reader and Original EPUB text and persists without
   await expect(frame.locator("h1")).toBeVisible();
   await page.getByRole("button", { name: "E-reader", exact: true }).click();
   await expect(page.locator('article [aria-current="true"]')).toHaveCSS("font-family", dyslexicFamily);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   await toggle.uncheck();
   await expect(page.locator('article [aria-current="true"]')).toHaveCSS("font-family", "Georgia, serif");
   await toggle.check();
@@ -323,9 +413,9 @@ test("OpenDyslexic switches E-reader and Original EPUB text and persists without
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.pdf", mimeType: "application/pdf", buffer: pdf() });
   await expect(page.getByLabel("Original PDF page 1")).toBeVisible();
   await openControls(page, true);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   await expect(toggle).toBeChecked();
-  await expect(page.getByText("Original PDF keeps the font embedded in the document.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Original PDF pages keep their embedded appearance.", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByLabel("Original PDF page 1")).toBeVisible();
   await page.getByRole("button", { name: "E-reader", exact: true }).click();

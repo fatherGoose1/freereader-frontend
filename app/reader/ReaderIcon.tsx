@@ -13,6 +13,8 @@ const paths = {
   next: "m5 5 10 7-10 7ZM19 5v14",
   previous: "m19 5-10 7 10 7ZM5 5v14",
   settings: "M4 7h9m4 0h3M4 17h3m4 0h9M13 4v6M7 14v6",
+  expand: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
+  shrink: "M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6",
   close: "m6 6 12 12M6 18 18 6",
   user: "M8 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0M4 21v-3a8 8 0 0 1 16 0v3",
   headphones: "M4 14V11a8 8 0 0 1 16 0v3M4 12H2v8h5v-8Zm16 0h2v8h-5v-8Z",

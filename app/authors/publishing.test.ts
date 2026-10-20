@@ -51,7 +51,8 @@ test("series are grouped in explicit order and public books retain reader progre
   assert.equal(imported.title, "Title one");
   assert.equal(imported.sourceIdentifier, "author-book:one");
   assert.equal(imported.sourceUrl, "/books/slug-one");
-  assert.equal(imported.preferredVoice, "af_river");
+  assert.equal(imported.preferredVoice, undefined);
+  assert.equal(imported.suggestedVoice, "af_river");
   const continued = toReaderBook(published, undefined, { ...imported,
     preferredVoice: "F4",
     position: { blockIndex: 3, offsetSeconds: 5, speed: 1.2 },

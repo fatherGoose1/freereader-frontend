@@ -54,7 +54,8 @@ export function toReaderBook(book: AuthorBookWithDocument, cover?: Blob, existin
   return {
     ...book.document, id: book.id, title: book.title, author: book.author_name, cover,
     language: existing?.language ?? book.document.language,
-    preferredVoice: existing?.preferredVoice ?? book.default_voice ?? "af_heart",
+    preferredVoice: existing?.preferredVoice,
+    suggestedVoice: book.default_voice ?? "af_heart",
     sourceIdentifier: `author-book:${book.id}`, sourceUrl: `/books/${book.slug}`,
     createdAt: existing?.createdAt ?? book.created_at, updatedAt: book.updated_at,
     position: existing?.position ?? { blockIndex: 0, offsetSeconds: 0, speed: 1 },

@@ -3,6 +3,15 @@ import JSZip from "jszip";
 
 const SAMPLE_RATE = 24_000;
 
+async function openVoiceSettings(page: Page) {
+  if (await page.evaluate(() => matchMedia("(max-width: 800px)").matches)) {
+    const tools = page.getByRole("button", { name: "Expand reading tools" });
+    await expect(tools).toBeVisible();
+    await tools.click();
+  }
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+}
+
 function wavBuffer(seconds: number): Buffer {
   const samples = Math.floor(SAMPLE_RATE * seconds);
   const buffer = Buffer.alloc(44 + samples * 2);
@@ -96,9 +105,9 @@ test("English narration uses the backend and never downloads an on-device model"
   await mockSpeech(page, { onRequest: () => { speechRequests += 1; } });
   await page.goto("/reader/audiobooks");
   await importText(page, "English route.txt", ENGLISH.repeat(4));
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await openVoiceSettings(page);
   await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("en");
-  await expect(page.getByLabel("Voice", { exact: false })).toHaveValue("af_heart");
+  await expect(page.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_heart");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => Number.isFinite(audio.duration) && audio.duration > 0 && (!audio.paused || audio.currentTime > 0)), { timeout: 60_000 }).toBe(true);
@@ -129,16 +138,16 @@ test("mobile preserves default English and non-English voice selections", async 
   test.skip(testInfo.project.name.startsWith("desktop"));
   await page.goto("/reader/audiobooks");
   await importText(page, "English route.txt", ENGLISH);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await openVoiceSettings(page);
   await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("en");
-  await expect(page.getByLabel("Voice", { exact: false })).toHaveValue("af_heart");
+  await expect(page.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_heart");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Library", exact: true }).click();
 
   await importText(page, "Spanish route.txt", SPANISH);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await openVoiceSettings(page);
   await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("es");
-  await expect(page.getByLabel("Voice", { exact: false })).toHaveValue("M3");
+  await expect(page.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("ef_dora");
 });
 
 // Opt-in integration test downloads the desktop Supertonic model and executes real WASM.
@@ -154,7 +163,7 @@ test("desktop synthesizes non-English text with Supertonic 3 WASM", async ({ pag
   });
   await page.goto("/reader/audiobooks");
   await importText(page, "Desktop smoke.txt", SPANISH);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await openVoiceSettings(page);
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("es");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();

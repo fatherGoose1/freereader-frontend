@@ -205,33 +205,41 @@
 .readingPane { min-width: 0; min-height: 640px; padding: 22px 54px 24px; background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 5px 20px #283a6004; }
 .readingToolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid #edf0f5; }
 .readingToolbar > span { color: #8390a3; font-size: 11px; }
+.readingToolbarActions, .readerSettingsActions { display: flex; align-items: center; }
+.readingToolbarActions { gap: 12px; margin-left: auto; }
+.readerSettingsActions { gap: 6px; }
+.readerSettingsButton { display: grid; place-items: center; min-width: 38px; height: 38px; flex: none; padding: 5px; color: #66758e; background: #f5f7fb; border: 1px solid #e7ebf3; border-radius: 6px; cursor: pointer; }
+.readerSettingsButton > span { font-size: 15px; font-weight: 600; letter-spacing: -.04em; }
+.readerSettingsButton svg { width: 20px; height: 20px; stroke-width: 1.8; }
+.readerSettingsButton:hover, .readerSettingsButton[aria-expanded="true"] { color: #254895; background: #eaf0fc; }
+.readerSettingsButton:focus-visible { outline: 3px solid #365bd6; outline-offset: 2px; }
 .textSizing { display: flex; flex: none; gap: 2px; }
 .textSizing button { min-width: 38px; min-height: 38px; padding: 5px; color: #66758e; background: #f5f7fb; border: 1px solid #e7ebf3; border-radius: 6px; }
 .readingText { position: relative; min-height: 410px; margin: 38px 0 30px; }
-.readingText h2 { margin: 24px 0; font-family: Georgia, serif; font-size: 1.5em; font-weight: 500; line-height: 1.3; }
-.readingText p { margin: 0 0 1.3em; color: #3d4655; font-family: Georgia, "Times New Roman", serif; font-size: inherit; line-height: 1.85; cursor: pointer; border-radius: 4px; }
+.readingText h2 { margin: 24px 0; color: var(--reading-heading, #283448); font-family: Georgia, serif; font-size: 1.5em; font-weight: 500; line-height: var(--reading-line-spacing, 1.3); }
+.readingText p { margin: 0 0 1.3em; color: var(--reading-text, #3d4655); font-family: Georgia, "Times New Roman", serif; font-size: inherit; line-height: var(--reading-line-spacing, 1.85); cursor: pointer; border-radius: 4px; }
 .readingText.openDyslexic :is(p, h2) { font-family: "FreeReader OpenDyslexic", sans-serif; }
-.readingText :is(p, h2):hover { background: #f4f6fc; }
-.readingText .currentBlock { color: #254895; background: #edf2ff; }
+.readingText :is(p, h2):hover { background: var(--reading-hover, #f4f6fc); }
+.readingText .currentBlock { color: var(--reading-current-text, #254895); background: var(--reading-current, #edf2ff); }
 .viewToggle { display: flex; gap: 3px; padding: 3px; background: #f1f4fa; border-radius: 8px; }
 .viewToggle button { min-height: 36px; padding: 7px 12px; color: #66758e; background: transparent; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; }
 .viewToggle button[aria-pressed="true"] { color: #254895; background: white; box-shadow: 0 1px 4px #24365c14; }
 .readingShell .nativeGrid { grid-template-columns: 190px minmax(0, 1fr); align-items: stretch; width: calc(100% - 40px); gap: 24px; overflow: hidden; padding: 16px 0; }
 .readingShell .nativePane { display: flex; flex-direction: column; padding: 0; overflow: hidden; height: 100%; }
-.nativePane .readingToolbar { flex: none; padding: 10px 16px; }
+.nativePane .readingToolbar { flex: none; padding: 10px 16px; background: #fff; }
 .eReaderArea { position: relative; display: flex; flex: 1; min-height: 0; }
-.eReaderViewport { flex: 1; min-height: 0; overflow: auto; overflow-anchor: none; padding: 12px 16px; }
+.eReaderViewport { flex: 1; min-height: 0; overflow: auto; overflow-anchor: none; padding: 12px 16px; background: var(--reading-background, #fff); }
 .eReaderViewport:focus-visible { outline: 2px solid #8ba7ff; outline-offset: -2px; }
 .resumeFollow { position: absolute; z-index: 6; right: 28px; bottom: 20px; min-height: 44px; padding: 10px 16px; color: #fff; background: #365bd6; border: 1px solid #294bbe; border-radius: 999px; box-shadow: 0 4px 16px #17253e38; font-size: 13px; font-weight: 600; cursor: pointer; }
 .resumeFollow:hover { background: #294bbe; }
 .resumeFollow:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 2px; }
 .eReaderViewport .readingText { margin: 0 auto; }
-.nativePane .readingText.eReaderPaper { width: min(100%, 760px); min-height: 100%; padding: 28px 40px; background: #fff; box-shadow: 0 2px 12px #17253e18; }
+.nativePane .readingText.eReaderPaper { width: min(100%, 760px); min-height: 100%; padding: 28px 40px; background: var(--reading-background, #fff); box-shadow: 0 2px 12px #17253e18; }
 .eReaderBlock { padding-bottom: 1.3em; }
 .eReaderHeading { padding: 24px 0; }
 .readingText .eReaderBlock p, .readingText .eReaderHeading h2 { position: relative; margin: 0; }
 .readingText .wordHighlights { position: absolute; inset: 0; pointer-events: none; }
-.readingText .spokenWord { position: absolute; overflow: hidden; color: #172f73; background: #aabaff; border-radius: 2px; white-space: pre; pointer-events: none; }
+.readingText .spokenWord { position: absolute; overflow: hidden; color: var(--reading-word-text, #172f73); background: var(--reading-word, #aabaff); border-radius: 2px; white-space: pre; pointer-events: none; }
 .nativeNotice { overflow: auto; padding: 32px 24px; color: #66758e; text-align: center; font-size: 13px; line-height: 1.7; }
 .nativeNotice strong { color: #3d4655; }
 .nativeNotice button { min-height: 44px; padding: 10px 16px; color: #254895; background: #edf2ff; border: 1px solid #dfe5f0; border-radius: 8px; }
@@ -251,7 +259,6 @@
 .progressSlider { width: 100%; height: 16px; margin: 3px 0 6px; accent-color: var(--app-blue); cursor: pointer; }
 .playerRow { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 15px; }
 .transport { display: flex; grid-column: 2; align-items: center; justify-content: center; gap: 12px; }
-.playerVoiceButton { grid-column: 3; justify-self: end; }
 .transport button { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 38px; min-height: 44px; padding: 5px; color: #5f708d; background: transparent; border: 0; border-radius: 8px; font-size: 13px; }
 .transport button:hover:not(:disabled) { background: #edf2fc; }
 .transport button span { color: #8a96a8; font-size: 9px; }
@@ -361,11 +368,23 @@
 .primaryAction .addSpinner { border-color: #fff; border-top-color: transparent; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .voicePopover { position: absolute; top: 86px; right: 24px; display: grid; gap: 16px; width: min(360px, calc(100% - 32px)); max-height: calc(100dvh - 110px); overflow: auto; padding: 22px; background: #fff; border: 1px solid var(--border); border-radius: 15px; box-shadow: 0 16px 60px #17253e26; }
+.fontPopover { width: min(440px, calc(100% - 32px)); }
+.backgroundPicker { display: grid; gap: 10px; color: #67758d; font-size: 13px; }
+.backgroundPicker > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.backgroundPicker button { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 6px 8px; color: #42506b; background: #f7f9fd; border: 1px solid #e1e8f5; border-radius: 8px; text-align: left; font-size: 12px; cursor: pointer; }
+.backgroundPicker button[aria-pressed="true"] { border-color: #365bd6; box-shadow: 0 0 0 1px #365bd6; }
+.backgroundPicker button:focus-visible { outline: 2px solid #365bd6; outline-offset: 2px; }
+.backgroundSwatch { width: 24px; height: 24px; flex: none; border: 1px solid #7b879a88; border-radius: 6px; }
+.fontPreview { padding: 16px; color: var(--reading-text); background: var(--reading-background); border: 1px solid #a9b2bf; border-radius: 9px; }
+.fontPreview strong { display: block; margin-bottom: 9px; color: var(--reading-heading); font-size: .85em; }
+.fontPreview p { margin: 0; }
 .settingsTitle { display: flex; align-items: center; justify-content: space-between; }
 .settingsTitle button { min-height: 40px; padding: 8px; color: var(--app-blue); background: transparent; border: 0; }
 .settingsRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; color: #67758d; font-size: 13px; }
 .settingsRow > span { display: flex; align-items: center; gap: 6px; }
 .settingsRow select { min-width: 0; max-width: 62%; min-height: 40px; padding: 8px; color: #425d98; background: #f3f6fc; border: 1px solid #e1e8f5; border-radius: 7px; }
+.preferenceAction { justify-self: start; padding: 0; color: var(--app-blue); background: transparent; border: 0; font-size: 12px; cursor: pointer; }
+.preferenceAction:disabled { color: #8792a5; cursor: default; }
 .wordHighlightSetting input { appearance: none; position: relative; width: 42px; height: 24px; flex: none; margin: 0; background: #cbd4e3; border-radius: 99px; cursor: pointer; }
 .wordHighlightSetting input::after { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; content: ""; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px #17253e33; transition: transform .15s ease; }
 .wordHighlightSetting input:checked { background: var(--app-blue); }
@@ -397,7 +416,6 @@
   .storageBadge { display: none; }
   .playerRow { grid-template-columns: minmax(0, 1fr) auto; }
   .transport { grid-column: 1 / -1; grid-row: 1; justify-self: center; }
-  .playerVoiceButton { grid-column: 2; grid-row: 2; }
   .continueCard { flex-wrap: wrap; }
   .continueCard > button { margin-left: 82px; }
 }
@@ -453,7 +471,7 @@
   .readingToolbar { gap: 8px; }
   .readingToolbar > span { font-size: 10px; }
   .readingText { margin-top: 26px; }
-  .readingText p { line-height: 1.75; }
+  .readingText p { line-height: var(--reading-line-spacing, 1.75); }
   .player { bottom: 0; width: 100%; padding: 12px 16px max(10px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
   .readingShell .player { margin-bottom: 0; }
   .playerRow { gap: 8px; }
@@ -476,7 +494,8 @@
 .readingShell .pdfPane { position: relative; background: #edf0f5; }
 .pdfPane .readingToolbar { position: absolute; z-index: 5; inset: 12px; display: block; padding: 0; border: 0; pointer-events: none; }
 .pdfPane .viewToggle { position: absolute; top: 0; left: 0; flex-direction: column; max-width: 112px; background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
-.pdfPane .textSizing { position: absolute; top: 0; right: 0; flex-direction: column; gap: 6px; pointer-events: auto; }
+.pdfPane .readingToolbarActions { position: absolute; top: 0; right: 0; pointer-events: auto; }
+.pdfPane .textSizing { flex-direction: row; gap: 2px; }
 .pdfPane .eReaderViewport { padding: 12px 84px 12px 132px; }
 @media (max-width: 800px) {
   .pdfPane .readingToolbar { inset: 8px; }
@@ -502,6 +521,10 @@
   .readingShell[data-mobile-tools-expanded="false"] .readingToolbar { display: none; }
   .readingShell .readingToolbar .viewToggle { position: static; flex-direction: column; width: 100%; max-width: none; padding: 2px; }
   .readingShell .readingToolbar .viewToggle button { width: 100%; min-height: 32px; padding: 4px; font-size: 10px; }
+  .readingShell .readingToolbar .readingToolbarActions { position: static; flex-direction: column; width: 100%; margin: 0; gap: 6px; }
+  .readingShell .readingToolbar .readerSettingsActions { flex-direction: row; gap: 4px; }
+  .readingShell .readingToolbar .readerSettingsButton { min-width: 32px; width: 32px; height: 32px; padding: 3px; }
+  .readingShell .readingToolbar .readerSettingsButton svg { width: 18px; height: 18px; }
   .readingShell .readingToolbar .textSizing { position: static; flex-direction: row; justify-content: center; gap: 4px; }
   .readingShell .readingToolbar .textSizing button { min-width: 32px; min-height: 32px; padding: 3px; font-size: 12px; }
   .readingShell .mobileSupportActions { display: flex; justify-content: center; gap: 4px; }
@@ -512,10 +535,24 @@
   .readingShell .pdfPane .eReaderViewport { padding: 4px; }
   .readingShell .player { width: 100%; padding: 6px 12px max(6px, env(safe-area-inset-bottom)); margin-bottom: 0; border-radius: 12px 12px 0 0; }
   .mobilePlayerBar { display: flex; align-items: center; gap: 8px; min-height: 38px; }
-  .mobilePlayerBar > span { flex: 1; color: #77839a; font-size: 11px; }
   .mobileQuickPlay { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: #fff; background: #365bd6; border: 0; border-radius: 50%; }
-  .mobilePlayerToggle { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px; color: #536b9b; background: #f6f8fc; border: 1px solid #e8edf7; border-radius: 8px; font-size: 11px; }
+  .mobilePlayerToggle { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; margin-left: auto; padding: 4px 8px; color: #536b9b; background: #f6f8fc; border: 1px solid #e8edf7; border-radius: 8px; font-size: 11px; }
   .readingShell[data-mobile-player-expanded="false"] .playerDetails { display: none; }
   .readingShell[data-mobile-player-expanded="true"] .playerDetails { display: block; padding-top: 8px; }
   .readingShell[data-mobile-player-expanded="true"] .mobileQuickPlay { display: none; }
+}
+
+/* Focus mode keeps the mounted reader and its cursor while clearing app chrome. */
+.readingShell.fullScreenReading { position: fixed; z-index: 35; inset: 0; width: 100vw; height: 100dvh; min-height: 0; overflow: hidden; }
+.readingShell.fullScreenReading :is(.readerTop, .accountNotice, .chapterRail, .readingToolbar, .mobileToolsToggle, .player, .upgradeFab, .modelProgress) { display: none; }
+.readingShell.fullScreenReading .readerGrid { display: flex; flex: 1; align-items: stretch; width: 100%; min-height: 0; margin: 0; padding: 0; overflow: hidden; }
+.readingShell.fullScreenReading .nativePane { flex: 1; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+.readingShell.fullScreenReading .nativePane [class*="pdfViewport"] { padding: 8px; }
+.fullScreenExit { position: fixed; z-index: 39; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: #42506b; background: #fffffff2; border: 1px solid #dfe5f0; border-radius: 8px; box-shadow: 0 2px 12px #17253e26; }
+.fullScreenExit:hover { background: #edf2fc; }
+.fullScreenPlayback { position: fixed; z-index: 39; top: calc(max(12px, env(safe-area-inset-top)) + 52px); right: max(12px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: #42506b; background: #fffffff2; border: 1px solid #dfe5f0; border-radius: 8px; box-shadow: 0 2px 12px #17253e26; }
+.fullScreenPlayback svg { width: 24px; height: 24px; stroke-width: 2.2; }
+.fullScreenPlayback:hover { background: #edf2fc; }
+@media (max-width: 800px) {
+  .readingShell.fullScreenReading .nativePane [class*="pdfViewport"] { padding: 4px; }
 }

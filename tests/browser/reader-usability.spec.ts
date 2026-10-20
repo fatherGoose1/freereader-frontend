@@ -43,8 +43,8 @@ test("guests see the upgrade notice and pricing dialog in the library and reader
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   await expect(notice).toContainText("Get FreeReader Gold");
   await expect(notice).toContainText("Faster generation");
-  await expect(notice).toContainText("A reserved Gold slot when shared generation is busy");
-  await expect(notice).toContainText("Enhanced audio");
+  await expect(notice).toContainText("Dedicated servers so you never have to wait for audio generation");
+  await expect(notice).toContainText("Highest-quality audio");
   await expect(notice).toContainText("Device syncing");
   await expect(notice.getByRole("button", { name: "See Gold plans" })).toBeVisible();
   await notice.screenshot({ path: testInfo.outputPath("gold-upgrade-notice.png") });
@@ -77,8 +77,31 @@ test("guests see the upgrade notice and pricing dialog in the library and reader
   await expect(page.locator('a[href*="buymeacoffee.com"]')).toHaveCount(0);
   await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
   await expect(page.getByText("Listen along")).toHaveCount(0);
-  await expect(page.locator('[class*="readerTools"]').getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
-  await expect(page.locator('[class*="playerRow"]').getByRole("button", { name: "Voice", exact: true })).toBeVisible();
+  await expect(page.locator('[class*="playerRow"]').getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
+  const fontButton = page.locator('#reader-reading-tools').getByRole("button", { name: "Font", exact: true });
+  const voiceButton = page.locator('#reader-reading-tools').getByRole("button", { name: "Voice", exact: true });
+  await expect(fontButton).toBeVisible();
+  await expect(voiceButton).toBeVisible();
+  expect(await fontButton.textContent()).toBe("Aa");
+  expect(await voiceButton.textContent()).toBe("");
+  const fontBounds = (await fontButton.boundingBox())!;
+  const sizeBounds = (await page.getByRole("button", { name: "Decrease text size" }).boundingBox())!;
+  expect(fontBounds.width).toBeGreaterThanOrEqual(44);
+  expect(fontBounds.height).toBeGreaterThanOrEqual(44);
+  if (await page.evaluate(() => innerWidth > 800)) expect(fontBounds.x).toBeLessThan(sizeBounds.x);
+  else expect(fontBounds.y).toBeLessThan(sizeBounds.y);
+  await fontButton.click();
+  const fontDialog = page.getByRole("dialog", { name: "Font settings" });
+  await expect(fontDialog.getByRole("switch", { name: "Highlight spoken words" })).toBeVisible();
+  await expect(fontDialog.getByRole("switch", { name: "OpenDyslexic font" })).toBeVisible();
+  await expect(fontDialog.getByLabel("Default reading view")).toHaveCount(0);
+  await expect(fontDialog).not.toContainText("These choices apply");
+  await fontDialog.getByRole("button", { name: "Done" }).click();
+  await voiceButton.click();
+  const voiceDialog = page.getByRole("dialog", { name: "Voice settings" });
+  await expect(voiceDialog.getByRole("switch")).toHaveCount(0);
+  await expect(voiceDialog.getByLabel("Default reading view")).toHaveCount(0);
+  await expect(voiceDialog).not.toContainText("Individual books remember");
 });
 
 test("an OAuth fallback to the homepage returns to the reader with the chosen billing interval", async ({ page }) => {
@@ -221,7 +244,7 @@ test("switching reading fonts recenters the spoken word promptly without showing
     const bounds = element.getBoundingClientRect();
     return word ? Math.abs((word.top + word.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
   });
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
   const toggle = page.getByRole("switch", { name: "OpenDyslexic font" });
   const before = await viewport.locator('[aria-current="true"]').evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
   await toggle.check();
@@ -559,6 +582,175 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toMatchObject({ speed: 0.5, engine: "supertonic" });
   expect(requests[1].quality).toBeUndefined();
+});
+
+test("guest voice and reading defaults persist across books and visits", async ({ page }) => {
+  await upload(page, "First default");
+  await upload(page, "Second default");
+  await page.getByRole("button", { name: /^html First default/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Voice settings" });
+  await dialog.getByRole("combobox", { name: "Voice", exact: true }).selectOption("af_river");
+  await dialog.getByRole("slider", { name: "Speaking speed" }).focus();
+  await dialog.getByRole("slider", { name: "Speaking speed" }).press("ArrowRight");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const font = page.getByRole("dialog", { name: "Font settings" });
+  await font.getByRole("switch", { name: "OpenDyslexic font" }).check();
+  await font.getByRole("switch", { name: "Highlight spoken words" }).uncheck();
+  await font.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Increase text size" }).click();
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: /^html Second default/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect(dialog.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_river");
+  await expect(dialog.getByRole("slider", { name: "Speaking speed" })).toHaveValue("1.1");
+  await expect(dialog.getByRole("switch")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
+  await expect(font.getByRole("switch", { name: "Highlight spoken words" })).not.toBeChecked();
+  await expect(font).toContainText("22px");
+  await font.getByRole("button", { name: "Done" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: /^html First default/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect(dialog.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_river");
+});
+
+test("font settings preview spacing and tint immediately and retain position across documents", async ({ page }) => {
+  await upload(page, "Accessible first", 5);
+  await upload(page, "Accessible second", 5);
+  await page.getByRole("button", { name: /^html Accessible first/ }).click();
+  await openControls(page);
+  const defaultLineHeight = await page.locator("article p").first().evaluate((element) => getComputedStyle(element).lineHeight);
+  expect(defaultLineHeight).toBe(await page.evaluate(() => innerWidth <= 800 ? "35px" : "37px"));
+  const chapter = page.getByLabel("Choose chapter");
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 3" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 3" }).click();
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Font settings" });
+  await expect(panel.getByRole("slider", { name: "Line spacing" })).toHaveAttribute("min", "1");
+  await expect(panel.getByRole("slider", { name: "Line spacing" })).toHaveAttribute("max", "2.5");
+  await expect(panel.getByRole("slider", { name: "Word spacing" })).toHaveAttribute("max", "0.3");
+  await panel.getByRole("slider", { name: "Line spacing" }).focus();
+  await panel.getByRole("slider", { name: "Line spacing" }).press("End");
+  await panel.getByRole("slider", { name: "Word spacing" }).focus();
+  await panel.getByRole("slider", { name: "Word spacing" }).press("End");
+  await panel.getByRole("button", { name: "Dark Mode" }).click();
+  const preview = panel.getByLabel("Live reading preview");
+  await expect(preview).toHaveCSS("background-color", "rgb(29, 36, 48)");
+  await expect(preview).toHaveCSS("word-spacing", "6px");
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+  await expect(page.locator("article p").first()).toHaveCSS("line-height", "50px");
+  await expect(page.locator("article p").first()).toHaveCSS("word-spacing", "6px");
+  await panel.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: /^html Accessible second/ }).click();
+  await openControls(page);
+  await expect(page.locator("article p").first()).toHaveCSS("line-height", "50px");
+  await expect(page.locator('[class*="eReaderViewport"]')).toHaveCSS("background-color", "rgb(29, 36, 48)");
+  await page.reload();
+  await page.getByRole("button", { name: /^html Accessible first/ }).click();
+  await openControls(page);
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+  await expect(page.locator('[class*="eReaderViewport"]')).toHaveCSS("background-color", "rgb(29, 36, 48)");
+});
+
+test("full screen fills the window with the chosen reading background and keeps the current passage", async ({ page }) => {
+  await upload(page, "Focus reading", 5);
+  await page.getByRole("button", { name: /^html Focus reading/ }).click();
+  await openControls(page);
+  const chapter = page.getByLabel("Choose chapter");
+  if (await chapter.isVisible()) await chapter.selectOption({ label: "Chapter 3" });
+  else await page.locator("aside").getByRole("button", { name: "Chapter 3" }).click();
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await page.getByRole("dialog", { name: "Font settings" }).getByRole("button", { name: "Soft Yellow" }).click();
+  await page.getByRole("dialog", { name: "Font settings" }).getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Full screen" }).click();
+  const reader = page.locator("main[data-mobile-reader]");
+  await expect(page.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+  await expect(page.locator('[class*="readerTop"]')).toBeHidden();
+  await expect(page.locator('[class*="chapterRail"]')).toBeHidden();
+  await expect(page.locator('main[data-mobile-reader] > div[class*="player"]')).toBeHidden();
+  await expect(page.locator("#reader-reading-tools")).toBeHidden();
+  await expect(reader).toHaveCSS("background-color", "rgb(255, 248, 206)");
+  await expect.poll(() => reader.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.x === 0 && rect.y === 0 && rect.width === innerWidth && rect.height === innerHeight;
+  })).toBe(true);
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Exit full screen" })).toHaveCount(0);
+  await expect(page.locator('[class*="readerTop"]')).toBeVisible();
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+  await page.getByRole("button", { name: "Full screen" }).click();
+  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await expect(page.locator('article [aria-current="true"]')).toHaveText("Chapter 3");
+});
+
+test("free accounts import guest defaults and restore them from account metadata", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  await upload(page, "Free account defaults");
+  await page.getByRole("button", { name: /^html Free account defaults/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Voice settings" });
+  await dialog.getByRole("combobox", { name: "Voice", exact: true }).selectOption("af_river");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const font = page.getByRole("dialog", { name: "Font settings" });
+  await font.getByRole("switch", { name: "OpenDyslexic font" }).check();
+  await font.getByRole("slider", { name: "Line spacing" }).focus();
+  await font.getByRole("slider", { name: "Line spacing" }).press("End");
+  await font.getByRole("button", { name: "Soft Green" }).click();
+  await font.getByRole("button", { name: "Done" }).click();
+
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  const user = { id: "22222222-2222-4222-8222-222222222222", email: "free@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {} as Record<string, unknown>, created_at: new Date().toISOString() };
+  const session = { access_token: "free-test-token", refresh_token: "free-test-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  const saved: unknown[] = [];
+  await page.route("**/auth/v1/user", (route) => {
+    if (route.request().method() === "PUT") {
+      const update = route.request().postDataJSON() as { data: Record<string, unknown> };
+      Object.assign(user.user_metadata, update.data);
+      saved.push(update.data.freereader_reader_preferences);
+    }
+    return route.fulfill({ status: 200, json: user });
+  });
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free" } }));
+  await page.route("**/auth/v1/logout**", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
+  await expect.poll(() => saved.length).toBeGreaterThan(0);
+  expect(saved[0]).toMatchObject({ openDyslexic: true, defaultVoices: { en: "af_river" }, lineSpacing: 2.5, readingBackground: "green" });
+  await page.evaluate(() => localStorage.removeItem("freereader-reader-preferences:v1:22222222-2222-4222-8222-222222222222"));
+  await page.reload();
+  await page.getByRole("button", { name: /^html Free account defaults/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect(dialog.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_river");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
+  await expect(page.locator('[class*="eReaderViewport"]')).toHaveCSS("background-color", "rgb(233, 245, 231)");
+  await font.getByRole("switch", { name: "OpenDyslexic font" }).uncheck();
+  await expect.poll(() => saved.length).toBeGreaterThan(1);
+  await font.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Account settings" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("button", { name: "Account settings" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
 });
 
 test("changing voice during first generation starts the new voice without another Listen click", async ({ page }) => {

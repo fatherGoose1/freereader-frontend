@@ -10,6 +10,8 @@ import type { LibraryBook } from "./types";
 import { indexNativeText, matchNativeBlocks, nativeRange, nativeWordRange, pdfPageForBlock, pdfWordRange, type NativeTextIndex } from "./nativeText";
 import type { SpokenWord } from "./spokenWord";
 import { OPEN_DYSLEXIC_SCALE } from "./readingFont";
+import { READING_BACKGROUNDS } from "./readingAppearance";
+import type { ReaderPreferences } from "./readerPreferences";
 import ReaderIcon from "./ReaderIcon";
 import styles from "./nativeReader.module.css";
 
@@ -18,6 +20,7 @@ interface Props {
   source: Blob;
   textSize: number;
   openDyslexic: boolean;
+  appearance: Pick<ReaderPreferences, "lineSpacing" | "wordSpacing" | "readingBackground">;
   spokenWord?: SpokenWord;
   onNavigate: (index: number) => void;
 }
@@ -38,7 +41,7 @@ function setEpubTextSize(rendition: Rendition, size: number, dyslexic: boolean) 
   else rendition.themes.fontSize(`${size / 20 * (dyslexic ? OPEN_DYSLEXIC_SCALE : 1) * 100}%`);
 }
 
-function EpubReader({ book, source, textSize, openDyslexic, spokenWord, onNavigate, onError }: ReaderProps) {
+function EpubReader({ book, source, textSize, openDyslexic, appearance, spokenWord, onNavigate, onError }: ReaderProps) {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<{ book: Book; rendition: Rendition; locations: Map<number, EpubLocation> } | null>(null);
   const cursor = useRef(book.position.blockIndex);
@@ -52,6 +55,7 @@ function EpubReader({ book, source, textSize, openDyslexic, spokenWord, onNaviga
   const size = useRef(textSize);
   const word = useRef(spokenWord);
   const fontCss = useRef("");
+  const appearanceCss = useRef("");
   cursor.current = book.position.blockIndex;
   word.current = spokenWord;
   navigate.current = onNavigate;
@@ -132,6 +136,12 @@ function EpubReader({ book, source, textSize, openDyslexic, spokenWord, onNaviga
           const style = contents.document.createElement("style");
           style.id = "freereader-open-dyslexic";
           style.textContent = fontCss.current;
+          contents.document.head.append(style);
+        }
+        if (appearanceCss.current) {
+          const style = contents.document.createElement("style");
+          style.id = "freereader-reading-appearance";
+          style.textContent = appearanceCss.current;
           contents.document.head.append(style);
         }
         contents.document.addEventListener("click", (event) => {
@@ -326,6 +336,32 @@ function EpubReader({ book, source, textSize, openDyslexic, spokenWord, onNaviga
     };
   }, [openDyslexic, ready]);
 
+  useEffect(() => {
+    const { lineSpacing, wordSpacing, readingBackground } = appearance;
+    const palette = READING_BACKGROUNDS[readingBackground];
+    appearanceCss.current = [
+      lineSpacing !== null ? `body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { line-height: ${lineSpacing} !important; }` : "",
+      wordSpacing ? `body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { word-spacing: ${wordSpacing}em !important; }` : "",
+      readingBackground !== "white" ? `html, body { background-color: ${palette.background} !important; color: ${palette.text} !important; }
+        body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, span, em, strong, a) { color: ${palette.text} !important; }` : "",
+    ].filter(Boolean).join("\n");
+    const rendition = engine.current?.rendition;
+    for (const contents of (rendition?.getContents() ?? []) as Contents[]) {
+      let style = contents.document.getElementById("freereader-reading-appearance");
+      if (!appearanceCss.current) { style?.remove(); continue; }
+      if (!style) {
+        style = contents.document.createElement("style");
+        style.id = "freereader-reading-appearance";
+        contents.document.head.append(style);
+      }
+      style.textContent = appearanceCss.current;
+    }
+    if (ready && rendition && host.current) {
+      rendition.resize(host.current.clientWidth, host.current.clientHeight);
+      void realign.current().catch(onError);
+    }
+  }, [appearance.lineSpacing, appearance.wordSpacing, appearance.readingBackground, ready]);
+
   async function turn(direction: "prev" | "next") {
     setMoving(true);
     manualNavigation.current = true;
@@ -333,9 +369,9 @@ function EpubReader({ book, source, textSize, openDyslexic, spokenWord, onNaviga
     catch { onError(); }
     finally { setMoving(false); }
   }
-  return <div className={styles.reader} aria-label="Native EPUB reader">
+  return <div className={styles.reader} aria-label="Native EPUB reader" style={{ background: READING_BACKGROUNDS[appearance.readingBackground].background }}>
     {!ready && <p className={styles.loading} role="status">Opening original EPUB…</p>}
-    <div ref={host} className={styles.epub} />
+    <div ref={host} className={styles.epub} style={{ background: READING_BACKGROUNDS[appearance.readingBackground].background }} />
     <nav className={styles.navigation} aria-label="Original document pages">
       <button disabled={!ready || moving || location.atStart} onClick={() => void turn("prev")}><ReaderIcon name="back" /> Previous</button>
       <span>Chapter page {location.page} of {location.total}</span>

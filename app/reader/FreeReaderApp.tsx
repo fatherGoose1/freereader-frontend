@@ -47,16 +47,17 @@ import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
 import { matchWordTimings, wordAtTime, type SpokenWord, type TimedSpokenWord, type WordTiming } from "./spokenWord";
 import ContinuousReader from "./ContinuousReader";
+import { readingColors, READING_BACKGROUNDS, type ReadingBackground } from "./readingAppearance";
+import { ACCOUNT_PREFERENCES_FIELD, DEFAULT_READER_PREFERENCES, parseReaderPreferences,
+  preferredVoiceForBook, readReaderPreferences, saveReaderPreferences, type ReaderPreferences } from "./readerPreferences";
 
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
 
-type Panel = "voice" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
+type Panel = "voice" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
-const WORD_HIGHLIGHT_PREFERENCE = "freereader-highlight-spoken-words";
-const OPEN_DYSLEXIC_PREFERENCE = "freereader-open-dyslexic";
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -207,10 +208,44 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [librarySearch, setLibrarySearch] = useState("");
   const [librarySort, setLibrarySort] = useState("recent");
   const [textSize, setTextSize] = useState(20);
+  const [compactSpacing, setCompactSpacing] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 800px)");
+    const update = () => setCompactSpacing(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const [mobileToolsExpanded, setMobileToolsExpanded] = useState(false);
   const [mobilePlayerExpanded, setMobilePlayerExpanded] = useState(false);
+  const [fullScreenReading, setFullScreenReading] = useState(false);
+  const fullScreenTrigger = useRef<HTMLButtonElement>(null);
+  const fullScreenExit = useRef<HTMLButtonElement>(null);
+  function exitFullScreenReading() {
+    setFullScreenReading(false);
+    requestAnimationFrame(() => fullScreenTrigger.current?.focus());
+  }
+  useEffect(() => {
+    if (!fullScreenReading) return;
+    const previousOverflow = document.documentElement.style.overflow;
+    const previousReaderMode = document.body.getAttribute("data-reader-fullscreen");
+    document.documentElement.style.overflow = "hidden";
+    document.body.setAttribute("data-reader-fullscreen", "true");
+    fullScreenExit.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); exitFullScreenReading(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.documentElement.style.overflow = previousOverflow;
+      if (previousReaderMode === null) document.body.removeAttribute("data-reader-fullscreen");
+      else document.body.setAttribute("data-reader-fullscreen", previousReaderMode);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [fullScreenReading]);
   const [readingView, setReadingView] = useState<ReadingView>("native");
   const [nativeSource, setNativeSource] = useState<{ bookId: string; source: Blob | null } | null>(null);
+  const nativeSourceRef = useRef(nativeSource);
   const [attachingSource, setAttachingSource] = useState(false);
   const [sourceError, setSourceError] = useState("");
   const nativeFileInput = useRef<HTMLInputElement>(null);
@@ -230,17 +265,20 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (!selected || !["epub", "pdf"].includes(selected.format)) return;
     let cancelled = false;
     setSourceError("");
+    nativeSourceRef.current = null;
     setNativeSource(null);
     void getNativeSource(selected.id).catch(() => null).then((source) => {
       if (cancelled) return;
-      setNativeSource({ bookId: selected.id, source });
+      nativeSourceRef.current = { bookId: selected.id, source };
+      setNativeSource(nativeSourceRef.current);
       let preference: string | null = null;
       try { preference = localStorage.getItem(`freereader-view:${selected.id}`); } catch { /* Storage may be restricted. */ }
-      setReadingView(preference === "ereader" || !source ? "ereader" : "native");
+      setReadingView(!source || (preference ?? preferencesRef.current.defaultView) === "ereader" ? "ereader" : "native");
     });
     return () => { cancelled = true; };
   }, [selected?.id]);
   const [panel, setPanel] = useState<Panel>(null);
+  const settingsOpen = panel === "voice" || panel === "font";
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialBook ? "" : "Your books and generated audio stay in this browser.");
   const [libraryLoaded, setLibraryLoaded] = useState(false);
@@ -285,6 +323,12 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [playing, setPlaying] = useState(false);
   const [highlightSpokenWords, setHighlightSpokenWords] = useState(true);
   const [openDyslexic, setOpenDyslexic] = useState(false);
+  const [preferences, setPreferences] = useState<ReaderPreferences>(DEFAULT_READER_PREFERENCES);
+  const preferencesRef = useRef(preferences);
+  const preferenceOwner = useRef<string | undefined>(undefined);
+  const preferenceEdits = useRef(0);
+  const preferenceWrites = useRef(Promise.resolve());
+  const preferenceSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [audioProgress, setAudioProgress] = useState(0);
   const [spoken, setSpoken] = useState<{ bookId: string; index: number; word: SpokenWord } | null>(null);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
@@ -304,12 +348,93 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const audioPrimed = useRef(false);
   const playedBooks = useRef(new Set<string>());
   const playableBooks = useRef(new Set<string>());
+  function applyPreferences(value: ReaderPreferences) {
+    preferencesRef.current = value;
+    setPreferences(value);
+    setHighlightSpokenWords(value.highlightSpokenWords);
+    setOpenDyslexic(value.openDyslexic);
+    setTextSize(value.textSize);
+    if (!managed) {
+      appliedSpeechRate.current = value.speakingSpeed;
+      setSpeechRate(value.speakingSpeed);
+    }
+    const book = selectedRef.current;
+    if (book) {
+      const language = languageForBook(book);
+      setVoice(voiceForLanguage(preferredVoiceForBook(book, value, language) ?? "af_heart", language));
+      if (nativeSourceRef.current?.bookId === book.id && nativeSourceRef.current.source) {
+        let bookView: string | null = null;
+        try { bookView = localStorage.getItem(`freereader-view:${book.id}`); } catch { /* Browser storage may be restricted. */ }
+        if (!bookView) setReadingView(value.defaultView);
+      }
+    }
+  }
+
+  function uploadPreferences(value: ReaderPreferences, ownerId: string) {
+    preferenceWrites.current = preferenceWrites.current.catch(() => {}).then(async () => {
+      if (preferenceOwner.current !== ownerId) return;
+      const { error } = await supabaseClient()!.auth.updateUser({ data: { [ACCOUNT_PREFERENCES_FIELD]: value } });
+      if (error) throw error;
+    });
+    void preferenceWrites.current.catch(() => { /* The account-scoped browser copy is retained for retry. */ });
+  }
+
+  function changePreferences(change: (current: ReaderPreferences) => ReaderPreferences) {
+    preferenceEdits.current += 1;
+    const previousTime = Date.parse(preferencesRef.current.updatedAt) || 0;
+    const next = { ...change(preferencesRef.current), updatedAt: new Date(Math.max(Date.now(), previousTime + 1)).toISOString() };
+    applyPreferences(next);
+    const ownerId = preferenceOwner.current;
+    saveReaderPreferences(next, ownerId);
+    if (preferenceSaveTimer.current) clearTimeout(preferenceSaveTimer.current);
+    if (ownerId) preferenceSaveTimer.current = setTimeout(() => {
+      preferenceSaveTimer.current = null;
+      uploadPreferences(preferencesRef.current, ownerId);
+    }, 400);
+  }
+
   useEffect(() => {
-    try { setHighlightSpokenWords(localStorage.getItem(WORD_HIGHLIGHT_PREFERENCE) !== "false"); }
-    catch { /* Keep the on-by-default setting when browser storage is unavailable. */ }
-    try { setOpenDyslexic(localStorage.getItem(OPEN_DYSLEXIC_PREFERENCE) === "true"); }
-    catch { /* Keep the default font when browser storage is unavailable. */ }
-  }, []);
+    if (!authReady && !managed) return;
+    const ownerId = managed ? undefined : session?.user.id;
+    if (preferenceSaveTimer.current) clearTimeout(preferenceSaveTimer.current);
+    preferenceSaveTimer.current = null;
+    preferenceOwner.current = ownerId;
+    const cached = readReaderPreferences(ownerId);
+    applyPreferences(cached ?? DEFAULT_READER_PREFERENCES);
+    if (!ownerId) return;
+    let cancelled = false;
+    const refresh = async () => {
+      const edits = preferenceEdits.current;
+      const { data, error } = await supabaseClient()!.auth.getUser();
+      if (cancelled || preferenceOwner.current !== ownerId || error || data.user?.id !== ownerId) return;
+      const remote = parseReaderPreferences(data.user.user_metadata?.[ACCOUNT_PREFERENCES_FIELD]);
+      const local = readReaderPreferences(ownerId);
+      if (!remote && !local) {
+        const guest = readReaderPreferences();
+        if (guest && edits === preferenceEdits.current) {
+          saveReaderPreferences(guest, ownerId);
+          applyPreferences(guest);
+          uploadPreferences(guest, ownerId);
+        }
+      } else if (local && (!remote || Date.parse(local.updatedAt) > Date.parse(remote.updatedAt))) {
+        if (edits === preferenceEdits.current) applyPreferences(local);
+        uploadPreferences(local, ownerId);
+      } else if (remote && edits === preferenceEdits.current) {
+        const previous = preferencesRef.current;
+        saveReaderPreferences(remote, ownerId);
+        applyPreferences(remote);
+        if (previous.speakingSpeed !== remote.speakingSpeed || selectedRef.current
+          && preferredVoiceForBook(selectedRef.current, previous, languageForBook(selectedRef.current))
+            !== preferredVoiceForBook(selectedRef.current, remote, languageForBook(selectedRef.current))) {
+          continueAfterSettingsChange();
+        }
+      }
+    };
+    void refresh().catch(() => { /* Continue with account-scoped browser preferences. */ });
+    const onFocus = () => { if (!cancelled) void refresh().catch(() => {}); };
+    window.addEventListener("focus", onFocus);
+    return () => { cancelled = true; window.removeEventListener("focus", onFocus); };
+  }, [authReady, session?.user.id, managed]);
   useEffect(() => {
     if (highlightSpokenWords && playing) startWordTracking();
     else {
@@ -378,9 +503,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         const authorReturn = takeAuthorReturn();
         if (authorReturn) { window.location.replace(authorReturn); return; }
       }
-      setSession(next);
+      setSession((current) => current?.access_token === next?.access_token && current?.user.id === next?.user.id ? current : next);
       setAuthReady(true);
-      if (next) void linkInstallation(next.access_token).catch(() => undefined);
+      if (next && _event !== "USER_UPDATED") void linkInstallation(next.access_token).catch(() => undefined);
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -838,8 +963,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     saveBook(book).then(libraryChanged).catch(() => setMessage("Reading position could not be saved."));
   }
 
-  function changeReadingView(view: ReadingView) {
+  function changeReadingView(view: ReadingView, updateDefault = true) {
     setReadingView(view);
+    if (updateDefault && preferencesRef.current.defaultView !== view) {
+      changePreferences((current) => ({ ...current, defaultView: view }));
+    }
     if (selected) {
       try { localStorage.setItem(`freereader-view:${selected.id}`, view); } catch { /* The view still changes in memory. */ }
     }
@@ -866,8 +994,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         resetPlayback();
         updateBook(refreshPdfNarration(current, parsed));
       }
-      setNativeSource({ bookId: book.id, source: file });
-      changeReadingView("native");
+      nativeSourceRef.current = { bookId: book.id, source: file };
+      setNativeSource(nativeSourceRef.current);
+      changeReadingView("native", false);
     } catch (error) {
       setSourceError(error instanceof Error ? error.message : "The original file could not be saved.");
     } finally {
@@ -1353,7 +1482,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const ready = rechunked.language ? rechunked : { ...rechunked, language, updatedAt: new Date().toISOString() };
     selectedRef.current = ready;
     setSelected(ready);
-    setVoice((current) => voiceForLanguage(book.preferredVoice ?? current, language));
+    setVoice(voiceForLanguage(preferredVoiceForBook(ready, preferencesRef.current, language) ?? "af_heart", language));
     if (ready !== book) {
       setBooks((current) => current.map((value) => value.id === book.id ? ready : value));
       saveBook(ready).then(libraryChanged).catch(() => undefined);
@@ -1370,19 +1499,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   function changeNarrationLanguage(language: SpeechLanguage) {
     const selected = selectedRef.current;
     if (!selected) return;
-    const nextVoice = voiceForLanguage(voice, language);
+    const nextVoice = voiceForLanguage(preferencesRef.current.defaultVoices[language] ?? selected.suggestedVoice ?? voice, language);
     setVoice(nextVoice);
-    const updated = { ...selected, language, preferredVoice: nextVoice, updatedAt: new Date().toISOString() };
-    updateBook(updated);
+    updateBook({ ...selected, language, updatedAt: new Date().toISOString() });
     continueAfterSettingsChange();
     posthog.capture("voice_settings_changed", { setting: "language", value: language });
   }
 
-  function changeNarratorVoice(value: NarratorVoice) {
-    const selected = selectedRef.current;
-    if (!selected) return;
-    setVoice(value);
-    updateBook({ ...selected, preferredVoice: value, updatedAt: new Date().toISOString() });
+  function changeDefaultVoice(language: SpeechLanguage, value: NarratorVoice) {
+    changePreferences((current) => ({ ...current, defaultVoices: { ...current.defaultVoices, [language]: value } }));
     continueAfterSettingsChange();
     posthog.capture("voice_settings_changed", { setting: "voice", value });
   }
@@ -1409,6 +1534,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (appliedSpeechRate.current === rate) return;
     appliedSpeechRate.current = rate;
     setSpeechRate(rate);
+    if (!managed) changePreferences((current) => ({ ...current, speakingSpeed: rate }));
     continueAfterSettingsChange();
     posthog.capture("voice_settings_changed", { setting: "speaking_rate", value: rate });
   }
@@ -1487,14 +1613,18 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const showNative = supportsNative && readingView === "native";
     const floatingPdfControls = selected.format === "pdf" && !!originalSource;
     return (
-      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook && !managed ? styles.embeddedReader : ""}`} data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded} onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
+      <main className={`${styles.appShell} ${styles.readingShell} ${initialBook && !managed ? styles.embeddedReader : ""} ${fullScreenReading ? styles.fullScreenReading : ""}`}
+        style={fullScreenReading ? { backgroundColor: showNative && selected.format === "pdf" ? "#edf0f5" : READING_BACKGROUNDS[preferences.readingBackground].background } : undefined}
+        data-mobile-reader data-mobile-tools-expanded={mobileToolsExpanded} data-mobile-player-expanded={mobilePlayerExpanded}
+        onClickCapture={(event) => { if (!panel) dialogTrigger.current = (event.target as Element).closest("button"); }}>
         <audio ref={audioRef} onTimeUpdate={onTimeUpdate} onSeeked={updateSpokenWord} onPlaying={startWordTracking} onPause={onAudioPaused} onEnded={onEnded} onError={() => {
           if (!currentAudio() || !audioRef.current?.error) return;
           setMessage(audioRef.current.error.message || "Audio playback failed. Tap Listen to retry.");
           resetPlayback();
         }} />
-        <div className={styles.readerTop} inert={panel === "voice"}>
+        <div className={styles.readerTop} inert={settingsOpen}>
           <button className={styles.textButton} onClick={() => {
+            setFullScreenReading(false);
             resetPlayback();
             if (managed) { if (selectedRef.current) void saveBook(selectedRef.current).catch(() => undefined); managed.exit(); return; }
             if (initialBook) { window.location.assign("/reader/audiobooks"); return; }
@@ -1521,7 +1651,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </div>
         </div>
         {accountNotice}
-        <div className={`${styles.readerGrid} ${styles.nativeGrid}`} inert={panel === "voice"}>
+        <div className={`${styles.readerGrid} ${styles.nativeGrid}`} inert={settingsOpen}>
           <aside className={styles.chapterRail}>
             <div className={styles.chapterBook}><BookCover book={selected} index={0} /><strong>{selected.title}</strong>{selected.author && <small>{selected.author}</small>}</div>
             <span className={styles.kicker}>Contents</span>
@@ -1534,21 +1664,29 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               >{item.title}</button>
             ))}
           </aside>
-          <article className={`${styles.readingPane} ${styles.nativePane} ${floatingPdfControls ? styles.pdfPane : ""}`}>
+          <article className={`${styles.readingPane} ${styles.nativePane} ${floatingPdfControls ? styles.pdfPane : ""}`}
+            style={!showNative ? { backgroundColor: READING_BACKGROUNDS[preferences.readingBackground].background } : undefined}>
             <button type="button" className={styles.mobileToolsToggle} aria-label={mobileToolsExpanded ? "Collapse reading tools" : "Expand reading tools"} aria-expanded={mobileToolsExpanded} aria-controls="reader-reading-tools" onClick={() => setMobileToolsExpanded((expanded) => !expanded)}><ReaderIcon name={mobileToolsExpanded ? "close" : "more"} /></button>
             <div id="reader-reading-tools" className={styles.readingToolbar}>
               {supportsNative ? <div className={styles.viewToggle} role="group" aria-label="Reading view">
                 <button aria-pressed={showNative} title="Original" onClick={() => changeReadingView("native")}>Original</button>
                 <button aria-pressed={!showNative} title="E-reader" onClick={() => changeReadingView("ereader")}>E-reader</button>
               </div> : <span>Tap a passage to listen from there</span>}
-              <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => setTextSize((size) => size - 2)}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => setTextSize((size) => size + 2)}>A+</button></div>
-              {!managed && <div className={styles.mobileSupportActions}>
-                {planReady && !enhanced && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="crown" /></button>}
-                <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
-              </div>}
+              <div className={styles.readingToolbarActions}>
+                <div className={styles.readerSettingsActions} role="group" aria-label="Reading settings">
+                  <button type="button" className={styles.readerSettingsButton} aria-label="Font" title="Font settings" aria-expanded={panel === "font"} onClick={() => setPanel(panel ? null : "font")}><span aria-hidden="true">Aa</span></button>
+                  <button type="button" className={styles.readerSettingsButton} aria-label="Voice" title="Voice settings" aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="headphones" /></button>
+                  <button ref={fullScreenTrigger} type="button" className={styles.readerSettingsButton} aria-label="Full screen" title="Full screen" onClick={() => setFullScreenReading(true)}><ReaderIcon name="expand" /></button>
+                </div>
+                <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => changePreferences((current) => ({ ...current, textSize: Math.max(16, current.textSize - 2) }))}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => changePreferences((current) => ({ ...current, textSize: Math.min(28, current.textSize + 2) }))}>A+</button></div>
+                {!managed && <div className={styles.mobileSupportActions}>
+                  {planReady && !enhanced && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="crown" /></button>}
+                  <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
+                </div>}
+              </div>
             </div>
             {showNative ? originalSource
-              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} openDyslexic={openDyslexic} spokenWord={activeWord} onNavigate={goToBlock} />
+              ? <NativeDocumentReader key={selected.id} book={selected} source={originalSource} textSize={textSize} openDyslexic={openDyslexic} appearance={preferences} spokenWord={activeWord} onNavigate={goToBlock} />
               : <div className={styles.nativeNotice}>
                 {!sourceLoaded ? <p role="status">Opening original document…</p> : <>
                   <strong>Open this book in its original layout</strong>
@@ -1558,10 +1696,17 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                   {sourceError && <p role="alert">{sourceError}</p>}
                 </>}
               </div>
-              : <ContinuousReader key={selected.id} book={selected} textSize={textSize} openDyslexic={openDyslexic} spokenWord={activeWord} onNavigate={goToBlock} paper={supportsNative}
+              : <ContinuousReader key={selected.id} book={selected} textSize={textSize} openDyslexic={openDyslexic} appearance={preferences} spokenWord={activeWord} onNavigate={goToBlock} paper={supportsNative}
                   navigationJump={navigationJump?.bookId === selected.id && navigationJump.index === selected.position.blockIndex ? navigationJump : null} />}
           </article>
         </div>
+        {fullScreenReading && <>
+          <button type="button" className={styles.fullScreenPlayback}
+            aria-label={playing ? "Pause reading" : "Play reading"} title={playing ? "Pause reading" : "Play reading"} onClick={togglePlayback}>
+            <ReaderIcon name={playing ? "pause" : "play"} />
+          </button>
+          <button ref={fullScreenExit} type="button" className={styles.fullScreenExit} aria-label="Exit full screen" title="Exit full screen" onClick={exitFullScreenReading}><ReaderIcon name="shrink" /></button>
+        </>}
         {ttsProgress !== undefined && (
           <section className={styles.modelProgress} role="status" aria-live="polite">
             <div>
@@ -1573,10 +1718,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             {isModelDownload && <small>The model and voice are cached in browser storage when available and reused after refresh.</small>}
           </section>
         )}
-        <div className={styles.player} inert={panel === "voice"}>
+        <div className={styles.player} inert={settingsOpen}>
           <div className={styles.mobilePlayerBar}>
             <button type="button" className={styles.mobileQuickPlay} aria-label={playing ? "Pause" : "Listen"} onClick={togglePlayback}><ReaderIcon name={playing ? "pause" : "play"} /></button>
-            <span>{Math.round(bookProgress * 100)}% of book</span>
             <button type="button" className={styles.mobilePlayerToggle} aria-label={mobilePlayerExpanded ? "Collapse player controls" : "Expand player controls"} aria-expanded={mobilePlayerExpanded} aria-controls="reader-player-details" onClick={() => setMobilePlayerExpanded((expanded) => !expanded)}>Player <ReaderIcon name={mobilePlayerExpanded ? "chevronDown" : "chevronUp"} /></button>
           </div>
           <div id="reader-player-details" className={styles.playerDetails}>
@@ -1590,7 +1734,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               <button onClick={() => seek(10)} title="Forward 10 seconds"><strong>+10</strong><span>seconds</span></button>
               <button className={styles.chapterSkip} onClick={() => moveChapter(1)} disabled={!selected.chapters.some((item) => item.startBlockIndex > selected.position.blockIndex)} title="Next chapter" aria-label="Next chapter"><ReaderIcon name="next" /></button>
             </div>
-            <button className={`${styles.textButton} ${styles.playerVoiceButton}`} aria-expanded={panel === "voice"} onClick={() => setPanel(panel ? null : "voice")}><ReaderIcon name="settings" /> Voice</button>
           </div>
           </div>
           {message && <p className={styles.statusLine} role="status">{message}</p>}
@@ -1605,7 +1748,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </select>
             </label>
             <label className={styles.settingsRow}><span>Voice</span>
-              <select value={narrationVoice} onChange={(event) => changeNarratorVoice(event.target.value as NarratorVoice)}>
+              <select value={narrationVoice} onChange={(event) => changeDefaultVoice(narrationLanguage, event.target.value as NarratorVoice)}>
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
@@ -1618,24 +1761,53 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 onBlur={(event) => commitSpeechRate(Number(event.currentTarget.value))} />
               <div className={styles.speakingRateBounds}><span>0.5×</span><span>3.0×</span></div>
             </div>
-            <small>Speaking speed applies to newly generated passages.</small>
-            <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>Highlight spoken words</span>
-              <input type="checkbox" role="switch" checked={highlightSpokenWords} onChange={(event) => {
-                const enabled = event.currentTarget.checked;
-                setHighlightSpokenWords(enabled);
-                try { localStorage.setItem(WORD_HIGHLIGHT_PREFERENCE, String(enabled)); }
-                catch { /* The preference still applies to this session. */ }
-              }} />
-            </label>
+            <small>Speaking speed applies to newly generated passages and becomes your default.</small>
+          </div>
+          </div>
+        )}
+        {panel === "font" && (
+          <div className={styles.settingsBackdrop} onMouseDown={() => setPanel(null)}>
+          <div className={`${styles.voicePopover} ${styles.fontPopover}`} role="dialog" aria-modal="true" aria-label="Font settings" onMouseDown={(event) => event.stopPropagation()}>
+            <div className={styles.settingsTitle}><strong>Font Settings</strong><button onClick={() => setPanel(null)}>Done</button></div>
             <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>OpenDyslexic font</span>
-              <input type="checkbox" role="switch" checked={openDyslexic} onChange={(event) => {
-                const enabled = event.currentTarget.checked;
-                setOpenDyslexic(enabled);
-                try { localStorage.setItem(OPEN_DYSLEXIC_PREFERENCE, String(enabled)); }
-                catch { /* The preference still applies to this session. */ }
-              }} />
+              <input type="checkbox" role="switch" checked={openDyslexic} onChange={(event) => changePreferences((current) => ({ ...current, openDyslexic: event.target.checked }))} />
             </label>
-            {selected.format === "pdf" && <small>Available in E-reader. Original PDF keeps the font embedded in the document.</small>}
+            <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>Highlight spoken words</span>
+              <input type="checkbox" role="switch" checked={highlightSpokenWords} onChange={(event) => changePreferences((current) => ({ ...current, highlightSpokenWords: event.target.checked }))} />
+            </label>
+            <div className={styles.speakingRateSetting}>
+              <div><label htmlFor="reader-font-size">Text size</label><output htmlFor="reader-font-size">{textSize}px</output></div>
+              <input id="reader-font-size" type="range" min="16" max="28" step="2" value={textSize}
+                onChange={(event) => changePreferences((current) => ({ ...current, textSize: Number(event.target.value) }))} />
+            </div>
+            <div className={styles.speakingRateSetting}>
+              <div><label htmlFor="reader-line-spacing">Line spacing</label><output htmlFor="reader-line-spacing">{(preferences.lineSpacing ?? (compactSpacing ? 1.75 : 1.85)).toFixed(2)}×</output></div>
+              <input id="reader-line-spacing" type="range" min="1" max="2.5" step="0.05"
+                value={preferences.lineSpacing ?? (compactSpacing ? 1.75 : 1.85)}
+                onChange={(event) => changePreferences((current) => ({ ...current, lineSpacing: Number(event.target.value) }))} />
+              <div className={styles.speakingRateBounds}><span>1.0×</span><span>2.5×</span></div>
+            </div>
+            <div className={styles.speakingRateSetting}>
+              <div><label htmlFor="reader-word-spacing">Word spacing</label><output htmlFor="reader-word-spacing">{preferences.wordSpacing === 0 ? "Normal" : `${preferences.wordSpacing.toFixed(2)}em`}</output></div>
+              <input id="reader-word-spacing" type="range" min="0" max="0.3" step="0.01" value={preferences.wordSpacing}
+                onChange={(event) => changePreferences((current) => ({ ...current, wordSpacing: Number(event.target.value) }))} />
+              <div className={styles.speakingRateBounds}><span>Normal</span><span>0.3em</span></div>
+            </div>
+            <div className={styles.backgroundPicker} role="group" aria-label="Reading background">
+              <strong>Background color &amp; screen tint</strong>
+              <div>{(Object.entries(READING_BACKGROUNDS) as [ReadingBackground, typeof READING_BACKGROUNDS[ReadingBackground]][]).map(([key, item]) => (
+                <button key={key} type="button" aria-pressed={preferences.readingBackground === key} onClick={() => changePreferences((current) => ({ ...current, readingBackground: key }))}>
+                  <span className={styles.backgroundSwatch} style={{ backgroundColor: item.background }} aria-hidden="true" />{item.label}
+                </button>
+              ))}</div>
+            </div>
+            <div className={styles.fontPreview} aria-label="Live reading preview" style={{ ...readingColors(preferences.readingBackground),
+              fontFamily: openDyslexic ? '"FreeReader OpenDyslexic", sans-serif' : 'Georgia, "Times New Roman", serif',
+              fontSize: textSize * (openDyslexic ? 0.85 : 1), lineHeight: preferences.lineSpacing ?? (compactSpacing ? 1.75 : 1.85),
+              wordSpacing: `${preferences.wordSpacing}em` }}>
+              <strong>Reading preview</strong><p>A comfortable page makes every word easier to follow. Adjust the spacing and color to find what works for you.</p>
+            </div>
+            {selected.format === "pdf" && <small>Original PDF pages keep their embedded appearance. Switch to E-reader for spacing and background colors.</small>}
           </div>
           </div>
         )}

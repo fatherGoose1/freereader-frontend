@@ -29,6 +29,7 @@ export interface LibraryBook {
   author?: string;
   language?: SpeechLanguage;
   preferredVoice?: NarratorVoice;
+  suggestedVoice?: NarratorVoice;
   format: DocumentFormat;
   sourceName: string;
   sourceIdentifier?: string;
