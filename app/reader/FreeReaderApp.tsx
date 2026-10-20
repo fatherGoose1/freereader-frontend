@@ -390,12 +390,24 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   useEffect(() => {
     if (managed || !session) { setPlan("free"); setBillingSource("stripe"); setPlanReady(true); return; }
     let cancelled = false;
+    // Re-resolve when the tab regains focus so a Gold purchase linked on another
+    // device (for example the iOS app) is reflected without a full reload.
+    const resolvePlan = () => {
+      fetchUsage(session.access_token)
+        .then((summary) => { if (!cancelled) { setPlan(summary.plan); setBillingSource(summary.billing_source ?? "stripe"); } })
+        .catch(() => { if (!cancelled) setPlan("free"); })
+        .finally(() => { if (!cancelled) setPlanReady(true); });
+    };
     setPlanReady(false);
-    fetchUsage(session.access_token)
-      .then((summary) => { if (!cancelled) { setPlan(summary.plan); setBillingSource(summary.billing_source ?? "stripe"); } })
-      .catch(() => { if (!cancelled) setPlan("free"); })
-      .finally(() => { if (!cancelled) setPlanReady(true); });
-    return () => { cancelled = true; };
+    resolvePlan();
+    const refreshOnReturn = () => { if (document.visibilityState === "visible") resolvePlan(); };
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    window.addEventListener("focus", refreshOnReturn);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+      window.removeEventListener("focus", refreshOnReturn);
+    };
   }, [managed, session]);
 
   // Continue Gold checkout after the Google round trip started from the upgrade notice.
@@ -472,6 +484,16 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (error) setMessage("Could not sign out. Try again.");
   }
 
+  async function signIn() {
+    const supabase = supabaseClient();
+    if (!supabase) { setMessage("Google sign-in is unavailable right now."); return; }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
+    });
+    if (error) setMessage("Google sign-in didn't start. Try again.");
+  }
+
   const accountNotice = !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
@@ -494,7 +516,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       }}>×</button>
     </section>
   );
-  const accountButton = !managed && session && planReady && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
+  const accountButton = !managed && session && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
   const upgradeFab = !managed && planReady && !enhanced && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
@@ -1654,6 +1676,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         </Link>
         <div className={styles.actions}>
           {authReady && planReady && !enhanced && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}
+          {authReady && !session && <button type="button" className={styles.librarySignIn} onClick={() => void signIn()}>Sign in</button>}
           <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
           {accountButton}
           <input ref={fileInputRef} hidden type="file" accept={IMPORT_ACCEPT} onChange={(event) => {
