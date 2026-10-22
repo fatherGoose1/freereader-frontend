@@ -39,22 +39,15 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
-test("guests see the upgrade notice and pricing dialog in the library and reader", async ({ page }, testInfo) => {
+test("guests can open Gold plans while the upgrade banner and floating button are hidden", async ({ page }) => {
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
-  await expect(notice).toContainText("Get FreeReader Gold");
-  await expect(notice).toContainText("Faster generation");
-  await expect(notice).toContainText("Dedicated servers so you never have to wait for audio generation");
-  await expect(notice).toContainText("Highest-quality audio");
-  await expect(notice).toContainText("Device syncing");
-  await expect(notice.getByRole("button", { name: "See Gold plans" })).toBeVisible();
-  await notice.screenshot({ path: testInfo.outputPath("gold-upgrade-notice.png") });
-  const bounds = await notice.boundingBox();
-  const viewportWidth = await page.evaluate(() => window.innerWidth);
-  expect(bounds!.width).toBeLessThan(viewportWidth);
-  expect(Math.abs(bounds!.x + bounds!.width / 2 - viewportWidth / 2)).toBeLessThan(2);
+  const floatingUpgrade = page.locator('button[class*="upgradeFab"]');
+  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toBeVisible();
+  await expect(notice).toHaveCount(0);
+  await expect(floatingUpgrade).toHaveCount(0);
 
-  // The notice opens the pricing dialog with yearly and monthly prices.
-  await notice.getByRole("button", { name: "See Gold plans" }).click();
+  // The library header still opens the pricing dialog with yearly and monthly prices.
+  await page.getByRole("button", { name: "Get FreeReader Gold" }).click();
   const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("$1");
@@ -67,13 +60,8 @@ test("guests see the upgrade notice and pricing dialog in the library and reader
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
   await openControls(page);
-  await expect(notice).toBeVisible();
-  await expect(notice.getByRole("button", { name: "See Gold plans" })).toBeVisible();
-  const upgrade = page.getByRole("button", { name: "Upgrade to FreeReader Gold" });
-  await expect(upgrade).toBeVisible();
-  await upgrade.click();
-  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toBeVisible();
-  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(floatingUpgrade).toHaveCount(0);
   await expect(page.locator('a[href*="buymeacoffee.com"]')).toHaveCount(0);
   await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
   await expect(page.getByText("Listen along")).toHaveCount(0);

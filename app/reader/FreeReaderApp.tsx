@@ -58,6 +58,8 @@ type Panel = "voice" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
+// Temporarily hide the library/reader upgrade banner and floating button.
+const SHOW_UPGRADE_PROMPTS = false;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -619,7 +621,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (error) setMessage("Google sign-in didn't start. Try again.");
   }
 
-  const accountNotice = !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
+  const accountNotice = SHOW_UPGRADE_PROMPTS && !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
         <div className={styles.accountNoticeHeading}><ReaderIcon name="crown" /><strong>Get {ENHANCED_TIER_NAME}</strong></div>
@@ -643,7 +645,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   );
   const accountButton = !managed && session && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
-  const upgradeFab = !managed && planReady && !enhanced && !upgradeOpen && (
+  const upgradeFab = SHOW_UPGRADE_PROMPTS && !managed && planReady && !enhanced && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
       <ReaderIcon name="crown" /><span>Upgrade</span>
     </button>
