@@ -58,7 +58,7 @@ type Panel = "voice" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
-// Temporarily hide the library/reader upgrade banner and floating button.
+// Temporarily hide the library/reader upgrade banner, floating button, and library header button.
 const SHOW_UPGRADE_PROMPTS = false;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
@@ -1849,7 +1849,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
         </Link>
         <div className={styles.actions}>
-          {authReady && planReady && !enhanced && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}
+          {SHOW_UPGRADE_PROMPTS && authReady && planReady && !enhanced && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}
           {authReady && !session && <button type="button" className={styles.librarySignIn} onClick={() => void signIn()}>Sign in</button>}
           <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
           {accountButton}

@@ -39,23 +39,12 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
-test("guests can open Gold plans while the upgrade banner and floating button are hidden", async ({ page }) => {
+test("upgrade prompts are hidden in the library and reader", async ({ page }) => {
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   const floatingUpgrade = page.locator('button[class*="upgradeFab"]');
-  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toHaveCount(0);
   await expect(notice).toHaveCount(0);
   await expect(floatingUpgrade).toHaveCount(0);
-
-  // The library header still opens the pricing dialog with yearly and monthly prices.
-  await page.getByRole("button", { name: "Get FreeReader Gold" }).click();
-  const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("$1");
-  await expect(dialog).toContainText("billed $12 yearly");
-  await dialog.getByRole("button", { name: "Monthly" }).click();
-  await expect(dialog).toContainText("$4");
-  await dialog.getByRole("button", { name: "Close" }).click();
-  await expect(dialog).toHaveCount(0);
 
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
