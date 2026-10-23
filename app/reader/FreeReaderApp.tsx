@@ -1780,11 +1780,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             </label>
             <label className={styles.settingsRow}><span>Voice</span>
               <select value={narrationVoice} onChange={(event) => changeDefaultVoice(narrationLanguage, event.target.value as NarratorVoice)}>
-                {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
                 {narrationLanguage === "en" && phononCatalog?.can_clone && phononCatalog.voices.filter((item) => item.status === "active")
                   .map((item) => <option key={item.id} value={phononVoiceRef(item.id)}>{item.name} (My voices)</option>)}
                 {isPhononVoice(narrationVoice) && !phononCatalog?.voices.some((item) => item.id === narrationVoice.slice(7) && item.status === "active")
                   && <option value={narrationVoice}>Cloned voice (unavailable)</option>}
+                {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </label>
             {!managed && <button className={styles.phononEntry} type="button" onClick={() => { pausePlayback(); setPanel("clone"); }}>Clone a voice <span>Gold · shared across devices</span></button>}

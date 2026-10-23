@@ -3,6 +3,10 @@ import { encodeWavPcm16 } from "./voiceCloneAudio";
 export const PHONON_CLIP_SECONDS = 10;
 export const PHONON_SAMPLE_RATE = 24_000;
 
+export function clampPhononWindow(start: number, visibleStart: number, visibleDuration: number): number {
+  return Math.max(visibleStart, Math.min(visibleStart + Math.max(0, visibleDuration - PHONON_CLIP_SECONDS), start));
+}
+
 export async function decodePhononRecording(file: Blob): Promise<AudioBuffer> {
   const Context = window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Context) throw new Error("Audio processing is not supported in this browser.");

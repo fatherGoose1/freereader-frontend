@@ -106,7 +106,7 @@ test("a signed-in free account can delete stored voices but must upgrade to clon
   await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toContainText("Voice cloning");
 });
 
-test("a Gold account shares cloned voices, quota, creation and narration with iOS", async ({ page }) => {
+test("a Gold account shares cloned voices, quota, creation and narration with iOS", async ({ page }, testInfo) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
   const owner = "33333333-3333-4333-8333-333333333333";
@@ -127,12 +127,14 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
     monthly_remaining: pending ? 1 : 2, stored_remaining: pending ? 1 : 2, can_clone: true });
   const uploads: Buffer[] = [];
   const speeches: Array<{ voice_id: string; texts: string[]; speed: number }> = [];
+  let releaseClone: (() => void) | undefined;
   await page.route("**/api/v1/freereader/phonon/**", async (route) => {
     expect(route.request().headers().authorization).toBe("Bearer phonon-test-token");
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/voices") && route.request().method() === "POST") {
       uploads.push(route.request().postDataBuffer()!);
       pending = true;
+      await new Promise<void>((resolve) => { releaseClone = resolve; });
       return route.fulfill({ status: 202, json: voice(newVoiceId, "Web voice", "pending") });
     }
     if (path.endsWith(`/voices/${newVoiceId}`)) {
@@ -174,18 +176,45 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Voice settings" });
   await expect(settings.getByLabel("Voice")).toContainText("iPhone voice (My voices)");
+  await expect(settings.getByLabel("Voice").locator("option").first()).toHaveText("iPhone voice (My voices)");
   await settings.getByRole("button", { name: /Clone a voice/ }).click();
   const dialog = page.getByRole("dialog", { name: "Clone a voice" });
   await expect(dialog).toContainText("2 of 3 clones left this month");
   await expect(dialog).toContainText("iPhone voice");
-  await dialog.locator('input[type="file"]').setInputFiles({ name: "sample.wav", mimeType: "audio/wav", buffer: playableWav(11) });
+  await expect(dialog.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
+  await dialog.locator('input[type="file"]').setInputFiles({ name: "sample.wav", mimeType: "audio/wav", buffer: playableWav(75) });
   await expect(dialog.getByLabel("Voice name")).toBeVisible();
+  await expect(dialog.getByText("Voice name *")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Please name your voice" })).toBeDisabled();
+  const waveform = dialog.getByRole("group", { name: "Ten-second voice sample window" });
+  const selectionWindow = waveform.locator('[class*="phononWaveformWindow"]');
+  await expect(waveform).toBeVisible();
+  const frameWidth = (await waveform.boundingBox())!.width;
+  expect((await selectionWindow.boundingBox())!.width / frameWidth).toBeCloseTo(1 / 6, 1);
+  const timeline = dialog.getByRole("slider", { name: /Explore the recording/ });
+  await timeline.focus();
+  await timeline.press("End");
+  await expect(dialog.locator('label[for="phonon-start"]')).toContainText("Your clip: 15.0s – 25.0s");
+  if (testInfo.project.name === "desktop-chromium") {
+    const bounds = (await selectionWindow.boundingBox())!;
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width / 2 + frameWidth * .2, bounds.y + bounds.height / 2, { steps: 5 });
+    await page.mouse.up();
+  } else {
+    const bounds = (await waveform.boundingBox())!;
+    await page.touchscreen.tap(bounds.x + bounds.width * .75, bounds.y + bounds.height / 2);
+  }
+  await expect.poll(async () => Number((await dialog.locator('label[for="phonon-start"]').textContent())?.match(/Your clip: ([\d.]+)s/)?.[1])).toBeGreaterThan(20);
   await dialog.getByLabel("Voice name").fill("Web voice");
   await dialog.getByRole("button", { name: "Clone this voice" }).click();
   await expect.poll(() => uploads.length).toBe(1);
+  await expect(dialog.getByRole("button", { name: "Creating your voice…" })).toBeDisabled();
+  await expect(dialog.locator('[class*="addSpinner"]')).toBeVisible();
   expect(await page.evaluate(() => (window as Window & { phononUpload?: Promise<unknown> }).phononUpload)).toEqual({
     name: "Web voice", length: 480044, rate: 24_000, bytes: 480_000,
   });
+  releaseClone?.();
   await expect(dialog).toContainText("1 of 3 clones left this month");
   await expect(dialog).toContainText("Web voice");
   await expect.poll(() => active).toBe(true);

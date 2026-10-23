@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { currentSessionAccessToken } from "./authToken";
 import { VoiceRecorder } from "./voiceCloneAudio";
-import { decodePhononRecording, phononWaveform, preparePhononClip, PHONON_CLIP_SECONDS } from "./phononAudio";
-import { createPhononVoice, deletePhononVoice, listPhononVoices, phononVoiceStatus, speakPhononVoice, type PhononCatalog } from "./phonon";
+import { clampPhononWindow, decodePhononRecording, phononWaveform, preparePhononClip, PHONON_CLIP_SECONDS } from "./phononAudio";
+import { createPhononVoice, deletePhononVoice, listPhononVoices, phononVoiceStatus, type PhononCatalog } from "./phonon";
+import PhononWaveformWindow from "./PhononWaveformWindow";
 import { phononVoiceRef } from "./voices";
 import styles from "./reader.module.css";
 
@@ -22,10 +23,11 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
   const [audio, setAudio] = useState<AudioBuffer | null>(null);
   const [peaks, setPeaks] = useState<number[]>([]);
   const [start, setStart] = useState(0);
+  const [visibleStart, setVisibleStart] = useState(0);
   const [name, setName] = useState("");
   const [preview, setPreview] = useState("");
-  const [voicePreview, setVoicePreview] = useState("");
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [pollRetry, setPollRetry] = useState(0);
   const recorder = useRef<VoiceRecorder | null>(null);
@@ -78,7 +80,6 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
     return () => { active = false; };
   }, [audio, start]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-  useEffect(() => () => { if (voicePreview) URL.revokeObjectURL(voicePreview); }, [voicePreview]);
   useEffect(() => () => { recorder.current?.cancel(); }, []);
 
   async function load(file: Blob) {
@@ -87,8 +88,9 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
     try {
       const decoded = await decodePhononRecording(file);
       setAudio(decoded);
-      setPeaks(phononWaveform(decoded));
+      setPeaks(phononWaveform(decoded, 512));
       setStart(0);
+      setVisibleStart(0);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Couldn't read the recording.");
     } finally { setBusy(false); }
@@ -116,6 +118,7 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
   async function create() {
     if (!audio || !catalog?.can_clone || !catalog.monthly_remaining || !catalog.stored_remaining || !name.trim()) return;
     setBusy(true);
+    setCreating(true);
     setError("");
     try {
       const token = await currentSessionAccessToken();
@@ -126,7 +129,7 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Couldn't create the voice.");
       try { await refresh(); } catch { /* Keep the current catalog for retry. */ }
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setCreating(false); }
   }
 
   async function remove(id: string, voiceName: string) {
@@ -141,21 +144,6 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Couldn't delete the voice.");
-    } finally { setBusy(false); }
-  }
-
-  async function previewSaved(id: string) {
-    setBusy(true);
-    setError("");
-    try {
-      const token = await currentSessionAccessToken();
-      if (!token) throw new Error("Sign in to preview your voice.");
-      const response = await speakPhononVoice(token, id, ["Once upon a time, every story had a voice of its own."], 1);
-      const blob = await response.blob();
-      if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Voice preview is unavailable.");
-      setVoicePreview(URL.createObjectURL(blob));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Voice preview is unavailable.");
     } finally { setBusy(false); }
   }
 
@@ -186,18 +174,28 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
             </div>
             {recording && <p role="status">Recording… Speak naturally for at least ten seconds.</p>}
             {audio && !recording && <>
-              <label htmlFor="phonon-name">Voice name</label>
-              <input id="phonon-name" type="text" maxLength={80} value={name} placeholder="e.g. Grandma's stories" onChange={(event) => setName(event.target.value)} />
-              <div className={styles.phononWaveform} aria-hidden="true">{peaks.map((peak, index) =>
-                <i key={index} style={{ height: `${Math.max(8, peak * 100)}%` }} />)}</div>
-              <label htmlFor="phonon-start">Select ten seconds: {start.toFixed(1)}s – {(start + PHONON_CLIP_SECONDS).toFixed(1)}s</label>
-              <input id="phonon-start" type="range" min="0" max={Math.max(0, audio.duration - PHONON_CLIP_SECONDS)} step="0.1"
-                value={start} onChange={(event) => setStart(Number(event.target.value))} />
+              <label htmlFor="phonon-name">Voice name <span className={styles.phononRequired} aria-label="required">*</span></label>
+              <input id="phonon-name" type="text" required maxLength={80} value={name} placeholder="e.g. Grandma's stories" onChange={(event) => setName(event.target.value)} />
+              <small>Drag the window to choose the ten seconds you want to clone.</small>
+              <PhononWaveformWindow peaks={peaks} duration={audio.duration} visibleStart={visibleStart}
+                visibleDuration={Math.min(audio.duration, 60)} start={start} onChange={setStart} />
+              {audio.duration > 60 && <label htmlFor="phonon-timeline">Explore the recording: {visibleStart.toFixed(1)}s – {(visibleStart + 60).toFixed(1)}s
+                <input id="phonon-timeline" type="range" min="0" max={audio.duration - 60} step="any" value={visibleStart}
+                  onChange={(event) => {
+                    const page = Number(event.target.value);
+                    setVisibleStart(page);
+                    setStart((current) => clampPhononWindow(current, page, 60));
+                  }} />
+              </label>}
+              <label htmlFor="phonon-start">Your clip: {start.toFixed(1)}s – {(start + PHONON_CLIP_SECONDS).toFixed(1)}s · exactly 10 seconds</label>
+              <input id="phonon-start" type="range" min={visibleStart} max={visibleStart + Math.min(audio.duration, 60) - PHONON_CLIP_SECONDS} step="any"
+                value={start} aria-label="Select ten-second voice sample" onChange={(event) => setStart(Number(event.target.value))} />
               {preview && <audio controls src={preview} aria-label="Preview selected ten seconds" />}
               <small>Only the selected ten seconds are uploaded. Use a speaker's voice with their consent.</small>
               <button className={styles.primaryAction} type="button" onClick={() => void create()}
                 disabled={busy || !name.trim() || !catalog.monthly_remaining || !catalog.stored_remaining}>
-                {busy ? "Creating your voice…" : "Clone this voice"}
+                {creating && <span className={styles.addSpinner} aria-hidden="true" />}
+                {creating ? "Creating your voice…" : name.trim() ? "Clone this voice" : "Please name your voice"}
               </button>
               {!catalog.monthly_remaining && <small>Your monthly voices refresh next month.</small>}
               {!catalog.stored_remaining && <small>Delete a voice to make room.</small>}
@@ -210,10 +208,8 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
               <span><b>{voice.name}</b><small>{voice.status === "active" ? "Ready for your books" : voice.status === "pending"
                 ? "Making your voice…" : "Couldn't finish · this attempt didn't count"}</small></span>
               {voice.status === "active" && catalog.can_clone && <button type="button" onClick={() => { onSelect(phononVoiceRef(voice.id)); onClose(); }}>Use for books</button>}
-              {voice.status === "active" && catalog.can_clone && <button type="button" disabled={busy} onClick={() => void previewSaved(voice.id)}>Preview</button>}
               <button type="button" disabled={busy} onClick={() => void remove(voice.id, voice.name)}>Delete</button>
             </div>)}
-            {voicePreview && <audio controls autoPlay src={voicePreview} aria-label="Cloned voice preview" />}
           </div>
           {error && <p role="alert" className={styles.goldError}>{error}</p>}
         </>}
