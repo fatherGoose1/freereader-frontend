@@ -28,7 +28,7 @@ import { cancelNarration, narrationRoute, synthesize, synthesizeBatch, type Narr
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
-import { isKokoroVoice, type NarratorVoice } from "./voices";
+import { isKokoroVoice, isPhononVoice, phononVoiceRef, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry as recordConsumerTelemetry, type TelemetryProperties } from "./telemetry";
 import consumerPosthog from "posthog-js";
@@ -41,6 +41,9 @@ import { fetchUsage, linkInstallation } from "./usage";
 import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
 import { startCheckout } from "./billing";
 import GoldDialog from "./GoldDialog";
+import PhononDialog from "./PhononDialog";
+import { listPhononVoices, type PhononCatalog } from "./phonon";
+import { currentSessionAccessToken } from "./authToken";
 import ReaderAccountMenu from "./ReaderAccountMenu";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
@@ -54,7 +57,7 @@ import { ACCOUNT_PREFERENCES_FIELD, DEFAULT_READER_PREFERENCES, parseReaderPrefe
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
 
-type Panel = "voice" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
+type Panel = "voice" | "clone" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
@@ -281,7 +284,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     return () => { cancelled = true; };
   }, [selected?.id]);
   const [panel, setPanel] = useState<Panel>(null);
-  const settingsOpen = panel === "voice" || panel === "font";
+  const settingsOpen = panel === "voice" || panel === "clone" || panel === "font";
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialBook ? "" : "Your books and generated audio stay in this browser.");
   const [libraryLoaded, setLibraryLoaded] = useState(false);
@@ -295,6 +298,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [plan, setPlan] = useState<string>("free");
   const [billingSource, setBillingSource] = useState<"stripe" | "apple">("stripe");
   const [planReady, setPlanReady] = useState(false);
+  const [phononCatalog, setPhononCatalog] = useState<PhononCatalog | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [upgradeInterval, setUpgradeInterval] = useState<EnhancedInterval>("yearly");
   const [upgradeError, setUpgradeError] = useState("");
@@ -537,6 +541,29 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       window.removeEventListener("focus", refreshOnReturn);
     };
   }, [managed, session]);
+
+  // The server catalog is shared with iOS; fetch it whenever the voice picker
+  // opens so a voice created on another device appears here automatically.
+  useEffect(() => {
+    if (panel !== "voice" || !session || managed) { setPhononCatalog(null); return; }
+    let active = true;
+    void currentSessionAccessToken().then((token) => token ? listPhononVoices(token) : null)
+      .then((catalog) => { if (active) setPhononCatalog(catalog); })
+      .catch(() => { if (active) setPhononCatalog(null); });
+    return () => { active = false; };
+  }, [panel, session?.user.id, managed]);
+
+  // Like iOS, fall back to a built-in voice if a clone was removed on another
+  // device or the account can no longer use it.
+  useEffect(() => {
+    if (!phononCatalog) return;
+    const preferred = preferencesRef.current.defaultVoices.en;
+    const chosen = isPhononVoice(voice) ? voice : preferred;
+    if (chosen && isPhononVoice(chosen) && (!phononCatalog.can_clone ||
+      !phononCatalog.voices.some((item) => item.id === chosen.slice(7) && item.status === "active"))) {
+      changeDefaultVoice("en", "af_heart");
+    }
+  }, [phononCatalog, voice]);
 
   // Continue Gold checkout after the Google round trip started from the upgrade notice.
   useEffect(() => {
@@ -1754,8 +1781,13 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             <label className={styles.settingsRow}><span>Voice</span>
               <select value={narrationVoice} onChange={(event) => changeDefaultVoice(narrationLanguage, event.target.value as NarratorVoice)}>
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                {narrationLanguage === "en" && phononCatalog?.can_clone && phononCatalog.voices.filter((item) => item.status === "active")
+                  .map((item) => <option key={item.id} value={phononVoiceRef(item.id)}>{item.name} (My voices)</option>)}
+                {isPhononVoice(narrationVoice) && !phononCatalog?.voices.some((item) => item.id === narrationVoice.slice(7) && item.status === "active")
+                  && <option value={narrationVoice}>Cloned voice (unavailable)</option>}
               </select>
             </label>
+            {!managed && <button className={styles.phononEntry} type="button" onClick={() => { pausePlayback(); setPanel("clone"); }}>Clone a voice <span>Gold · shared across devices</span></button>}
             <div className={styles.speakingRateSetting}>
               <div><label htmlFor="reader-speaking-speed">Speaking speed</label><output htmlFor="reader-speaking-speed">{speechRate.toFixed(1)}×</output></div>
               <input id="reader-speaking-speed" type="range" min="0.5" max="3" step="0.1" value={speechRate}
@@ -1769,6 +1801,13 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </div>
           </div>
         )}
+        {panel === "clone" && <PhononDialog session={session} onClose={() => setPanel("voice")}
+          onUpgrade={() => { setPanel(null); setUpgradeOpen(true); }} onSignIn={() => { setPanel(null); void signIn(); }}
+          onSelect={(selectedVoice) => changeDefaultVoice("en", selectedVoice)}
+          onDelete={(id) => {
+            const removed = phononVoiceRef(id);
+            if (preferencesRef.current.defaultVoices.en === removed || voice === removed) changeDefaultVoice("en", "af_heart");
+          }} />}
         {panel === "font" && (
           <div className={styles.settingsBackdrop} onMouseDown={() => setPanel(null)}>
           <div className={`${styles.voicePopover} ${styles.fontPopover}`} role="dialog" aria-modal="true" aria-label="Font settings" onMouseDown={(event) => event.stopPropagation()}>

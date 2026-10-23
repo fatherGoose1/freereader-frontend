@@ -55,6 +55,148 @@ test("Gold plans show the configured Stripe amounts before checkout", async ({ p
   await dialog.getByRole("button", { name: "Monthly" }).click();
   await expect(dialog).toContainText("$5/month, billed monthly");
   await expect(dialog).not.toContainText("7 days free");
+  await expect(dialog).toContainText("Voice cloning");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toContainText("Voice cloning");
+});
+
+test("a guest can find voice cloning from Voice Settings and see the Gold gate", async ({ page }) => {
+  await upload(page, "Clone entry");
+  await page.getByRole("button", { name: /^html Clone entry/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("dialog", { name: "Voice settings" }).getByRole("button", { name: /Clone a voice/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Clone a voice" });
+  await expect(dialog).toContainText("Sign in to save your voices");
+  await expect(dialog).toContainText("shared with the iPhone app");
+});
+
+test("a signed-in free account can delete stored voices but must upgrade to clone", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const user = { id: "44444444-4444-4444-8444-444444444444", email: "free@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() };
+  const session = { access_token: "free-phonon-token", refresh_token: "free-phonon-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free" } }));
+  let deleted = false;
+  await page.route("**/api/v1/freereader/phonon/voices**", (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer free-phonon-token");
+    if (route.request().method() === "DELETE") { deleted = true; return route.fulfill({ json: { deleted: true } }); }
+    return route.fulfill({ json: { can_clone: false, monthly_remaining: 1, stored_remaining: deleted ? 3 : 2,
+      voices: deleted ? [] : [{ id: "4d16a52c-40d6-462e-a015-5665798732af", name: "Old voice", status: "active", error: null, created_at: new Date().toISOString() }] } });
+  });
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await upload(page, "Free clone gate");
+  await page.getByRole("button", { name: /^html Free clone gate/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await page.getByRole("dialog", { name: "Voice settings" }).getByRole("button", { name: /Clone a voice/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Clone a voice" });
+  await expect(dialog).toContainText("Old voice");
+  await expect(dialog.getByRole("button", { name: "Use for books" })).toHaveCount(0);
+  page.once("dialog", (confirmation) => confirmation.accept());
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect.poll(() => deleted).toBe(true);
+  await expect(dialog).toContainText("Your first voice will appear here");
+  await dialog.getByRole("button", { name: "Explore Gold" }).click();
+  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toContainText("Voice cloning");
+});
+
+test("a Gold account shares cloned voices, quota, creation and narration with iOS", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const owner = "33333333-3333-4333-8333-333333333333";
+  const voiceId = "4d16a52c-40d6-462e-a015-5665798732af";
+  const newVoiceId = "6a1bcbfd-25d9-4c4a-81a6-9fc715e2db78";
+  const user = { id: owner, email: "gold@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() };
+  const session = { access_token: "phonon-test-token", refresh_token: "phonon-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
+  await page.route("**/api/v1/freereader/sync/**", (route) => route.fulfill({ status: 403, json: { error: "sync_unavailable" } }));
+  let pending = false;
+  let active = false;
+  const voice = (id: string, name: string, status: string) => ({ id, name, status, error: null, created_at: new Date().toISOString() });
+  const catalog = () => ({ voices: [voice(voiceId, "iPhone voice", "active"),
+    ...(pending ? [voice(newVoiceId, "Web voice", active ? "active" : "pending")] : [])],
+    monthly_remaining: pending ? 1 : 2, stored_remaining: pending ? 1 : 2, can_clone: true });
+  const uploads: Buffer[] = [];
+  const speeches: Array<{ voice_id: string; texts: string[]; speed: number }> = [];
+  await page.route("**/api/v1/freereader/phonon/**", async (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer phonon-test-token");
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/voices") && route.request().method() === "POST") {
+      uploads.push(route.request().postDataBuffer()!);
+      pending = true;
+      return route.fulfill({ status: 202, json: voice(newVoiceId, "Web voice", "pending") });
+    }
+    if (path.endsWith(`/voices/${newVoiceId}`)) {
+      active = true;
+      return route.fulfill({ status: 200, json: voice(newVoiceId, "Web voice", "active") });
+    }
+    if (path.endsWith("/voices")) return route.fulfill({ status: 200, json: catalog() });
+    if (path.endsWith("/speech")) {
+      const request = route.request().postDataJSON() as { voice_id: string; texts: string[]; speed: number };
+      speeches.push(request);
+      if (request.texts.length > 1) {
+        const archive = new JSZip();
+        request.texts.forEach((_, index) => archive.file(`${index}.m4a`, playableWav()));
+        return route.fulfill({ contentType: "application/zip", headers: { "X-Audio-Durations": request.texts.map(() => "20").join(",") },
+          body: await archive.generateAsync({ type: "nodebuffer" }) });
+      }
+      return route.fulfill({ contentType: "audio/wav", headers: { "X-Audio-Duration": "20" }, body: playableWav() });
+    }
+    return route.fulfill({ status: 404, json: { error: "voice_not_found" } });
+  });
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      if (String(input).endsWith("/phonon/voices") && init?.method === "POST" && init.body instanceof FormData) {
+        const clip = init.body.get("audio");
+        (window as Window & { phononUpload?: Promise<{ name: FormDataEntryValue | null; length: number; rate: number; bytes: number }> }).phononUpload =
+          (clip as Blob).arrayBuffer().then((buffer) => ({ name: (init.body as FormData).get("name"),
+            length: buffer.byteLength, rate: new DataView(buffer).getUint32(24, true), bytes: new DataView(buffer).getUint32(40, true) }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await upload(page, "Phonon reading", 3);
+  await page.getByRole("button", { name: /^html Phonon reading/ }).click();
+  await openControls(page);
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Voice settings" });
+  await expect(settings.getByLabel("Voice")).toContainText("iPhone voice (My voices)");
+  await settings.getByRole("button", { name: /Clone a voice/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Clone a voice" });
+  await expect(dialog).toContainText("2 of 3 clones left this month");
+  await expect(dialog).toContainText("iPhone voice");
+  await dialog.locator('input[type="file"]').setInputFiles({ name: "sample.wav", mimeType: "audio/wav", buffer: playableWav(11) });
+  await expect(dialog.getByLabel("Voice name")).toBeVisible();
+  await dialog.getByLabel("Voice name").fill("Web voice");
+  await dialog.getByRole("button", { name: "Clone this voice" }).click();
+  await expect.poll(() => uploads.length).toBe(1);
+  expect(await page.evaluate(() => (window as Window & { phononUpload?: Promise<unknown> }).phononUpload)).toEqual({
+    name: "Web voice", length: 480044, rate: 24_000, bytes: 480_000,
+  });
+  await expect(dialog).toContainText("1 of 3 clones left this month");
+  await expect(dialog).toContainText("Web voice");
+  await expect.poll(() => active).toBe(true);
+  await dialog.getByRole("button", { name: "Use for books" }).first().click();
+  await expect(settings.getByLabel("Voice")).toHaveValue(`phonon:${voiceId}`);
+  await settings.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => speeches.length).toBeGreaterThan(0);
+  expect(speeches[0].voice_id).toBe(voiceId);
+  expect(speeches[0].speed).toBe(1);
+  await expect.poll(() => speeches.some((request) => request.texts.length > 1)).toBe(true);
 });
 
 test("guests see the Gold upgrade notice and yearly free-trial pricing", async ({ page }) => {

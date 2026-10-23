@@ -4,8 +4,9 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken, currentSessionAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
-import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isQwenVoice, voiceDisplayName } from "./voices";
+import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isPhononVoice, isQwenVoice, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
+import { speakPhononVoice } from "./phonon";
 import type { SpeechResult } from "./mobileSpeech";
 import { parseWordTimings } from "./spokenWord";
 
@@ -60,6 +61,31 @@ export class RemoteSpeechClient {
     const generationStartedAt = performance.timeOrigin + started;
     try {
       const requestedVoice = options?.voice;
+      if (requestedVoice && isPhononVoice(requestedVoice)) {
+        if (options?.language !== "en") throw new Error("Cloned Phonon voices are available for English books only.");
+        const token = await currentSessionAccessToken();
+        if (!token) throw new Error("Sign in to use your cloned voice.");
+        status?.("Generating with your cloned voice");
+        const response = await speakPhononVoice(token, requestedVoice.slice(7),
+          items.map((item) => normalizeForSpeech(item.text, item.isHeading, "en")), speechSpeed, controller.signal);
+        if (items.length === 1) {
+          const blob = await response.blob();
+          if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");
+          status?.("Speech ready", 1);
+          return [speechResult(blob, Number(response.headers.get("X-Audio-Duration")),
+            Number(response.headers.get("X-Generation-Seconds")), generationStartedAt)];
+        }
+        const durations = (response.headers.get("X-Audio-Durations") ?? "").split(",").map(Number);
+        const archive = await JSZip.loadAsync(await response.arrayBuffer());
+        const parts = await Promise.all(items.map(async (_, index) => {
+          const entry = archive.file(`${index}.m4a`);
+          if (!entry) throw new Error("Speech service returned an incomplete batch.");
+          return speechResult(new Blob([await entry.async("blob")], { type: "audio/mp4" }), durations[index],
+            Number(response.headers.get("X-Generation-Seconds")), generationStartedAt);
+        }));
+        status?.("Speech ready", 1);
+        return parts;
+      }
       if (requestedVoice && isClonedVoice(requestedVoice)) {
         return await this.synthesizeClone(items, speechSpeed, status, requestedVoice,
           options?.language, controller.signal, generationStartedAt, options?.instruct);

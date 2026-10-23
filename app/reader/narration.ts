@@ -3,7 +3,7 @@ import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
-import { clonedVoiceId, isClonedVoice, isKokoroVoice, isQwenVoice, isSupertonicVoice } from "./voices";
+import { clonedVoiceId, isClonedVoice, isKokoroVoice, isPhononVoice, isQwenVoice, isSupertonicVoice } from "./voices";
 import type { TelemetrySource } from "./telemetry";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
@@ -32,6 +32,9 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
+    if (isPhononVoice(voice) && language === "en") {
+      return { model: "phonon-31m-en", voice, provider: "Server", mobile: this.mobile };
+    }
     // Preserve distinct cache keys for each clone model generation.
     if (isClonedVoice(voice)) {
       const id = clonedVoiceId(voice);

@@ -88,6 +88,15 @@ test("cloned-voice delivery reaches the remote narration client", async () => {
   assert.deepEqual(calls, ["remote:Hello:en:clone:vox2_voice-1:12:Speak warmly"]);
 });
 
+test("a shared Phonon voice uses the English backend route, not the legacy clone service", async () => {
+  const { router, calls } = setup(false);
+  const voice = "phonon:4d16a52c-40d6-462e-a015-5665798732af";
+  const result = await router.synthesize("Hello", voice, 12, undefined, false, 1, "en");
+  assert.equal(result.route.model, "phonon-31m-en");
+  assert.deepEqual(calls, [`remote:Hello:en:${voice}:12`]);
+  assert.equal((await router.route(voice, "fr")).model, "kokoro-82m-fp32-server-v1");
+});
+
 for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: non-English uses the server Supertonic voice and steps`, async () => {
     const { calls, speakFrench } = setup(mobile);

@@ -49,3 +49,10 @@ test("older account settings retain original spacing and white background; malfo
   assert.equal(selected?.wordSpacing, 0.3);
   assert.equal(selected?.readingBackground, "dark");
 });
+
+test("account preferences preserve an English Phonon voice shared with iOS", () => {
+  const id = "4d16a52c-40d6-462e-a015-5665798732af";
+  const preferences = parseReaderPreferences({ ...DEFAULT_READER_PREFERENCES, updatedAt: new Date().toISOString(),
+    defaultVoices: { en: `phonon:${id}`, fr: `phonon:${id}`, es: "phonon:invalid" } });
+  assert.deepEqual(preferences?.defaultVoices, { en: `phonon:${id}` });
+});

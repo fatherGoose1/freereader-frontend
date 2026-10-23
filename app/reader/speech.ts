@@ -3,6 +3,7 @@ import {
   isClonedVoice,
   isKokoroVoiceForLanguage,
   isQwenVoice,
+  isPhononVoice,
   kokoroVoicesForLanguage,
   KOKORO_DEFAULT_VOICES,
   QWEN_LANGUAGES,
@@ -49,6 +50,8 @@ export function voicesForLanguage(language: SpeechLanguage): readonly (readonly 
 }
 
 export function voiceForLanguage(voice: NarratorVoice, language: SpeechLanguage): NarratorVoice {
+  // Phonon only synthesizes English; never send another language to its endpoint.
+  if (isPhononVoice(voice) && language === "en") return voice;
   // Cloned voices are language-agnostic; never remap them to a built-in default.
   if (isClonedVoice(voice)) return voice;
   if (isQwenVoice(voice) && QWEN_LANGUAGES.has(language)) return voice;
