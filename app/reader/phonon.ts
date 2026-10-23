@@ -20,7 +20,7 @@ export interface PhononCatalog {
 const errors: Record<string, string> = {
   premium_required: "A linked FreeReader Gold subscription is required to clone or use a voice.",
   monthly_limit_reached: "Your three monthly voice clones have been used. They refresh next month.",
-  voice_limit_reached: "You have three stored voices. Delete one to make room; this won't restore a monthly credit.",
+  voice_limit_reached: "You have three stored voices.",
   invalid_audio: "Select exactly ten seconds of audio and try again.",
   voice_not_found: "This voice is no longer available on your account.",
   phonon_unavailable: "Voice narration is unavailable right now. Please try again.",

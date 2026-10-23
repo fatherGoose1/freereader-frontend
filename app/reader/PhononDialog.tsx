@@ -162,7 +162,6 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
             <button type="button" onClick={onUpgrade}>Explore Gold</button>
           </div> : <div className={styles.phononSection}>
             <strong>{catalog.monthly_remaining} of 3 clones left this month · {catalog.stored_remaining} storage slots open</strong>
-            <p>Successful clones count for the UTC month, even if deleted. Failed attempts release their credit and slot.</p>
             <div className={styles.phononActions}>
               <button type="button" onClick={() => void toggleRecording()} disabled={busy}>{recording ? "Stop recording" : "Record"}</button>
               <button type="button" onClick={() => fileInput.current?.click()} disabled={busy || recording}>Import audio</button>
@@ -198,7 +197,6 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
                 {creating ? "Creating your voice…" : name.trim() ? "Clone this voice" : "Please name your voice"}
               </button>
               {!catalog.monthly_remaining && <small>Your monthly voices refresh next month.</small>}
-              {!catalog.stored_remaining && <small>Delete a voice to make room.</small>}
             </>}
           </div>}
           <div className={styles.phononSection}>
