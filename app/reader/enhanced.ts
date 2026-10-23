@@ -17,29 +17,17 @@ export function isEnhancedPlan(plan: string | null | undefined): plan is Enhance
   return typeof plan === "string" && ENHANCED_PLAN_IDS.includes(plan);
 }
 
-export interface EnhancedPrice {
-  interval: EnhancedInterval;
-  perMonth: number;
-  total: number;
-  cadence: string;
-  // Free trial length in days; yearly is the only interval with a trial.
-  trialDays: number;
+export const ENHANCED_TRIAL_DAYS = 7;
+
+// The yearly plan is displayed as its monthly equivalent; the billed amount
+// always comes from the backend's configured Stripe Price.
+export function enhancedPerMonthLabel(amountCents: number, interval: EnhancedInterval): string {
+  return interval === "yearly" ? `$${(amountCents / 1200).toFixed(2)}` : enhancedTotalLabel(amountCents);
 }
 
-// The yearly plan is displayed as its monthly-equivalent price rounded to cents,
-// but the full amount is billed once for the year.
-export const ENHANCED_PRICES: Record<EnhancedInterval, EnhancedPrice> = {
-  yearly: { interval: "yearly", perMonth: 1, total: 12, cadence: "per month, billed $12.00 yearly", trialDays: 7 },
-  monthly: { interval: "monthly", perMonth: 4, total: 4, cadence: "per month, billed monthly", trialDays: 0 },
-};
-
-// Yearly shows its monthly-equivalent to two decimals; monthly shows whole dollars.
-export function enhancedPerMonthLabel(price: EnhancedPrice): string {
-  return `$${price.perMonth.toFixed(price.interval === "yearly" ? 2 : 0)}`;
-}
-
-export function enhancedTotalLabel(price: EnhancedPrice): string {
-  return `$${price.total.toFixed(price.interval === "yearly" ? 2 : 0)}`;
+export function enhancedTotalLabel(amountCents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
+    minimumFractionDigits: amountCents % 100 === 0 ? 0 : 2 }).format(amountCents / 100);
 }
 
 

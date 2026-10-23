@@ -36,7 +36,25 @@ async function openControls(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/telemetry", (route) => route.fulfill({ status: 202, json: {} }));
+  await page.route("**/api/v1/freereader/billing/price?plan=gold_*", (route) => {
+    const yearly = new URL(route.request().url()).searchParams.get("plan") === "gold_yearly";
+    return route.fulfill({ status: 200, json: {
+      amount_cents: yearly ? 3900 : 500, currency: "usd", interval: yearly ? "year" : "month",
+    } });
+  });
   await page.goto("/reader/audiobooks");
+});
+
+test("Gold plans show the configured Stripe amounts before checkout", async ({ page }) => {
+  await page.getByRole("region", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "See Gold plans" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
+  await expect(dialog).toContainText("$3.25");
+  await expect(dialog).toContainText("billed $39 yearly");
+  await expect(dialog).toContainText("7 days free");
+  await expect(dialog.getByRole("button", { name: "Start 7-day free trial" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Monthly" }).click();
+  await expect(dialog).toContainText("$5/month, billed monthly");
+  await expect(dialog).not.toContainText("7 days free");
 });
 
 test("guests see the Gold upgrade notice and yearly free-trial pricing", async ({ page }) => {
@@ -51,11 +69,11 @@ test("guests see the Gold upgrade notice and yearly free-trial pricing", async (
   await notice.getByRole("button", { name: "See Gold plans" }).click();
   const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("$1.00");
+  await expect(dialog).toContainText("$3.25");
   await expect(dialog).toContainText("7 days free");
-  await expect(dialog).toContainText("billed $12.00");
+  await expect(dialog).toContainText("billed $39 yearly");
   await dialog.getByRole("button", { name: "Monthly" }).click();
-  await expect(dialog).toContainText("$4");
+  await expect(dialog).toContainText("$5");
   await expect(dialog).not.toContainText("7 days free");
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
@@ -102,7 +120,7 @@ test("an OAuth fallback to the homepage returns to the reader with the chosen bi
   await page.waitForURL("**/reader/audiobooks");
   const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(dialog).toContainText("Google sign-in didn't finish");
-  await expect(dialog).toContainText("$4");
+  await expect(dialog).toContainText("$5");
 });
 
 test("a Gold subscriber manages billing from the account circle in the library and reader", async ({ page }) => {

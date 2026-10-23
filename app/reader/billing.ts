@@ -42,6 +42,7 @@ async function billingUrl(path: "checkout" | "portal", token: string, plan?: Pai
     if (path === "checkout" && response.status === 409) {
       const detail = await response.json().catch(() => null) as { error?: string } | null;
       if (detail?.error === "manage_existing_subscription") return billingUrl("portal", token);
+      if (detail?.error === "manage_apple_subscription") throw new Error("manage_apple_subscription");
     }
     throw new Error("checkout_unavailable");
   }

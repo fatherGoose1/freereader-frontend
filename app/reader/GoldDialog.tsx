@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabaseClient } from "./supabase";
-import { startCheckout } from "./billing";
+import { fetchPlanPrice, startCheckout, type PlanPrice } from "./billing";
 import {
   enhancedPerMonthLabel,
   enhancedTotalLabel,
   ENHANCED_FEATURES,
   ENHANCED_PLANS,
-  ENHANCED_PRICES,
+  ENHANCED_TRIAL_DAYS,
   ENHANCED_TIER_NAME,
   type EnhancedInterval,
 } from "./enhanced";
@@ -22,10 +22,26 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
   const [interval, setInterval] = useState<EnhancedInterval>(initialInterval);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
-  const price = ENHANCED_PRICES[interval];
-  const trial = price.trialDays > 0;
+  const [prices, setPrices] = useState<Partial<Record<EnhancedInterval, PlanPrice>>>({});
+  const [priceErrors, setPriceErrors] = useState<Partial<Record<EnhancedInterval, boolean>>>({});
+  const price = prices[interval];
+  const trial = interval === "yearly";
+
+  useEffect(() => {
+    let active = true;
+    for (const chosen of ["yearly", "monthly"] as const) {
+      void fetchPlanPrice(ENHANCED_PLANS[chosen]).then((result) => {
+        if (result.interval !== (chosen === "yearly" ? "year" : "month")) throw new Error("invalid_plan_price");
+        if (active) setPrices((previous) => ({ ...previous, [chosen]: result }));
+      }).catch(() => {
+        if (active) setPriceErrors((previous) => ({ ...previous, [chosen]: true }));
+      });
+    }
+    return () => { active = false; };
+  }, []);
 
   async function subscribe() {
+    if (!price) return;
     setBusy(true);
     setError("");
     try {
@@ -49,7 +65,9 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
     } catch (reason) {
       try { sessionStorage.removeItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
       setError(reason instanceof Error && reason.message === "Google sign-in is unavailable right now."
-        ? reason.message : "Couldn't open checkout. Please try again.");
+        ? reason.message : reason instanceof Error && reason.message === "manage_apple_subscription"
+          ? "Your Gold subscription is managed through Apple. Manage it in iPhone Settings → Subscriptions."
+          : "Couldn't open checkout. Please try again.");
       setBusy(false);
     }
   }
@@ -76,25 +94,26 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
         </ul>
 
         <div className={styles.goldToggle} role="group" aria-label="Billing interval">
-          <button type="button" aria-pressed={interval === "yearly"} onClick={() => setInterval("yearly")}>Yearly <small>7-day free trial</small></button>
+          <button type="button" aria-pressed={interval === "yearly"} onClick={() => setInterval("yearly")}>Yearly <small>{ENHANCED_TRIAL_DAYS}-day free trial</small></button>
           <button type="button" aria-pressed={interval === "monthly"} onClick={() => setInterval("monthly")}>Monthly</button>
         </div>
 
         <div className={styles.goldPrice}>
-          <strong>{enhancedPerMonthLabel(price)}</strong>
-          <span>{price.cadence}</span>
+          <strong>{price ? enhancedPerMonthLabel(price.amount_cents, interval) : "—"}</strong>
+          <span>{price ? (trial ? `per month, billed ${enhancedTotalLabel(price.amount_cents)} yearly` : "per month, billed monthly") : "Loading price…"}</span>
         </div>
 
         {error && <p className={styles.goldError} role="alert">{error}</p>}
+        {priceErrors[interval] && <p className={styles.goldError} role="alert">Pricing is unavailable. Please try again later.</p>}
 
-        <small className={styles.goldNote}>
+        {price && <small className={styles.goldNote}>
           {trial
-            ? `${price.trialDays} days free, then ${enhancedPerMonthLabel(price)}/month, billed ${enhancedTotalLabel(price)}/year. Renews automatically.`
-            : `${enhancedPerMonthLabel(price)}/month, billed monthly. Renews automatically.`}
-        </small>
+            ? `${ENHANCED_TRIAL_DAYS} days free for eligible new subscribers, then ${enhancedTotalLabel(price.amount_cents)}/year (${enhancedPerMonthLabel(price.amount_cents, interval)}/month equivalent). Renews automatically.`
+            : `${enhancedTotalLabel(price.amount_cents)}/month, billed monthly. Renews automatically.`}
+        </small>}
 
-        <button className={`${styles.primaryAction} ${styles.goldCta}`} type="button" disabled={busy} onClick={() => void subscribe()}>
-          {busy ? "Opening checkout…" : trial ? `Start ${price.trialDays}-day free trial` : `Get ${ENHANCED_TIER_NAME}`}
+        <button className={`${styles.primaryAction} ${styles.goldCta}`} type="button" disabled={busy || !price} onClick={() => void subscribe()}>
+          {busy ? "Opening checkout…" : trial ? `Start ${ENHANCED_TRIAL_DAYS}-day free trial` : `Get ${ENHANCED_TIER_NAME}`}
         </button>
       </div>
     </div>

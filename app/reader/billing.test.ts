@@ -64,3 +64,10 @@ test("an existing subscriber is sent to the billing portal to change plans", asy
   assert.equal(await startCheckout("access-token", "premium"), "https://billing.stripe.com/p/session/upgrade");
   assert.ok(String(fetch.mock.calls[1].arguments[0]).endsWith("/billing/portal"));
 });
+
+test("Apple subscriptions are not sent to a Stripe portal without a customer", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ error: "manage_apple_subscription" }, { status: 409 }));
+  await assert.rejects(startCheckout("access-token", "gold_yearly"), /manage_apple_subscription/);
+  assert.equal(fetch.mock.callCount(), 1);
+});
