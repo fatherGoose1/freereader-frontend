@@ -39,18 +39,33 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
-test("upgrade prompts are hidden in the library and reader", async ({ page }) => {
+test("guests see the Gold upgrade notice and yearly free-trial pricing", async ({ page }) => {
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   const floatingUpgrade = page.locator('button[class*="upgradeFab"]');
-  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toHaveCount(0);
-  await expect(notice).toHaveCount(0);
-  await expect(floatingUpgrade).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toBeVisible();
+  await expect(notice).toContainText("7 days");
+  await expect(notice).toBeVisible();
+  if (await page.evaluate(() => innerWidth > 800)) await expect(floatingUpgrade).toBeVisible();
+
+  // The notice opens the pricing dialog with the yearly trial and monthly price.
+  await notice.getByRole("button", { name: "See Gold plans" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("$1.00");
+  await expect(dialog).toContainText("7 days free");
+  await expect(dialog).toContainText("billed $12.00");
+  await dialog.getByRole("button", { name: "Monthly" }).click();
+  await expect(dialog).toContainText("$4");
+  await expect(dialog).not.toContainText("7 days free");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
 
   await upload(page, "Guest reading");
   await page.getByRole("button", { name: /^html Guest reading/ }).click();
   await openControls(page);
-  await expect(notice).toHaveCount(0);
-  await expect(floatingUpgrade).toHaveCount(0);
+  await expect(notice).toBeVisible();
+  // The floating upgrade button is hidden inside the mobile reading shell.
+  if (await page.evaluate(() => innerWidth > 800)) await expect(floatingUpgrade).toBeVisible();
   await expect(page.locator('a[href*="buymeacoffee.com"]')).toHaveCount(0);
   await expect(page.getByText("Press Listen to hear this passage. Your place is saved automatically.")).toHaveCount(0);
   await expect(page.getByText("Listen along")).toHaveCount(0);

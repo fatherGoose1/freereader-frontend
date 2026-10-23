@@ -58,8 +58,9 @@ type Panel = "voice" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
-// Temporarily hide the library/reader upgrade banner, floating button, and library header button.
-const SHOW_UPGRADE_PROMPTS = false;
+// The library/reader upgrade banner, floating button, and library header button
+// are shown to readers who have not subscribed yet.
+const SHOW_UPGRADE_PROMPTS = true;
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -625,6 +626,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
         <div className={styles.accountNoticeHeading}><ReaderIcon name="crown" /><strong>Get {ENHANCED_TIER_NAME}</strong></div>
+        <p>Try it free for 7 days with the yearly plan, then it renews automatically.</p>
         <ul className={styles.accountNoticeFeatures}>
           {ENHANCED_FEATURES.map((feature) => (
             <li key={feature.title}>

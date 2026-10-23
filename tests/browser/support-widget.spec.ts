@@ -26,7 +26,8 @@ test("support is available without signing in and preserves an unsent message", 
 
   await page.goto("/reader/audiobooks");
   await expect(page.locator('a[href*="buymeacoffee.com"]')).toHaveCount(0);
-  await expect(page.locator('button[class*="upgradeFab"]')).toHaveCount(0);
+  // The floating upgrade button is hidden inside the mobile reading shell.
+  if (await page.evaluate(() => innerWidth > 800)) await expect(page.locator('button[class*="upgradeFab"]')).toBeVisible();
   await page.getByRole("button", { name: "Contact support" }).click();
   await page.getByRole("dialog", { name: "Contact support" }).getByLabel("Email address").fill("reader@example.com");
   await page.getByRole("dialog", { name: "Contact support" }).getByLabel("How can we help?").fill("Reader playback stopped working.");

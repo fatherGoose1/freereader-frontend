@@ -22,13 +22,26 @@ export interface EnhancedPrice {
   perMonth: number;
   total: number;
   cadence: string;
+  // Free trial length in days; yearly is the only interval with a trial.
+  trialDays: number;
 }
 
-// The yearly plan is displayed as $1/month but billed $12 for the full year.
+// The yearly plan is displayed as its monthly-equivalent price rounded to cents,
+// but the full amount is billed once for the year.
 export const ENHANCED_PRICES: Record<EnhancedInterval, EnhancedPrice> = {
-  yearly: { interval: "yearly", perMonth: 1, total: 12, cadence: "per month, billed $12 yearly" },
-  monthly: { interval: "monthly", perMonth: 4, total: 4, cadence: "per month, billed monthly" },
+  yearly: { interval: "yearly", perMonth: 1, total: 12, cadence: "per month, billed $12.00 yearly", trialDays: 7 },
+  monthly: { interval: "monthly", perMonth: 4, total: 4, cadence: "per month, billed monthly", trialDays: 0 },
 };
+
+// Yearly shows its monthly-equivalent to two decimals; monthly shows whole dollars.
+export function enhancedPerMonthLabel(price: EnhancedPrice): string {
+  return `$${price.perMonth.toFixed(price.interval === "yearly" ? 2 : 0)}`;
+}
+
+export function enhancedTotalLabel(price: EnhancedPrice): string {
+  return `$${price.total.toFixed(price.interval === "yearly" ? 2 : 0)}`;
+}
+
 
 export interface EnhancedFeature {
   title: string;

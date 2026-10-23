@@ -5,6 +5,8 @@ import type { Session } from "@supabase/supabase-js";
 import { supabaseClient } from "./supabase";
 import { startCheckout } from "./billing";
 import {
+  enhancedPerMonthLabel,
+  enhancedTotalLabel,
   ENHANCED_FEATURES,
   ENHANCED_PLANS,
   ENHANCED_PRICES,
@@ -21,6 +23,7 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
   const price = ENHANCED_PRICES[interval];
+  const trial = price.trialDays > 0;
 
   async function subscribe() {
     setBusy(true);
@@ -73,21 +76,26 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
         </ul>
 
         <div className={styles.goldToggle} role="group" aria-label="Billing interval">
-          <button type="button" aria-pressed={interval === "yearly"} onClick={() => setInterval("yearly")}>Yearly <small>Save 75%</small></button>
+          <button type="button" aria-pressed={interval === "yearly"} onClick={() => setInterval("yearly")}>Yearly <small>7-day free trial</small></button>
           <button type="button" aria-pressed={interval === "monthly"} onClick={() => setInterval("monthly")}>Monthly</button>
         </div>
 
         <div className={styles.goldPrice}>
-          <strong>${price.perMonth}</strong>
+          <strong>{enhancedPerMonthLabel(price)}</strong>
           <span>{price.cadence}</span>
         </div>
 
         {error && <p className={styles.goldError} role="alert">{error}</p>}
 
+        <small className={styles.goldNote}>
+          {trial
+            ? `${price.trialDays} days free, then ${enhancedPerMonthLabel(price)}/month, billed ${enhancedTotalLabel(price)}/year. Renews automatically.`
+            : `${enhancedPerMonthLabel(price)}/month, billed monthly. Renews automatically.`}
+        </small>
+
         <button className={`${styles.primaryAction} ${styles.goldCta}`} type="button" disabled={busy} onClick={() => void subscribe()}>
-          {busy ? "Opening checkout…" : `Get ${ENHANCED_TIER_NAME}`}
+          {busy ? "Opening checkout…" : trial ? `Start ${price.trialDays}-day free trial` : `Get ${ENHANCED_TIER_NAME}`}
         </button>
-        {/* <small className={styles.goldNote}>Cancel anytime.</small> */}
       </div>
     </div>
   );
