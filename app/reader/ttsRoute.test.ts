@@ -31,7 +31,7 @@ test("landing speech requests let the backend select a voice after detecting lan
   });
   const request = new Request("http://localhost/api/tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" },
     body: JSON.stringify({
       text: "Bonjour l'ami",
       speed: 1,
@@ -69,7 +69,7 @@ test("English narration forwards the selected Kokoro voice", async (t) => {
   });
   const response = await POST(new Request("http://localhost/api/tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" },
     body: JSON.stringify({
       text: "A creator voice preview.",
       speed: 1.1,
@@ -98,14 +98,14 @@ test("English Supertonic requests tell the backend which model to use", async (t
   });
   const response = await POST(new Request("http://localhost/api/tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" },
     body: JSON.stringify({ texts: ["A creator voice preview."], speed: 1.1, language: "en", engine: "supertonic", voice: "F1", steps: 12 }),
   }));
   assert.equal(response.status, 200);
   assert.equal(fetch.mock.callCount(), 1);
 });
 
-test("enhanced requests forward the higher-quality stream and unknown values are dropped", async (t) => {
+test("all signed-in requests use the same audio quality and anonymous requests are rejected", async (t) => {
   const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
   process.env.FREEREADER_TTS_API_TOKEN = "test-token";
   t.after(() => {
@@ -115,7 +115,7 @@ test("enhanced requests forward the higher-quality stream and unknown values are
   const bodies: unknown[] = [];
   t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
     bodies.push(JSON.parse(String(init?.body)));
-    assert.equal(new Headers(init?.headers).get("X-FreeReader-User-Token"), bodies.length === 1 ? "subscriber-token" : null);
+    assert.equal(new Headers(init?.headers).get("X-FreeReader-User-Token"), bodies.length === 1 ? "subscriber-token" : "reader-token");
     return new Response(new Uint8Array([1]), { headers: { "Content-Type": "audio/mp4" } });
   });
 
@@ -124,13 +124,13 @@ test("enhanced requests forward the higher-quality stream and unknown values are
     body: JSON.stringify({ text: "Hello reader.", speed: 1, voice: "af_heart", quality: "enhanced" }),
   }));
   const standard = await POST(new Request("http://localhost/api/tts", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" },
     body: JSON.stringify({ text: "Hello reader.", speed: 1, voice: "af_heart", quality: "standard" }),
   }));
 
   assert.equal(enhanced.status, 200);
   assert.equal(standard.status, 200);
-  assert.equal((bodies[0] as { quality?: string }).quality, "enhanced");
+  assert.ok(!("quality" in (bodies[0] as Record<string, unknown>)));
   assert.ok(!("quality" in (bodies[1] as Record<string, unknown>)));
   const anonymous = await POST(new Request("http://localhost/api/tts", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -156,7 +156,7 @@ test("reader word timings request preserves the audio-and-timings archive", asyn
     });
   });
   const response = await POST(new Request("http://localhost/api/tts", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" },
     body: JSON.stringify({ texts: ["Hello reader."], speed: 1, voice: "af_heart", word_timings: true }),
   }));
   assert.equal(response.status, 200);

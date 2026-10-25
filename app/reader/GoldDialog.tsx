@@ -88,7 +88,7 @@ export default function GoldDialog({ session, onClose, initialInterval = "yearly
           {ENHANCED_FEATURES.map((feature) => (
             <li key={feature.title}>
               <span className={styles.goldCrown}><ReaderIcon name="crown" /></span>
-              <span><strong>{feature.title}</strong><small>{feature.detail}</small></span>
+              <span><strong>{feature.title}</strong></span>
             </li>
           ))}
         </ul>

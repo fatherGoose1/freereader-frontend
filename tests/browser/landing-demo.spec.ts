@@ -1,10 +1,19 @@
 import { expect, test } from "@playwright/test";
 
+function sampleAudio(): Buffer {
+  const audio = Buffer.alloc(44 + 24_000 * 2);
+  audio.write("RIFF", 0); audio.writeUInt32LE(audio.length - 8, 4); audio.write("WAVEfmt ", 8);
+  audio.writeUInt32LE(16, 16); audio.writeUInt16LE(1, 20); audio.writeUInt16LE(1, 22);
+  audio.writeUInt32LE(24_000, 24); audio.writeUInt32LE(48_000, 28); audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34);
+  audio.write("data", 36); audio.writeUInt32LE(audio.length - 44, 40);
+  return audio;
+}
+
 test("landing demo lists supported languages and routes non-English speech", async ({ page }) => {
   await page.route("**/api/demo-tts", (route) => route.fulfill({
     status: 200,
-    contentType: "audio/mp4",
-    body: "mock audio",
+    contentType: "audio/wav",
+    body: sampleAudio(),
   }));
   await page.goto("/");
 
@@ -67,4 +76,6 @@ test("landing demo lists supported languages and routes non-English speech", asy
   expect(body).toEqual({
     text: "Bonjour l'ami",
   });
+  await expect.poll(() => page.locator(".hero-demo audio").evaluate((audio: HTMLAudioElement) => audio.readyState)).toBeGreaterThan(0);
+  await expect(page.getByRole("dialog", { name: "Sign in to generate audio" })).toHaveCount(0);
 });

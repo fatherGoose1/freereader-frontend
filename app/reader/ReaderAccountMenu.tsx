@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { manageSubscription } from "./billing";
 import { ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan } from "./enhanced";
+import { formatRemaining, type UsageSummary } from "./usage";
 import ReaderIcon from "./ReaderIcon";
 import styles from "./reader.module.css";
 
-export default function ReaderAccountMenu({ session, plan, billingSource, onUpgrade, onSignOut }: {
-  session: Session; plan: string; billingSource: "stripe" | "apple"; onUpgrade: () => void; onSignOut: () => void;
+export default function ReaderAccountMenu({ session, plan, billingSource, usage, onUpgrade, onSignOut }: {
+  session: Session; plan: string; billingSource: "stripe" | "apple"; usage: UsageSummary | null; onUpgrade: () => void; onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,11 @@ export default function ReaderAccountMenu({ session, plan, billingSource, onUpgr
           <button type="button" disabled={busy} onClick={() => void manage()}>{busy ? "Opening Stripe…" : "Manage subscription"}</button>
           <small>Change billing, switch plans, or cancel in Stripe.</small>
         </>}
-      </> : <button type="button" onClick={() => { setOpen(false); onUpgrade(); }}>Upgrade to {ENHANCED_TIER_NAME}</button>}
+      </> : <>
+        {usage && Number.isFinite(usage.daily_used_seconds) &&
+          <small>Today: {formatRemaining(usage.daily_used_seconds)} of 1 hr of audio used</small>}
+        <button type="button" onClick={() => { setOpen(false); onUpgrade(); }}>Upgrade to {ENHANCED_TIER_NAME}</button>
+      </>}
       {error && <p role="alert" className={styles.accountError}>{error}</p>}
       <button type="button" onClick={() => { setOpen(false); onSignOut(); }}>Sign out</button>
     </div>}

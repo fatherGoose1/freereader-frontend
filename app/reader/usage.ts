@@ -11,6 +11,9 @@ export interface UsageSummary {
   budget_seconds: number;
   used_seconds: number;
   remaining_seconds: number;
+  daily_used_seconds: number;
+  daily_budget_seconds: number;
+  daily_remaining_seconds: number;
   premium_voice_budget_seconds: number;
   premium_voice_used_seconds: number;
   premium_voice_remaining_seconds: number;

@@ -36,9 +36,6 @@ export async function POST(request: Request) {
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }
   if (body.engine) upstreamBody.engine = body.engine;
-  // Subscribers request the higher-quality stream. The backend maps this to
-  // 96 kbps versus its 48 kbps default; unknown values are ignored.
-  if (body.quality === "enhanced") upstreamBody.quality = "enhanced";
   if (body.word_timings === true) upstreamBody.word_timings = true;
   if (typeof body.voiceName === "string" && body.voiceName.trim()) upstreamBody.voice_name = body.voiceName.trim().slice(0, 80);
   const backend = process.env.KOKO_BACKEND_URL
@@ -47,9 +44,7 @@ export async function POST(request: Request) {
   if (!token) return NextResponse.json({ error: "speech_not_configured" }, { status: 503 });
   const upstreamContext = (request.headers.get("x-freereader-context") ?? "").slice(0, 2048);
   const upstreamUser = (request.headers.get("x-freereader-user-token") ?? "").slice(0, 4096);
-  // The backend must verify this token and the Gold entitlement before
-  // honoring quality=enhanced; a request body or client header alone is not proof.
-  if (body.quality === "enhanced" && !upstreamUser) {
+  if (!upstreamUser) {
     return NextResponse.json({ error: "sign_in_required" }, { status: 401 });
   }
 
@@ -66,6 +61,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
         ...(upstreamContext ? { "X-FreeReader-Context": upstreamContext } : {}),
         ...(upstreamUser ? { "X-FreeReader-User-Token": upstreamUser } : {}),
+        "X-FreeReader-Client": "web",
       },
       body: JSON.stringify(upstreamBody),
       signal: controller.signal,

@@ -28,7 +28,7 @@ import { cancelNarration, narrationRoute, synthesize, synthesizeBatch, type Narr
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
 import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, voicesForLanguage, type SpeechLanguage } from "./speech";
-import { isKokoroVoice, isPhononVoice, phononVoiceRef, type NarratorVoice } from "./voices";
+import { isKokoroVoice, isPhononVoice, phononVoiceRef, PUBLIC_PARKER_VOICE, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry as recordConsumerTelemetry, type TelemetryProperties } from "./telemetry";
 import consumerPosthog from "posthog-js";
@@ -300,6 +300,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [planReady, setPlanReady] = useState(false);
   const [phononCatalog, setPhononCatalog] = useState<PhononCatalog | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [usage, setUsage] = useState<Awaited<ReturnType<typeof fetchUsage>> | null>(null);
+  const [usageOwner, setUsageOwner] = useState<string | null>(null);
   const [upgradeInterval, setUpgradeInterval] = useState<EnhancedInterval>("yearly");
   const [upgradeError, setUpgradeError] = useState("");
   const enhanced = isEnhancedPlan(plan);
@@ -517,16 +521,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     return () => data.subscription.unsubscribe();
   }, []);
 
-  // The plan decides both syncing and audio quality, so resolve it before showing
-  // the upgrade notice or starting any sync. Anonymous readers stay on "free".
+  // Resolve membership and today's audiobook usage together.
   useEffect(() => {
-    if (managed || !session) { setPlan("free"); setBillingSource("stripe"); setPlanReady(true); return; }
+    if (managed || !session) { setPlan("free"); setUsage(null); setUsageOwner(null); setBillingSource("stripe"); setPlanReady(true); return; }
     let cancelled = false;
     // Re-resolve when the tab regains focus so a Gold purchase linked on another
     // device (for example the iOS app) is reflected without a full reload.
     const resolvePlan = () => {
       fetchUsage(session.access_token)
-        .then((summary) => { if (!cancelled) { setPlan(summary.plan); setBillingSource(summary.billing_source ?? "stripe"); } })
+        .then((summary) => { if (!cancelled) { setPlan(summary.plan); setUsage(summary); setUsageOwner(session.user.id); setBillingSource(summary.billing_source ?? "stripe"); } })
         .catch(() => { if (!cancelled) setPlan("free"); })
         .finally(() => { if (!cancelled) setPlanReady(true); });
     };
@@ -541,6 +544,20 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       window.removeEventListener("focus", refreshOnReturn);
     };
   }, [managed, session]);
+
+  useEffect(() => {
+    if (managed || !session || !planReady || usageOwner !== session.user.id || enhanced) return;
+    let queued: string | null = null;
+    try { queued = sessionStorage.getItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
+    if (isEnhancedPlan(queued)) return;
+    const key = `freereader-first-login-gold:${session.user.id}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "shown");
+    } catch { /* A private session can still dismiss the modal. */ }
+    setLoginOpen(false);
+    setUpgradeOpen(true);
+  }, [managed, session?.user.id, planReady, usageOwner, enhanced]);
 
   // The server catalog is shared with iOS; fetch it whenever the voice picker
   // opens so a voice created on another device appears here automatically.
@@ -559,7 +576,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (!phononCatalog) return;
     const preferred = preferencesRef.current.defaultVoices.en;
     const chosen = isPhononVoice(voice) ? voice : preferred;
-    if (chosen && isPhononVoice(chosen) && (!phononCatalog.can_clone ||
+    if (chosen && isPhononVoice(chosen) && chosen !== PUBLIC_PARKER_VOICE && (!phononCatalog.can_clone ||
       !phononCatalog.voices.some((item) => item.id === chosen.slice(7) && item.status === "active"))) {
       changeDefaultVoice("en", "af_heart");
     }
@@ -641,12 +658,20 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   async function signIn() {
     const supabase = supabaseClient();
-    if (!supabase) { setMessage("Google sign-in is unavailable right now."); return; }
+    if (!supabase) {
+      setLoginError("Google sign-in is unavailable right now.");
+      setMessage("Google sign-in is unavailable right now.");
+      return;
+    }
+    setLoginError("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
     });
-    if (error) setMessage("Google sign-in didn't start. Try again.");
+    if (error) {
+      setLoginError("Google sign-in didn't start. Try again.");
+      setMessage("Google sign-in didn't start. Try again.");
+    }
   }
 
   const accountNotice = SHOW_UPGRADE_PROMPTS && !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
@@ -658,7 +683,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           {ENHANCED_FEATURES.map((feature) => (
             <li key={feature.title}>
               <span className={styles.accountNoticeStar} aria-hidden="true">✦</span>
-              <span><b>{feature.title}:</b> <span>{feature.detail}</span></span>
+              <span><b>{feature.title}</b></span>
             </li>
           ))}
         </ul>
@@ -673,6 +698,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     </section>
   );
   const accountButton = !managed && session && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
+    usage={usageOwner === session.user.id ? usage : null}
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
   const upgradeFab = SHOW_UPGRADE_PROMPTS && !managed && planReady && !enhanced && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
@@ -680,6 +706,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     </button>
   );
   const upgradeDialog = upgradeOpen && <GoldDialog session={session} initialInterval={upgradeInterval} initialError={upgradeError} onClose={() => { setUpgradeOpen(false); setUpgradeError(""); }} />;
+  const loginDialog = loginOpen && !session && <div className={styles.modalBackdrop} onMouseDown={() => setLoginOpen(false)}>
+    <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Sign in to generate audio" onMouseDown={(event) => event.stopPropagation()}>
+      <button className={styles.goldClose} type="button" aria-label="Close" onClick={() => setLoginOpen(false)}><ReaderIcon name="close" /></button>
+      <h2>Sign in to listen</h2>
+      <p>Reading is free. Sign in to generate up to 1 hour of audio each day.</p>
+      {loginError && <p role="alert">{loginError}</p>}
+      <button type="button" className={styles.primaryAction} onClick={() => void signIn()}>Continue with Google</button>
+    </div>
+  </div>;
 
   useEffect(() => {
     if (managed) {
@@ -1050,9 +1085,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const pdfRevision = book.pdfNarrationRevision ? `-pdf${book.pdfNarrationRevision}` : "";
     // Older Kokoro audio has no timing sidecar; regenerate it once for word cues.
     const wordRevision = language === "en" && route.model.startsWith("kokoro") ? "-words1" : "";
-    // Version the free tier again: earlier 48 kbps clips may have been generated
-    // before the backend quality split, so they cannot share this cache key.
-    const qualityTier = enhanced ? "-96k-v1" : "-48k-v2";
+    const qualityTier = "-96k-v2";
     const model = `${TEXT_PIPELINE_REVISION}${chunkRevision}${pdfRevision}${wordRevision}-${route.model}-${language}-${route.voice}-${quality}${speechRate}${qualityTier}`;
     return `${book.id}/${model}/${index}.${route.provider === "Server" ? "m4a" : "wav"}`;
   }
@@ -1087,6 +1120,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (cached) {
       return { blob: cached, provider: route.provider, model: route.model, cached: true, duration: 0,
         wordTimings: await getWordTimings(key) };
+    }
+    if (!session) {
+      setLoginOpen(true);
+      throw new SpeechCancelledError("Sign in to generate audio.");
     }
     const existing = pendingAudio.current.get(key);
     if (existing) {
@@ -1131,6 +1168,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         selectedVoice, steps, onStatus, speechRate, language, () => request.isCurrent(), "audiobook", enhanced,
       ).then(async ({ parts, route: actualRoute }) => {
         if (parts.length !== batch.length) throw new Error("Speech batch size did not match the request.");
+        if (session) void fetchUsage(session.access_token).then(setUsage).catch(() => {});
         audioPrimed.current = true;
         return Promise.all(batch.map(async (item, position) => {
           const part = parts[position];
@@ -1155,6 +1193,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
     const promise = synthesize(block.text, selectedVoice, steps, onStatus, block.isHeading, speechRate, language,
       () => request.isCurrent(), "audiobook", undefined, enhanced).then(async ({ blob, duration, provider, generationStartedAt, wordTimings, route: actualRoute }) => {
+      if (session) void fetchUsage(session.access_token).then(setUsage).catch(() => {});
       // A failed Kokoro request may have completed with Supertonic. Cache its real variant.
       const partKey = audioCacheKey(book, index, actualRoute);
       if (wordTimings) await saveWordTimings(partKey, wordTimings);
@@ -1186,7 +1225,14 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           bufferedSeconds += book.blocks[index].text.split(/\s+/).length / 2.5 / speechRate;
         }
         if (bufferedSeconds >= 30) return;
-      } catch { return; }
+      } catch (error) {
+        if (error instanceof Error && error.message === "daily_audio_limit_reached") {
+          setUpgradeOpen(true);
+          setMessage("You've used your 1 hour of free audio today. Upgrade for unlimited audio.");
+          if (session) void fetchUsage(session.access_token).then(setUsage).catch(() => {});
+        }
+        return;
+      }
     }
   }
 
@@ -1316,7 +1362,13 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     } catch (error) {
       if (!isCurrent()) return;
       pausePlayback();
-      setMessage(error instanceof Error ? error.message : "Speech generation failed.");
+      if (error instanceof Error && error.message === "daily_audio_limit_reached") {
+        setUpgradeOpen(true);
+        setMessage("You've used your 1 hour of free audio today. Upgrade for unlimited audio.");
+        void fetchUsage(session!.access_token).then(setUsage).catch(() => {});
+      } else if (error instanceof Error && error.message === "sign_in_required") setLoginOpen(true);
+      else if (!(error instanceof SpeechCancelledError && error.message === "Sign in to generate audio."))
+        setMessage(error instanceof Error ? error.message : "Speech generation failed.");
     } finally {
       if (isCurrent()) setBusy(false);
     }
@@ -1780,9 +1832,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             </label>
             <label className={styles.settingsRow}><span>Voice</span>
               <select value={narrationVoice} onChange={(event) => changeDefaultVoice(narrationLanguage, event.target.value as NarratorVoice)}>
-                {narrationLanguage === "en" && phononCatalog?.can_clone && phononCatalog.voices.filter((item) => item.status === "active")
+                {narrationLanguage === "en" && <option value={PUBLIC_PARKER_VOICE}>Parker (Founder)</option>}
+                {narrationLanguage === "en" && phononCatalog?.can_clone && phononCatalog.voices.filter((item) => item.status === "active" && phononVoiceRef(item.id) !== PUBLIC_PARKER_VOICE)
                   .map((item) => <option key={item.id} value={phononVoiceRef(item.id)}>{item.name} (My voices)</option>)}
-                {isPhononVoice(narrationVoice) && !phononCatalog?.voices.some((item) => item.id === narrationVoice.slice(7) && item.status === "active")
+                {isPhononVoice(narrationVoice) && narrationVoice !== PUBLIC_PARKER_VOICE && !phononCatalog?.voices.some((item) => item.id === narrationVoice.slice(7) && item.status === "active")
                   && <option value={narrationVoice}>Cloned voice (unavailable)</option>}
                 {voicesForLanguage(narrationLanguage).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
               </select>
@@ -1856,6 +1909,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         )}
         {upgradeFab}
         {upgradeDialog}
+        {loginDialog}
       </main>
     );
   }
@@ -2170,6 +2224,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       )}
       {upgradeFab}
       {upgradeDialog}
+      {loginDialog}
     </main>
   );
 }

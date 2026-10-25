@@ -33,12 +33,11 @@ export function enhancedTotalLabel(amountCents: number): string {
 
 export interface EnhancedFeature {
   title: string;
-  detail: string;
 }
 
 export const ENHANCED_FEATURES: readonly EnhancedFeature[] = [
-  { title: "Device syncing", detail: "Keep your books and progress synced between devices." },
-  { title: "Highest-quality audio", detail: "Hear your books and documents in clear, studio-level quality." },
-  { title: "Faster generation", detail: "Dedicated servers so you never have to wait for audio generation." },
-  { title: "Voice cloning", detail: "Create up to three voices per month for English books, shared across your devices." },
+  { title: "Unlimited audio" },
+  { title: "Device syncing" },
+  { title: "Faster generation" },
+  { title: "Voice cloning" },
 ];

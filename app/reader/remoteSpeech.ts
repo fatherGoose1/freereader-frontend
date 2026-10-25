@@ -4,7 +4,7 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken, currentSessionAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
-import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isPhononVoice, isQwenVoice, voiceDisplayName } from "./voices";
+import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isPhononVoice, isQwenVoice, PUBLIC_PARKER_VOICE, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
 import { speakPhononVoice } from "./phonon";
 import type { SpeechResult } from "./mobileSpeech";
@@ -63,11 +63,24 @@ export class RemoteSpeechClient {
       const requestedVoice = options?.voice;
       if (requestedVoice && isPhononVoice(requestedVoice)) {
         if (options?.language !== "en") throw new Error("Cloned Phonon voices are available for English books only.");
-        const token = await currentSessionAccessToken();
-        if (!token) throw new Error("Sign in to use your cloned voice.");
         status?.("Generating with your cloned voice");
-        const response = await speakPhononVoice(token, requestedVoice.slice(7),
-          items.map((item) => normalizeForSpeech(item.text, item.isHeading, "en")), speechSpeed, controller.signal);
+        const texts = items.map((item) => normalizeForSpeech(item.text, item.isHeading, "en"));
+        let response: Response;
+        if (requestedVoice === PUBLIC_PARKER_VOICE) {
+          const token = await currentSessionAccessToken();
+          if (!token) throw new Error("sign_in_required");
+          response = await fetch("/api/public-phonon-tts", { method: "POST",
+            headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": token,
+              "X-FreeReader-Context": JSON.stringify(telemetryContext(options?.source)) }, body: JSON.stringify({ texts, speed: speechSpeed }),
+            signal: controller.signal });
+          if (!response.ok) {
+            throw new Error(unavailableMessage(response, await response.json().catch(() => null)));
+          }
+        } else {
+          const token = await currentSessionAccessToken();
+          if (!token) throw new Error("Sign in to use your cloned voice.");
+          response = await speakPhononVoice(token, requestedVoice.slice(7), texts, speechSpeed, controller.signal);
+        }
         if (items.length === 1) {
           const blob = await response.blob();
           if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");

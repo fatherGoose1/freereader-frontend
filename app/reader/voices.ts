@@ -63,6 +63,7 @@ export function isKokoroVoiceForLanguage(voice: string, language: string): voice
 // from the finite built-in voice sets while still flowing through NarratorVoice.
 export type ClonedVoice = `clone:${string}`;
 export type PhononVoiceRef = `phonon:${string}`;
+export const PUBLIC_PARKER_VOICE: PhononVoiceRef = "phonon:8e7e52e7-77f4-4677-a488-ded347498b1a";
 export const QWEN_VOICES = [
   ["qwen_ryan", "Ryan"], ["qwen_aiden", "Aiden"], ["qwen_vivian", "Vivian"],
   ["qwen_serena", "Serena"], ["qwen_ono_anna", "Ono Anna"], ["qwen_sohee", "Sohee"],
