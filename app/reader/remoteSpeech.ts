@@ -17,7 +17,7 @@ function unavailableMessage(response: Response, payload: { error?: unknown } | n
   if (payload?.error === "usage_limit_reached") {
     return "You have used your monthly narration allowance. Check your plan and usage for more hours.";
   }
-  if (payload?.error === "sign_in_required") return "Sign in to generate narration. Audiobook listening stays free.";
+  if (payload?.error === "sign_in_required") return "sign_in_required";
   if (payload?.error === "premium_required") return "A Pro or Premium subscription is required to use premium voices.";
   if (payload?.error === "enhanced_audio_required") return "FreeReader Gold is required for enhanced audio. Refresh your account and try again.";
   if (payload?.error === "premium_voice_limit_reached") return "You have used your monthly premium voice allowance. Try a standard voice or upgrade your plan.";
@@ -132,20 +132,17 @@ export class RemoteSpeechClient {
         body.voice = options.voice;
         body.steps = options.steps;
         if (options.engine) body.engine = options.engine;
-        // The backend encodes enhanced listening at 96 kbps and defaults to 48 kbps.
-        if (options.enhanced) body.quality = "enhanced";
         const voiceName = options.voice ? voiceDisplayName(options.voice) : undefined;
         if (voiceName) body.voice_name = voiceName;
       }
-      const userToken = options?.enhanced ? await currentSessionAccessToken()
-        : options?.source === "youtube_narration" ? currentAccessToken() : null;
-      if (options?.enhanced && !userToken) throw new Error("Sign in to use enhanced audio.");
+      const userToken = await currentSessionAccessToken();
+      if (!userToken) throw new Error("sign_in_required");
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-FreeReader-Context": JSON.stringify(telemetryContext(options?.source)),
-          ...(userToken ? { "X-FreeReader-User-Token": userToken } : {}),
+          "X-FreeReader-User-Token": userToken,
         },
         body: JSON.stringify(body),
         signal: controller.signal,

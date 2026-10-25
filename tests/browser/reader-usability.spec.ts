@@ -121,6 +121,14 @@ test("a signed-in free account can delete stored voices but must upgrade to clon
   await upload(page, "Free clone gate");
   await page.getByRole("button", { name: /^html Free clone gate/ }).click();
   await openControls(page);
+  await page.route("**/api/tts", (route) => route.fulfill({ contentType: "audio/wav",
+    headers: { "X-Audio-Duration": "20" }, body: playableWav() }));
+  const speechRequest = page.waitForRequest("**/api/tts");
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  const request = await speechRequest;
+  expect(request.headers()["x-freereader-user-token"]).toBe("free-phonon-token");
+  expect(request.postDataJSON()).not.toHaveProperty("quality");
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await page.getByRole("dialog", { name: "Voice settings" }).getByRole("button", { name: /Clone a voice/ }).click();
   const dialog = page.getByRole("dialog", { name: "Clone a voice" });
