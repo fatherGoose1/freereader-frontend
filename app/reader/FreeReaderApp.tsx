@@ -710,7 +710,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Sign in to generate audio" onMouseDown={(event) => event.stopPropagation()}>
       <button className={styles.goldClose} type="button" aria-label="Close" onClick={() => setLoginOpen(false)}><ReaderIcon name="close" /></button>
       <h2>Sign in to listen</h2>
-      <p>Reading is free. Sign in to generate up to 1 hour of audio each day.</p>
+      <p>Sign in to generate up to 1 hour of audio each day.</p>
       {loginError && <p role="alert">{loginError}</p>}
       <button type="button" className={styles.primaryAction} onClick={() => void signIn()}>Continue with Google</button>
     </div>
