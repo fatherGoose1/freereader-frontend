@@ -304,7 +304,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [goldOfferChecked, setGoldOfferChecked] = useState(false);
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof fetchUsage>> | null>(null);
   const [usageOwner, setUsageOwner] = useState<string | null>(null);
   const [optedInOwner, setOptedInOwner] = useState<string | null>(null);
@@ -580,7 +579,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     setGoldOfferError("");
   }
 
-  // Google OAuth navigates away; keep the checked choice until the account write succeeds.
+  // Google OAuth navigates away; keep the signup opt-in until the account write succeeds.
   useEffect(() => {
     if (managed || !session) return;
     let posting = false;
@@ -742,13 +741,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   function signIn() {
     setLoginError("");
-    setGoldOfferChecked(false);
     setLoginOpen(true);
   }
 
   function closeLogin() {
     setLoginOpen(false);
-    setGoldOfferChecked(false);
   }
 
   async function beginGoogleSignIn() {
@@ -760,13 +757,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
     setLoginError("");
     try {
-      if (goldOfferChecked) sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, "true");
-      else sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY);
+      sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, "true");
     } catch {
-      if (goldOfferChecked) {
-        setLoginError("Browser storage is unavailable. Please enable it to request the Gold offer.");
-        return;
-      }
+      setLoginError("Browser storage is unavailable. Please enable it to complete sign-in.");
+      return;
     }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -832,10 +826,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       <button className={styles.goldClose} type="button" aria-label="Close" onClick={closeLogin}><ReaderIcon name="close" /></button>
       <h2>Sign in to listen</h2>
       <p>Sign in to generate up to 1 hour of audio each day.</p>
-      <label className={styles.goldOfferOptIn}>
-        <input type="checkbox" checked={goldOfferChecked} onChange={(event) => setGoldOfferChecked(event.target.checked)} />
-        <span>Send me a 50% off deal for FreeReader Gold plans by email.</span>
-      </label>
       {loginError && <p role="alert">{loginError}</p>}
       <button type="button" className={styles.primaryAction} onClick={() => void beginGoogleSignIn()}>Continue with Google</button>
     </div>

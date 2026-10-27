@@ -61,19 +61,17 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
-test("free-account sign-in offers an unchecked email deal opt-in", async ({ page }) => {
+test("free-account sign-in has no email deal checkbox", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Sign in to generate audio" });
-  const offer = dialog.getByRole("checkbox", { name: "Send me a 50% off deal for FreeReader Gold plans by email." });
-  await expect(offer).not.toBeChecked();
-  await offer.check();
+  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(offer).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
 });
 
-test("a checked offer is saved after the Google account returns", async ({ page }) => {
+test("the signup offer is saved after the Google account returns", async ({ page }) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
   const user = { id: "77777777-7777-4777-8777-777777777777", email: "offer@example.com", aud: "authenticated", role: "authenticated",

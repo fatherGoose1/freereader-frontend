@@ -288,8 +288,6 @@
 .modalActions button:not(.primaryAction), .catalogSearch button, .catalogList button, .catalog > button { min-height: 44px; padding: 10px 16px; color: #536584; background: #f5f7fc; border: 1px solid var(--border); border-radius: 8px; font-weight: 500; }
 .modalPrivacy { margin-top: 22px; padding-top: 16px; color: #7f8c9e; border-top: 1px solid #edf0f5; font-size: 11px; text-align: center; }
 .goldModal { position: relative; width: min(440px, 100%); border-color: #d9b76b; box-shadow: 0 0 0 2px #d7a93f50, 0 24px 80px #674d1b40; }
-.goldOfferOptIn { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0; color: #3d4655; font-size: 13px; line-height: 1.5; cursor: pointer; }
-.goldOfferOptIn input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--app-blue); cursor: pointer; }
 .goldOfferDismiss { display: block; margin: 12px auto 0; padding: 8px 12px; color: #536584; background: transparent; border: 0; text-decoration: underline; }
 .goldClose { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: #76603a; background: transparent; border: 0; border-radius: 8px; }
 .goldClose:hover { background: #fff4d8; }
