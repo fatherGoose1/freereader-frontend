@@ -6,6 +6,7 @@ const API_BASE = (process.env.NEXT_PUBLIC_KOKO_BACKEND_URL
 
 export interface UsageSummary {
   plan: "free" | "pro" | "premium" | EnhancedPlanId;
+  gold_offer_opted_in?: boolean;
   billing_source?: "stripe" | "apple";
   period: string;
   budget_seconds: number;
@@ -41,6 +42,15 @@ export function linkInstallation(token: string): Promise<UsageSummary> {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ installation_id: installationId() }),
   }).then(readSummary);
+}
+
+export async function optInToGoldOffer(token: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/freereader/usage/gold-offer-opt-in`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ opted_in: true }),
+  });
+  if (!response.ok) throw new Error("gold_offer_opt_in_unavailable");
 }
 
 // "2 hr 5 min", "48 min", etc.

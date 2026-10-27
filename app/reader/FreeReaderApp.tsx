@@ -37,9 +37,10 @@ import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
 import { supabaseClient } from "./supabase";
 import { synchronizeLibrary } from "./accountSync";
-import { fetchUsage, linkInstallation } from "./usage";
+import { fetchUsage, linkInstallation, optInToGoldOffer } from "./usage";
 import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
-import { startCheckout } from "./billing";
+import { startCheckout, startGoldOfferCheckout } from "./billing";
+import { GOLD_OFFER_RETURN_KEY } from "./goldOffer";
 import GoldDialog from "./GoldDialog";
 import PhononDialog from "./PhononDialog";
 import { listPhononVoices, type PhononCatalog } from "./phonon";
@@ -64,6 +65,7 @@ const BATCH_MAX_CHARS = 1200;
 // The library/reader upgrade banner, floating button, and library header button
 // are shown to readers who have not subscribed yet.
 const SHOW_UPGRADE_PROMPTS = true;
+const GOLD_OFFER_PENDING_KEY = "freereader-gold-offer-opt-in-pending";
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -302,10 +304,16 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [goldOfferChecked, setGoldOfferChecked] = useState(false);
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof fetchUsage>> | null>(null);
   const [usageOwner, setUsageOwner] = useState<string | null>(null);
+  const [optedInOwner, setOptedInOwner] = useState<string | null>(null);
   const [upgradeInterval, setUpgradeInterval] = useState<EnhancedInterval>("yearly");
   const [upgradeError, setUpgradeError] = useState("");
+  const [goldOfferActive, setGoldOfferActive] = useState(false);
+  const [goldOfferError, setGoldOfferError] = useState("");
+  const [goldOfferAttempt, setGoldOfferAttempt] = useState(0);
+  const goldOfferStarted = useRef(false);
   const enhanced = isEnhancedPlan(plan);
   const localRevisionRef = useRef(0);
   const syncRunning = useRef(false);
@@ -510,6 +518,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const supabase = supabaseClient();
     if (!supabase) { setAuthReady(true); return; }
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (_event === "INITIAL_SESSION" && !next) {
+        // A canceled Google round trip must not consent a later, unrelated sign-in.
+        try { sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY); } catch { /* Storage may be unavailable. */ }
+      }
       if (next) {
         const authorReturn = takeAuthorReturn();
         if (authorReturn) { window.location.replace(authorReturn); return; }
@@ -520,6 +532,77 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    let returning = false;
+    try {
+      returning = sessionStorage.getItem(GOLD_OFFER_RETURN_KEY) === "true";
+      sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY);
+    } catch { /* Storage may be unavailable. */ }
+    if (!managed && (returning || new URL(window.location.href).searchParams.get("offer") === "gold50")) setGoldOfferActive(true);
+  }, [managed]);
+
+  useEffect(() => {
+    if (!goldOfferActive || !authReady || managed || goldOfferStarted.current) return;
+    goldOfferStarted.current = true;
+    if (!session) {
+      const supabase = supabaseClient();
+      if (!supabase) { setGoldOfferError("Sign-in is unavailable. Please try again later."); return; }
+      try { sessionStorage.setItem(GOLD_OFFER_RETURN_KEY, "true"); }
+      catch { setGoldOfferError("Browser storage is unavailable. Please enable it to use your offer."); return; }
+      void supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
+      }).then(({ error }) => {
+        if (error) {
+          try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
+          setGoldOfferError("Google sign-in didn't start. Please try again.");
+        }
+      }).catch(() => {
+        try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
+        setGoldOfferError("Google sign-in didn't start. Please try again.");
+      });
+      return;
+    }
+    void startGoldOfferCheckout(session.access_token)
+      .then((url) => window.location.assign(url))
+      .catch((error) => setGoldOfferError(error instanceof Error && error.message === "gold_offer_ineligible"
+        ? "This offer is available only to opted-in accounts that have never had Gold."
+        : "We couldn't open your discounted checkout. Please try again."));
+  }, [goldOfferActive, goldOfferAttempt, authReady, managed, session?.access_token]);
+
+  function leaveGoldOffer() {
+    try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("offer");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    setGoldOfferActive(false);
+    setGoldOfferError("");
+  }
+
+  // Google OAuth navigates away; keep the checked choice until the account write succeeds.
+  useEffect(() => {
+    if (managed || !session) return;
+    let posting = false;
+    const saveOptIn = async () => {
+      if (posting) return;
+      try {
+        if (sessionStorage.getItem(GOLD_OFFER_PENDING_KEY) !== "true") return;
+        setOptedInOwner(session.user.id);
+        posting = true;
+        await optInToGoldOffer(session.access_token);
+        sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY);
+      } catch { /* Retry on focus or the next visit if the backend is unavailable. */ }
+      finally { posting = false; }
+    };
+    void saveOptIn();
+    window.addEventListener("focus", saveOptIn);
+    return () => window.removeEventListener("focus", saveOptIn);
+  }, [managed, session?.user.id, session?.access_token]);
+
+  const showUpgradePrompts = SHOW_UPGRADE_PROMPTS && !goldOfferActive && !managed && !!session && planReady &&
+    usageOwner === session.user.id && usage?.gold_offer_opted_in === false &&
+    optedInOwner !== session.user.id && !enhanced;
 
   // Resolve membership and today's audiobook usage together.
   useEffect(() => {
@@ -546,7 +629,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }, [managed, session]);
 
   useEffect(() => {
-    if (managed || !session || !planReady || usageOwner !== session.user.id || enhanced) return;
+    if (!showUpgradePrompts || !session) return;
     let queued: string | null = null;
     try { queued = sessionStorage.getItem("freereaderUpgradePlan"); } catch { /* unavailable */ }
     if (isEnhancedPlan(queued)) return;
@@ -557,7 +640,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     } catch { /* A private session can still dismiss the modal. */ }
     setLoginOpen(false);
     setUpgradeOpen(true);
-  }, [managed, session?.user.id, planReady, usageOwner, enhanced]);
+  }, [showUpgradePrompts, session?.user.id]);
 
   // The server catalog is shared with iOS; fetch it whenever the voice picker
   // opens so a voice created on another device appears here automatically.
@@ -652,11 +735,23 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }, [libraryLoaded, session, localRevision, enhanced]);
 
   async function signOut() {
+    try { sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY); } catch { /* Storage may be unavailable. */ }
     const { error } = await supabaseClient()!.auth.signOut();
     if (error) setMessage("Could not sign out. Try again.");
   }
 
-  async function signIn() {
+  function signIn() {
+    setLoginError("");
+    setGoldOfferChecked(false);
+    setLoginOpen(true);
+  }
+
+  function closeLogin() {
+    setLoginOpen(false);
+    setGoldOfferChecked(false);
+  }
+
+  async function beginGoogleSignIn() {
     const supabase = supabaseClient();
     if (!supabase) {
       setLoginError("Google sign-in is unavailable right now.");
@@ -664,17 +759,27 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       return;
     }
     setLoginError("");
+    try {
+      if (goldOfferChecked) sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, "true");
+      else sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY);
+    } catch {
+      if (goldOfferChecked) {
+        setLoginError("Browser storage is unavailable. Please enable it to request the Gold offer.");
+        return;
+      }
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
     });
     if (error) {
+      try { sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY); } catch { /* Storage may be unavailable. */ }
       setLoginError("Google sign-in didn't start. Try again.");
       setMessage("Google sign-in didn't start. Try again.");
     }
   }
 
-  const accountNotice = SHOW_UPGRADE_PROMPTS && !managed && planReady && !enhanced && !initialBook && authReady && !accountNoticeDismissed && (
+  const accountNotice = showUpgradePrompts && !initialBook && !accountNoticeDismissed && (
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
         <div className={styles.accountNoticeHeading}><ReaderIcon name="crown" /><strong>Get {ENHANCED_TIER_NAME}</strong></div>
@@ -699,20 +804,40 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   );
   const accountButton = !managed && session && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
     usage={usageOwner === session.user.id ? usage : null}
+    showUpgrade={showUpgradePrompts}
     onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
-  const upgradeFab = SHOW_UPGRADE_PROMPTS && !managed && planReady && !enhanced && !upgradeOpen && (
+  const upgradeFab = showUpgradePrompts && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
       <ReaderIcon name="crown" /><span>Upgrade</span>
     </button>
   );
   const upgradeDialog = upgradeOpen && <GoldDialog session={session} initialInterval={upgradeInterval} initialError={upgradeError} onClose={() => { setUpgradeOpen(false); setUpgradeError(""); }} />;
-  const loginDialog = loginOpen && !session && <div className={styles.modalBackdrop} onMouseDown={() => setLoginOpen(false)}>
+  const goldOfferDialog = goldOfferActive && <div className={styles.modalBackdrop}>
+    <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Your 50% off Gold offer">
+      <h2>50% off FreeReader Gold yearly</h2>
+      <p>No free trial. Your subscription starts when you complete Stripe checkout and renews yearly at the discounted rate.</p>
+      {goldOfferError ? <>
+        <p role="alert">{goldOfferError}</p>
+        <button className={styles.primaryAction} type="button" onClick={() => {
+          goldOfferStarted.current = false;
+          setGoldOfferError("");
+          setGoldOfferAttempt((attempt) => attempt + 1);
+        }}>Try again</button>
+      </> : <p role="status">{session ? "Opening your discounted checkout…" : "Signing you in…"}</p>}
+      <button className={styles.goldOfferDismiss} type="button" onClick={leaveGoldOffer}>Back to library</button>
+    </div>
+  </div>;
+  const loginDialog = loginOpen && !session && <div className={styles.modalBackdrop} onMouseDown={closeLogin}>
     <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Sign in to generate audio" onMouseDown={(event) => event.stopPropagation()}>
-      <button className={styles.goldClose} type="button" aria-label="Close" onClick={() => setLoginOpen(false)}><ReaderIcon name="close" /></button>
+      <button className={styles.goldClose} type="button" aria-label="Close" onClick={closeLogin}><ReaderIcon name="close" /></button>
       <h2>Sign in to listen</h2>
       <p>Sign in to generate up to 1 hour of audio each day.</p>
+      <label className={styles.goldOfferOptIn}>
+        <input type="checkbox" checked={goldOfferChecked} onChange={(event) => setGoldOfferChecked(event.target.checked)} />
+        <span>Send me a 50% off deal for FreeReader Gold plans by email.</span>
+      </label>
       {loginError && <p role="alert">{loginError}</p>}
-      <button type="button" className={styles.primaryAction} onClick={() => void signIn()}>Continue with Google</button>
+      <button type="button" className={styles.primaryAction} onClick={() => void beginGoogleSignIn()}>Continue with Google</button>
     </div>
   </div>;
 
@@ -1763,7 +1888,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 </div>
                 <div className={styles.textSizing} role="group" aria-label={showNative && selected.format === "pdf" ? "PDF zoom" : "Text size"}><button aria-label={showNative && selected.format === "pdf" ? "Zoom out" : "Decrease text size"} disabled={textSize <= 16} onClick={() => changePreferences((current) => ({ ...current, textSize: Math.max(16, current.textSize - 2) }))}>A−</button><button aria-label={showNative && selected.format === "pdf" ? "Zoom in" : "Increase text size"} disabled={textSize >= 28} onClick={() => changePreferences((current) => ({ ...current, textSize: Math.min(28, current.textSize + 2) }))}>A+</button></div>
                 {!managed && <div className={styles.mobileSupportActions}>
-                  {planReady && !enhanced && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="crown" /></button>}
+                  {showUpgradePrompts && <button type="button" className={styles.mobileUpgrade} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}><ReaderIcon name="crown" /></button>}
                   <button type="button" className={styles.mobileSupportButton} aria-label="Contact support" title="Contact support" onClick={(event) => window.dispatchEvent(new CustomEvent("freereader:open-support", { detail: { trigger: event.currentTarget } }))}>?</button>
                 </div>}
               </div>
@@ -1909,6 +2034,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         )}
         {upgradeFab}
         {upgradeDialog}
+        {goldOfferDialog}
         {loginDialog}
       </main>
     );
@@ -1944,7 +2070,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
         </Link>
         <div className={styles.actions}>
-          {SHOW_UPGRADE_PROMPTS && authReady && planReady && !enhanced && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}
+          {showUpgradePrompts && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}
           {authReady && !session && <button type="button" className={styles.librarySignIn} onClick={() => void signIn()}>Sign in</button>}
           <button className={styles.primaryAction} onClick={() => setPanel("add")}><ReaderIcon name="plus" /> Add content</button>
           {accountButton}
@@ -2224,6 +2350,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       )}
       {upgradeFab}
       {upgradeDialog}
+      {goldOfferDialog}
       {loginDialog}
     </main>
   );

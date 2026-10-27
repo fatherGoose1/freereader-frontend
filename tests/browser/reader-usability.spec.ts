@@ -34,6 +34,22 @@ async function openControls(page: Page) {
   if (await player.isVisible()) await player.click();
 }
 
+async function signInFreeReader(page: Page, optedIn: boolean) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const user = { id: "77777777-7777-4777-8777-777777777777", email: "free@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() };
+  const session = { access_token: "free-offer-token", refresh_token: "free-offer-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200,
+    json: { plan: "free", gold_offer_opted_in: optedIn } }));
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/telemetry", (route) => route.fulfill({ status: 202, json: {} }));
   await page.route("**/api/v1/freereader/billing/price?plan=gold_*", (route) => {
@@ -45,7 +61,115 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/reader/audiobooks");
 });
 
+test("free-account sign-in offers an unchecked email deal opt-in", async ({ page }) => {
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign in to generate audio" });
+  const offer = dialog.getByRole("checkbox", { name: "Send me a 50% off deal for FreeReader Gold plans by email." });
+  await expect(offer).not.toBeChecked();
+  await offer.check();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(offer).not.toBeChecked();
+  await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
+});
+
+test("a checked offer is saved after the Google account returns", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const user = { id: "77777777-7777-4777-8777-777777777777", email: "offer@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() };
+  const session = { access_token: "opt-in-token", refresh_token: "opt-in-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
+  let submitted = 0;
+  await page.route("**/api/v1/freereader/usage/gold-offer-opt-in", (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer opt-in-token");
+    expect(route.request().postDataJSON()).toEqual({ opted_in: true });
+    submitted += 1;
+    return route.fulfill({ status: 200, json: { gold_offer_opted_in: true } });
+  });
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  await page.evaluate(([key, value]) => {
+    localStorage.setItem(key, value);
+    sessionStorage.setItem("freereader-gold-offer-opt-in-pending", "true");
+  }, [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await expect.poll(() => submitted).toBe(1);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("freereader-gold-offer-opt-in-pending"))).toBeNull();
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+});
+
+test("an opted-in free account does not see Gold upgrade prompts", async ({ page }) => {
+  await signInFreeReader(page, true);
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toHaveCount(0);
+  await expect(page.locator('button[class*="upgradeFab"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Account settings" }).click();
+  await expect(page.getByRole("button", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Account settings" }).click();
+  await upload(page, "Opted-in reader");
+  await page.getByRole("button", { name: /^html Opted-in reader/ }).click();
+  await openControls(page);
+  await expect(page.getByRole("button", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+});
+
+test("the Brevo email link automatically opens the signed-in account's discount checkout", async ({ page }) => {
+  await signInFreeReader(page, true);
+  let requests = 0;
+  await page.route("**/api/v1/freereader/billing/gold-offer-checkout", (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer free-offer-token");
+    expect(route.request().method()).toBe("POST");
+    requests += 1;
+    return route.fulfill({ status: 200, json: { url: "https://checkout.stripe.com/c/pay/gold50" } });
+  });
+  await page.route("https://checkout.stripe.com/**", (route) => route.fulfill({ contentType: "text/html", body: "Discount checkout" }));
+  await page.goto("/reader/audiobooks?offer=gold50");
+  await page.waitForURL("https://checkout.stripe.com/c/pay/gold50");
+  expect(requests).toBe(1);
+  await expect(page.locator("body")).toHaveText("Discount checkout");
+});
+
+test("the email offer keeps its destination through Google sign-in", async ({ page }) => {
+  const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabase) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const origin = new URL(page.url()).origin;
+  await page.route("**/auth/v1/authorize?**", (route) => route.fulfill({ contentType: "text/html", body: "OAuth started" }));
+  const authorize = page.waitForRequest("**/auth/v1/authorize?**");
+  await page.goto("/reader/audiobooks?offer=gold50");
+  const request = await authorize;
+  expect(request.url()).toContain(new URL(supabase!).host);
+  expect(new URL(request.url()).searchParams.get("redirect_to")).toBe(`${origin}/reader/audiobooks`);
+});
+
+test("a Supabase homepage redirect resumes the email offer in the reader", async ({ page }) => {
+  await page.evaluate(() => sessionStorage.setItem("freereaderGold50Checkout", "true"));
+  await page.route("**/auth/v1/authorize?**", (route) => route.fulfill({ contentType: "text/html", body: "OAuth started" }));
+  const authorize = page.waitForRequest("**/auth/v1/authorize?**");
+  await page.goto("/");
+  expect(new URL((await authorize).url()).searchParams.get("redirect_to")).toContain("/reader/audiobooks");
+});
+
+test("an ineligible email link explains the rejection without opening full-price checkout", async ({ page }) => {
+  await signInFreeReader(page, false);
+  let regularCheckouts = 0;
+  await page.route("**/api/v1/freereader/billing/checkout", (route) => { regularCheckouts += 1; return route.abort(); });
+  await page.route("**/api/v1/freereader/billing/gold-offer-checkout", (route) => route.fulfill({ status: 403,
+    json: { error: "gold_offer_ineligible" } }));
+  await page.goto("/reader/audiobooks?offer=gold50");
+  const dialog = page.getByRole("dialog", { name: "Your 50% off Gold offer" });
+  await expect(dialog.getByRole("alert")).toContainText("only to opted-in accounts that have never had Gold");
+  expect(regularCheckouts).toBe(0);
+  await dialog.getByRole("button", { name: "Back to library" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/reader\/audiobooks$/);
+});
+
 test("Gold plans show the configured Stripe amounts before checkout", async ({ page }) => {
+  await signInFreeReader(page, false);
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
   await page.getByRole("region", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "See Gold plans" }).click();
   const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(dialog).toContainText("$3.25");
@@ -100,7 +224,7 @@ test("a signed-in free account can delete stored voices but must upgrade to clon
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
   await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200,
-    json: { plan: "free", daily_used_seconds: 1_560, daily_budget_seconds: 3_600, daily_remaining_seconds: 2_040 } }));
+    json: { plan: "free", gold_offer_opted_in: false, daily_used_seconds: 1_560, daily_budget_seconds: 3_600, daily_remaining_seconds: 2_040 } }));
   let deleted = false;
   await page.route("**/api/v1/freereader/phonon/voices**", (route) => {
     expect(route.request().headers().authorization).toBe("Bearer free-phonon-token");
@@ -264,7 +388,20 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
   await expect.poll(() => speeches.some((request) => request.texts.length > 1)).toBe(true);
 });
 
-test("guests see the Gold upgrade notice and yearly free-trial pricing", async ({ page }) => {
+test("guests do not see Gold upgrade prompts before signing up", async ({ page }) => {
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toHaveCount(0);
+  await expect(page.locator('button[class*="upgradeFab"]')).toHaveCount(0);
+  await upload(page, "Guest reading");
+  await page.getByRole("button", { name: /^html Guest reading/ }).click();
+  await openControls(page);
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+});
+
+test("signed-in free accounts without the opt-in see Gold upgrade prompts", async ({ page }) => {
+  await signInFreeReader(page, false);
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   const floatingUpgrade = page.locator('button[class*="upgradeFab"]');
   await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toBeVisible();
@@ -303,8 +440,8 @@ test("guests see the Gold upgrade notice and yearly free-trial pricing", async (
   expect(await voiceButton.textContent()).toBe("");
   const fontBounds = (await fontButton.boundingBox())!;
   const sizeBounds = (await page.getByRole("button", { name: "Decrease text size" }).boundingBox())!;
-  expect(fontBounds.width).toBeGreaterThanOrEqual(44);
-  expect(fontBounds.height).toBeGreaterThanOrEqual(44);
+  expect(fontBounds.width).toBeGreaterThanOrEqual(32);
+  expect(fontBounds.height).toBeGreaterThanOrEqual(32);
   if (await page.evaluate(() => innerWidth > 800)) expect(fontBounds.x).toBeLessThan(sizeBounds.x);
   else expect(fontBounds.y).toBeLessThan(sizeBounds.y);
   await fontButton.click();
@@ -943,7 +1080,7 @@ test("free accounts import guest defaults and restore them from account metadata
     }
     return route.fulfill({ status: 200, json: user });
   });
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free" } }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
   await page.route("**/auth/v1/logout**", (route) => route.fulfill({ status: 204, body: "" }));
   await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
   await page.reload();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fetchPlanPrice, fetchProPrice, formatProPrice, manageSubscription, startCheckout } from "./billing";
+import { fetchPlanPrice, fetchProPrice, formatProPrice, manageSubscription, startCheckout, startGoldOfferCheckout } from "./billing";
 
 test("Pro price is read from the configured Stripe Price instead of the checkout button", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ amount_cents: 600, currency: "usd", interval: "month" }));
@@ -54,6 +54,20 @@ test("billing actions request a hosted Stripe URL for the signed-in user", async
 test("billing refuses non-Stripe redirect URLs", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ url: "https://stripe.com.attacker.example/steal" }));
   await assert.rejects(startCheckout("access-token"), /checkout_unavailable/);
+});
+
+test("the email offer uses its own authenticated checkout without passing a client coupon", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ url: "https://checkout.stripe.com/c/pay/gold50" }));
+  assert.equal(await startGoldOfferCheckout("offer-token"), "https://checkout.stripe.com/c/pay/gold50");
+  assert.ok(String(fetch.mock.calls[0].arguments[0]).endsWith("/billing/gold-offer-checkout"));
+  assert.equal(new Headers(fetch.mock.calls[0].arguments[1]?.headers).get("Authorization"), "Bearer offer-token");
+  assert.equal(fetch.mock.calls[0].arguments[1]?.body, undefined);
+});
+
+test("ineligible email offers do not fall back to full-price checkout", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ error: "gold_offer_ineligible" }, { status: 403 }));
+  await assert.rejects(startGoldOfferCheckout("offer-token"), /gold_offer_ineligible/);
+  assert.equal(fetch.mock.callCount(), 1);
 });
 
 test("an existing subscriber is sent to the billing portal to change plans", async (t) => {
