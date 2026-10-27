@@ -814,8 +814,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const upgradeDialog = upgradeOpen && <GoldDialog session={session} initialInterval={upgradeInterval} initialError={upgradeError} onClose={() => { setUpgradeOpen(false); setUpgradeError(""); }} />;
   const goldOfferDialog = goldOfferActive && <div className={styles.modalBackdrop}>
     <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Your 50% off Gold offer">
-      <h2>50% off FreeReader Gold yearly</h2>
-      <p>No free trial. Your subscription starts when you complete Stripe checkout and renews yearly at the discounted rate.</p>
+      <h2>50% off FreeReader Gold</h2>
+      <p>Your subscription starts when you complete Stripe checkout and renews at the discounted rate.</p>
       {goldOfferError ? <>
         <p role="alert">{goldOfferError}</p>
         <button className={styles.primaryAction} type="button" onClick={() => {
