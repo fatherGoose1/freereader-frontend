@@ -579,14 +579,23 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     setGoldOfferError("");
   }
 
-  // Google OAuth navigates away; keep the signup opt-in until the account write succeeds.
+  // Google OAuth navigates away; keep the web signup attempt until the account write succeeds.
   useEffect(() => {
     if (managed || !session) return;
     let posting = false;
     const saveOptIn = async () => {
       if (posting) return;
       try {
-        if (sessionStorage.getItem(GOLD_OFFER_PENDING_KEY) !== "true") return;
+        const pending = sessionStorage.getItem(GOLD_OFFER_PENDING_KEY);
+        if (pending === null) return;
+        const startedAt = Number(pending);
+        const createdAt = Date.parse(session.user.created_at);
+        // Existing accounts (including those first created on iOS or in the extension)
+        // can sign in here, but only a new web signup should enter the Brevo list.
+        if (!Number.isFinite(startedAt) || startedAt <= 0 || !Number.isFinite(createdAt) || createdAt < startedAt) {
+          sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY);
+          return;
+        }
         setOptedInOwner(session.user.id);
         posting = true;
         await optInToGoldOffer(session.access_token);
@@ -757,7 +766,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
     setLoginError("");
     try {
-      sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, "true");
+      sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
     } catch {
       setLoginError("Browser storage is unavailable. Please enable it to complete sign-in.");
       return;

@@ -71,7 +71,7 @@ test("free-account sign-in has no email deal checkbox", async ({ page }) => {
   await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
 });
 
-test("the signup offer is saved after the Google account returns", async ({ page }) => {
+test("a new web signup sends the Gold offer opt-in after Google returns", async ({ page }) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
   const user = { id: "77777777-7777-4777-8777-777777777777", email: "offer@example.com", aud: "authenticated", role: "authenticated",
@@ -90,13 +90,38 @@ test("the signup offer is saved after the Google account returns", async ({ page
   const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
   await page.evaluate(([key, value]) => {
     localStorage.setItem(key, value);
-    sessionStorage.setItem("freereader-gold-offer-opt-in-pending", "true");
+    sessionStorage.setItem("freereader-gold-offer-opt-in-pending", String(Date.now() - 1000));
   }, [storageKey, JSON.stringify(session)]);
   await page.reload();
   await expect.poll(() => submitted).toBe(1);
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem("freereader-gold-offer-opt-in-pending"))).toBeNull();
   await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+});
+
+test("an iOS or extension account signing in on the web is not enrolled in Brevo", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const user = { id: "77777777-7777-4777-8777-777777777777", email: "existing@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date(Date.now() - 86_400_000).toISOString() };
+  const session = { access_token: "existing-token", refresh_token: "existing-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
+  let submitted = 0;
+  await page.route("**/api/v1/freereader/usage/gold-offer-opt-in", (route) => {
+    submitted += 1;
+    return route.fulfill({ status: 200, json: { gold_offer_opted_in: true } });
+  });
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  await page.evaluate(([key, value]) => {
+    localStorage.setItem(key, value);
+    sessionStorage.setItem("freereader-gold-offer-opt-in-pending", String(Date.now()));
+  }, [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("freereader-gold-offer-opt-in-pending"))).toBeNull();
+  expect(submitted).toBe(0);
 });
 
 test("an opted-in free account does not see Gold upgrade prompts", async ({ page }) => {
