@@ -1,6 +1,8 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import JSZip from "jszip";
 
 test.skip(process.env.EDU_ENABLED !== "true", "Build and run with EDU_ENABLED=true to test the school offering");
 const schoolId = "00000000-0000-4000-8000-000000000001";
@@ -92,6 +94,44 @@ test("student opens hosted original PDF, listens, saves position, and reloads wi
   await expect(page.locator('article [aria-current="true"]')).toContainText("Students can listen");
   expect(state.consumerRequests).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem("freereaderTelemetryQueue"))).toBeNull();
+});
+
+test("EDU reader highlights spoken words in original and E-reader views, including cached playback", async ({ page, context }) => {
+  await signIn(context);
+  await setup(page);
+  const archive = new JSZip();
+  archive.file("0.m4a", readFileSync("public/voice-previews/am_fenrir.m4a"));
+  archive.file("0.json", JSON.stringify([[0, .1, 1.4], [1, 1.5, 3.2]]));
+  const audio = await archive.generateAsync({ type: "nodebuffer" });
+  let calls = 0;
+  await page.route("**/api/edu/**/speech", (route) => {
+    if (route.request().postDataJSON().blockIndex === 0) calls++;
+    return route.fulfill({ body: audio, contentType: "application/zip", headers: { "X-Audio-Duration": "3.367667", ...(calls > 1 ? { "X-Speech-Cache": "hit" } : {}) } });
+  });
+  await page.goto(`/edu/assignments/${assignmentId}/reader/${versionId}`);
+  await openTools(page);
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const toggle = page.getByRole("switch", { name: "Highlight spoken words" });
+  await expect(toggle).toBeChecked();
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await page.locator("audio").evaluate((element: HTMLAudioElement) => { element.playbackRate = .25; });
+  const nativeWord = page.locator("article .freereader-spoken-word");
+  await expect(nativeWord).toHaveCount(1);
+  await page.locator("audio").evaluate((element: HTMLAudioElement) => { element.currentTime = 2; });
+  await expect(nativeWord).toContainText("original");
+  await page.getByRole("button", { name: "E-reader", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [], (range) => range.toString())[0])).toBe("original");
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await toggle.uncheck();
+  await expect.poll(() => page.evaluate(() => CSS.highlights.has("freereader-spoken-word"))).toBe(false);
+  await toggle.check();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect.poll(() => page.evaluate(() => CSS.highlights.has("freereader-spoken-word"))).toBe(true);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.getByRole("button", { name: "Listen", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => CSS.highlights.has("freereader-spoken-word"))).toBe(true);
+  expect(calls).toBe(1);
 });
 
 test("teacher dashboard prioritizes readings and keeps class creation out of the way", async ({ page, context }, testInfo) => {

@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import JSZip from "jszip";
 import FreeReaderApp, { type ManagedReader } from "../reader/FreeReaderApp";
 import { decodeCloudDocument } from "../reader/accountSync";
 import type { LibraryBook } from "../reader/types";
 import { requestSpeech } from "../reader/speechRequest";
 import { speechEngineForVoice } from "../reader/speech";
 import { SpeechCancelledError } from "../reader/ttsDiagnostics";
+import { parseWordTimings } from "../reader/spokenWord";
 import { useEdu } from "./EduProvider";
 import { eduFetch, eduHeaders, errorMessage } from "./client";
 import { sharedFetch, guestHeaders } from "./sharedClient";
@@ -81,11 +83,21 @@ export default function AssignmentReader({ assignment, version, documents, share
         body: JSON.stringify({ blockIndex: index, speed: options.speed, voice: options.voice, language: options.language,
           engine: speechEngineForVoice(options.voice, options.language), identity: identity() }), redirect: "error", referrerPolicy: "no-referrer" });
       if (!response.ok) throw new Error(errorMessage((await response.json().catch(() => ({}))).error));
-      const blob = await response.blob();
+      const archive = response.headers.get("Content-Type")?.includes("zip")
+        ? await JSZip.loadAsync(await response.arrayBuffer()) : null;
+      const entry = archive?.file("0.m4a");
+      if (archive && !entry) throw new Error("The speech service returned incomplete audio.");
+      const blob = entry ? new Blob([await entry.async("blob")], { type: "audio/mp4" }) : await response.blob();
       if (!blob.type.startsWith("audio/") || !blob.size) throw new Error("The speech service returned invalid audio.");
       if (!needed()) throw new SpeechCancelledError("Narration was cancelled");
+      let wordTimings;
+      const timingFile = archive?.file("0.json");
+      if (timingFile) {
+        try { wordTimings = parseWordTimings(JSON.parse(await timingFile.async("text"))); }
+        catch { /* Audio remains usable without word timings. */ }
+      }
       return { blob, duration: Number(response.headers.get("X-Audio-Duration")), provider: "Server", model: response.headers.get("X-TTS-Model") ?? "edu-standard",
-        cached: response.headers.get("X-Speech-Cache") === "hit", generationStartedAt: started };
+        cached: response.headers.get("X-Speech-Cache") === "hit", generationStartedAt: started, wordTimings };
     },
   } : null, [loaded, base, version.id, shareToken, userId, documents, assignment.id]);
   if (!loaded || !managed) return <main className={styles.main}><h1>{version.title}</h1>{error ? <p role="alert" className={styles.error}>{error}<button onClick={() => setAttempt((value) => value + 1)}>Retry opening</button></p> : <p role="status">Opening your reading…</p>}</main>;

@@ -197,16 +197,16 @@ function folderPath(folder: LibraryFolder, folders: LibraryFolder[]): string {
 }
 
 export default function FreeReaderApp({ initialBook, managed }: { initialBook?: LibraryBook; managed?: ManagedReader } = {}) {
-  const managedAudio = useRef(new Map<string, Blob>());
+  const managedAudio = useRef(new Map<string, PreparedAudio>());
   const currentSpeechRate = useRef(managed?.speechRate ?? 1);
   const posthog = managed ? { capture: (..._args: unknown[]) => {}, captureException: (..._args: unknown[]) => {} } : consumerPosthog;
   const recordTelemetry = (name: string, properties: TelemetryProperties = {}) => managed ? managed.event(name, properties) : recordConsumerTelemetry(name, properties);
   const saveBook = (book: LibraryBook) => managed ? managed.save(book, currentSpeechRate.current) : saveLocalBook(book);
   const getNativeSource = (id: string) => managed ? Promise.resolve(id === initialBook?.id ? managed.original : null) : getLocalNativeSource(id);
-  const getAudio = (key: string) => managed ? Promise.resolve(managedAudio.current.get(key) ?? null) : getLocalAudio(key);
-  const saveAudio = async (key: string, blob: Blob) => {
+  const getAudio = (key: string) => managed ? Promise.resolve(managedAudio.current.get(key)?.blob ?? null) : getLocalAudio(key);
+  const saveAudio = async (key: string, blob: Blob, prepared?: PreparedAudio) => {
     if (!managed) return saveLocalAudio(key, blob);
-    managedAudio.current.set(key, blob);
+    if (prepared) managedAudio.current.set(key, prepared);
     if (managedAudio.current.size > 16) managedAudio.current.delete(managedAudio.current.keys().next().value!);
   };
   const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -1221,12 +1221,12 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       const selectedVoice = voiceForLanguage(voice, language);
       const key = `${book.id}:${index}:${selectedVoice}:${speechRate}:${language}`;
       const cached = managedAudio.current.get(key);
-      if (cached) return { blob: cached, duration: 0, provider: "Server", model: "edu-standard", cached: true };
+      if (cached) return { ...cached, cached: true };
       const existing = pendingAudio.current.get(key);
       if (existing) { existing.request.isCurrent = isCurrent; return existing.promise; }
       const request = { isCurrent };
       const promise = managed.generate(book, index, { voice: selectedVoice, language, speed: speechRate }, () => request.isCurrent())
-        .then(async (result) => { await saveAudio(key, result.blob); return result; })
+        .then(async (result) => { await saveAudio(key, result.blob, result); return result; })
         .finally(() => pendingAudio.current.delete(key));
       pendingAudio.current.set(key, { promise, request });
       return promise;
