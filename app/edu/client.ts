@@ -31,7 +31,9 @@ export async function eduHeaders(expectedUserId: string) {
 export async function eduFetch<T>(path: string, expectedUserId: string, init: RequestInit = {}): Promise<T> {
   if (!/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(path)) throw new Error("Invalid school API path.");
   const headers = new Headers(init.headers);
-  for (const [name, value] of Object.entries(await eduHeaders(expectedUserId))) headers.set(name, value);
+  for (const [name, value] of Object.entries(await eduHeaders(expectedUserId))) {
+    if (name !== "Content-Type" || !headers.has(name)) headers.set(name, value);
+  }
   init.signal?.throwIfAborted();
   const response = await fetch(`/api/edu/${path}`, { ...init, headers, cache: "no-store", redirect: "error" });
   const payload = await response.json().catch(() => ({}));

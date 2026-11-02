@@ -291,6 +291,14 @@
 .goldOfferDismiss { display: block; margin: 12px auto 0; padding: 8px 12px; color: #536584; background: transparent; border: 0; text-decoration: underline; }
 .goldClose { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: #76603a; background: transparent; border: 0; border-radius: 8px; }
 .goldClose:hover { background: #fff4d8; }
+.emailAuth { margin-top: 12px; }
+.emailAuth form { display: grid; gap: 14px; }
+.emailAuth .fieldLabel { margin-top: 0; }
+.emailAuth form > button { width: 100%; }
+.emailAuth .emailAuthError { margin: 0; color: #b3261e; }
+.emailAuthDivider { margin-top: 20px; color: var(--app-secondary); font-size: 12px; text-align: center; }
+.emailAuthLinks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin-top: 16px; }
+.emailAuthLinks button { padding: 4px; color: var(--app-blue); background: transparent; border: 0; text-decoration: underline; }
 .goldFeatures { display: grid; gap: 14px; margin: 20px 0 0; padding: 0; list-style: none; }
 .goldFeatures li { display: flex; align-items: flex-start; gap: 12px; }
 .goldCrown { flex: none; display: grid; place-items: center; width: 26px; height: 26px; color: #865d0e; background: #fff0ca; border-radius: 50%; }

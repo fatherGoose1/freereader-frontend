@@ -11,3 +11,4 @@ test-results/
 playwright-report/
 public/onnxruntime-web/*/*.mjs
 public/onnxruntime-web/*/*.jsep.wasm
+public/scan-opencv.js

@@ -20,6 +20,9 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   if (!path.length || path.some((part) => !/^[a-zA-Z0-9_-]+$/.test(part))) {
     return NextResponse.json({ error: "invalid_path" }, { status: 400 });
   }
+  const scanPage = request.method === "PUT" && path.length === 4 && path[0] === "scans"
+    && /^[0-9a-f-]{36}$/i.test(path[1]) && path[2] === "pages" && /^(?:[0-9]|1[0-9])$/.test(path[3]);
+  const maxBody = scanPage ? 4 * 1024 * 1024 : MAX_BODY;
   let body: Uint8Array<ArrayBuffer> | undefined;
   if (request.method !== "GET" && request.method !== "DELETE" && request.body) {
     const reader = request.body.getReader();
@@ -30,7 +33,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
         const chunk = await reader.read();
         if (chunk.done) break;
         size += chunk.value.length;
-        if (size > MAX_BODY) {
+        if (size > maxBody) {
           await reader.cancel();
           return NextResponse.json({ error: "request_too_large" }, { status: 413 });
         }
@@ -45,11 +48,11 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const controller = new AbortController();
   const abort = () => controller.abort();
   request.signal.addEventListener("abort", abort, { once: true });
-  const timeout = setTimeout(abort, path.at(-1) === "speech" ? 120_000 : 90_000);
+  const timeout = setTimeout(abort, path.at(-1) === "speech" ? 120_000 : path[0] === "scans" && path.at(-1) === "complete" ? 170_000 : 90_000);
   try {
     const upstream = await fetch(`${backend}/api/v1/freereader/edu/${path.map(encodeURIComponent).join("/")}`, {
-      method: request.method, headers: { ...(!shared ? { Authorization: authorization } : { "X-FreeReader-Edu-Guest": (request.headers.get("x-freereader-edu-guest") ?? "").slice(0, 128) }), "Content-Type": "application/json" },
-      body: body ? new Blob([body], { type: "application/json" }) : undefined, signal: controller.signal, cache: "no-store", redirect: "error",
+      method: request.method, headers: { ...(!shared ? { Authorization: authorization } : { "X-FreeReader-Edu-Guest": (request.headers.get("x-freereader-edu-guest") ?? "").slice(0, 128) }), "Content-Type": scanPage ? "image/jpeg" : "application/json" },
+      body: body ? new Blob([body], { type: scanPage ? "image/jpeg" : "application/json" }) : undefined, signal: controller.signal, cache: "no-store", redirect: "error",
     });
     const headers = new Headers({ "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Vary": "Authorization" });
     for (const name of ["Content-Type", "Retry-After", "X-Audio-Duration", "X-Generation-Seconds", "X-TTS-Model", "X-TTS-Language", "X-Speech-Cache"]) {

@@ -1,0 +1,12 @@
+.page { min-height:100vh; display:grid; place-items:center; background:#f5f7fc; padding:24px; font-family:Inter,system-ui,sans-serif; color:#253359 }
+.card { background:white; border:1px solid #e1e6f6; border-radius:20px; box-shadow:0 14px 48px #26398214; padding:32px; max-width:460px; width:100% }
+.brand { font-weight:800; color:#365bd6 }
+.card h1 { font:32px Georgia,serif; letter-spacing:-1px }
+.card p { line-height:1.6; color:#526078 }
+.card button { background:#365bd6; border:0; color:white; border-radius:10px; padding:12px 17px; cursor:pointer; margin:8px 0; width:100%; font-weight:700 }
+.card button:disabled { opacity:.5 }
+.card label { display:block; font-size:13px; font-weight:650; margin-top:12px }
+.card input { width:100%; padding:12px; border:1px solid #b9c5e5; border-radius:8px; display:block; margin:6px 0 }
+.card input:focus { outline:2px solid #365bd6 }
+.card small { color:#68758f; line-height:1.6; display:block; margin-top:16px }
+.divider { text-align:center; color:#78829c; margin:12px 0 }

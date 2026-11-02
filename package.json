@@ -15,9 +15,11 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@supabase/supabase-js": "^2.116.0",
+    "@techstark/opencv-js": "^5.0.0-release.1",
     "dompurify": "^3.4.17",
     "epubjs": "^0.3.93",
     "franc-min": "^6.2.0",
+    "jscanify": "^1.4.3",
     "jszip": "^3.10.2",
     "mammoth": "^1.12.2",
     "next": "^16.2.10",

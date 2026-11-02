@@ -4,7 +4,7 @@ import { LegalPage } from "../../components/LegalPage";
 export const metadata: Metadata = {
   title: "VoiceReader Privacy Policy",
   description:
-    "Privacy Policy for the VoiceReader iOS app, also known as FreeReader on the web.",
+    "Privacy Policy for VoiceReader and FreeReader on the web and Chrome.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -12,8 +12,8 @@ export default function PrivacyPolicy() {
   return (
     <LegalPage
       title="VoiceReader Privacy Policy"
-      updated="September 5, 2026"
-      intro="VoiceReader is the iOS app, also known as FreeReader on the web. This policy explains the limited information the App and Website handle."
+      updated="October 28, 2026"
+      intro="VoiceReader is the iOS app, also known as FreeReader on the web and Chrome. This policy explains the limited information these products handle."
     >
       <h2>1. Who we are</h2>
       <p>
@@ -21,9 +21,8 @@ export default function PrivacyPolicy() {
         &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). VoiceReader is
         the name of the iOS application (the &ldquo;App&rdquo;). Its web version
         is known as FreeReader (the &ldquo;Website&rdquo;). This Privacy Policy
-        explains how the App and Website handle information.
+        explains how the App, Website, and FreeReader Chrome extension handle information.
       </p>
-
       <h2>2. Using VoiceReader or FreeReader without an account</h2>
       <p>
         The VoiceReader iOS App and the anonymous path in FreeReader do not
@@ -47,6 +46,18 @@ export default function PrivacyPolicy() {
         readable text. The source site may receive your IP address and request
         information under its own privacy policy.
       </p>
+      <p>
+        The FreeReader Chrome extension processes visible page text locally to
+        apply your saved appearance settings while its panel is open. It sends
+        readable passages, not the full HTML page, to our speech service only
+        when you choose Read page, Read selected text, Start Reading from Here,
+        or the selection context menu to generate audio. The extension does
+        not save your browsing history or page text to a cloud library. Audio is
+        held temporarily for playback. An installation-specific random identifier
+        and authentication credential are kept in Chrome extension storage to
+        enforce listening limits and subscription access. They survive extension
+        updates but may be lost on uninstall. We do not use browser fingerprinting.
+      </p>
 
       <h2>3. Account sign-in and library sync</h2>
       <p>
@@ -68,6 +79,16 @@ export default function PrivacyPolicy() {
         available only to authenticated requests for your account. Generated
         audiobook audio and original source files are not synced. To request
         removal of synced content, contact us through the <a href="/support">support page</a>.
+      </p>
+      <p>
+        Gold can be purchased in the Chrome extension without an account through
+        Stripe Checkout. Stripe processes payment details; we receive subscription
+        status, a Stripe customer identifier, and the installation identifier to
+        grant access. If you optionally connect a verified FreeReader account,
+        we associate that subscription with the account for access across devices.
+        Without linking, an anonymous purchase may not be recoverable after
+        uninstalling the extension. You can manage eligible subscriptions through
+        Stripe Customer Portal from the extension.
       </p>
 
       <h2>4. Limited diagnostics we collect</h2>
@@ -91,7 +112,6 @@ export default function PrivacyPolicy() {
         Installation identifiers are not Apple advertising or hardware
         identifiers and reset when the App is deleted and reinstalled.
       </p>
-
       <h2>5. How we use diagnostics</h2>
       <p>We use diagnostics only to:</p>
       <ul>

@@ -71,6 +71,56 @@ test("free-account sign-in has no email deal checkbox", async ({ page }) => {
   await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
 });
 
+test("email signup requests Supabase confirmation and does not sign in before verification", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  let signupRequests = 0;
+  await page.route("**/auth/v1/signup?**", async (route) => {
+    const request = route.request();
+    expect(request.postDataJSON()).toMatchObject({ email: "new-reader@example.com", password: "a-long-password" });
+    expect(new URL(request.url()).searchParams.get("redirect_to")).toBe(new URL("/reader/audiobooks", page.url()).href);
+    signupRequests += 1;
+    await route.fulfill({ status: 200, json: {
+      user: { id: "88888888-8888-4888-8888-888888888888", email: "new-reader@example.com",
+        app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, identities: [] },
+      session: null,
+    } });
+  });
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign in to generate audio" });
+  await dialog.getByRole("button", { name: "Create an account" }).click();
+  await dialog.getByRole("textbox", { name: "Email address" }).fill("new-reader@example.com");
+  await dialog.getByLabel("Password", { exact: true }).fill("a-long-password");
+  await dialog.getByRole("button", { name: "Create account" }).click();
+  await expect(dialog.getByRole("status")).toContainText("Check your email to confirm");
+  expect(signupRequests).toBe(1);
+  await expect(page.getByRole("button", { name: "Account settings" })).toHaveCount(0);
+});
+
+test("a confirmed email account can sign in and reach the reader", async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const user = { id: "99999999-9999-4999-8999-999999999999", email: "reader@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, created_at: new Date().toISOString() };
+  let passwordRequests = 0;
+  await page.route("**/auth/v1/token?grant_type=password", async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ email: "reader@example.com", password: "reader-password" });
+    passwordRequests += 1;
+    await route.fulfill({ status: 200, json: { access_token: "email-token", refresh_token: "email-refresh",
+      token_type: "bearer", expires_in: 3600, user } });
+  });
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200,
+    json: { plan: "free", gold_offer_opted_in: false } }));
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign in to generate audio" });
+  await dialog.getByRole("textbox", { name: "Email address" }).fill("reader@example.com");
+  await dialog.getByLabel("Password", { exact: true }).fill("reader-password");
+  await dialog.getByRole("button", { name: "Sign in with email" }).click();
+  await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
+  expect(passwordRequests).toBe(1);
+});
+
 test("a new web signup sends the Gold offer opt-in after Google returns", async ({ page }) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");

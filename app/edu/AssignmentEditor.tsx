@@ -6,6 +6,7 @@ import { useEdu } from "./EduProvider";
 import { useDashboard } from "./useDashboard";
 import { eduFetch } from "./client";
 import { uploadDocument } from "./documents";
+import ScanDialog from "../reader/ScanDialog";
 import { localDateTime, schoolTimeToUTC, type Assignment, type DocumentVersion } from "./model";
 import { IMPORT_ACCEPT } from "../reader/importFormats";
 import styles from "./edu.module.css";
@@ -27,6 +28,7 @@ export default function AssignmentEditor({ assignmentId }: { assignmentId?: stri
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const currentSchool = useRef(school?.id);
   currentSchool.current = school?.id;
@@ -90,11 +92,12 @@ export default function AssignmentEditor({ assignmentId }: { assignmentId?: stri
           <section className={styles.card}><div className={styles.sectionHeading}><div><span className={styles.sectionEyebrow}>03 · What to read</span><h2>Reading material</h2></div></div>
             {locked && <p className={styles.muted}>Published readings stay attached to this assignment. Create a new assignment to change documents.</p>}
             {documents.length > 0 && <div className={styles.choiceGrid}>{documents.map((doc) => <label className={styles.choiceItem} key={doc.id}><input type="checkbox" disabled={locked} checked={versionIds.includes(doc.id)} onChange={() => toggle(doc.id, versionIds, setVersionIds)} /><span><strong>{doc.title}</strong><small>{doc.format.toUpperCase()}</small></span></label>)}</div>}
-            {!locked && <label className={styles.uploadBox}><span><UiIcon name="upload" /> Upload documents</span><small>PDF, EPUB, Word, or text files</small><input type="file" multiple accept={IMPORT_ACCEPT} onChange={async (event) => {
+             {!locked && <label className={styles.uploadBox}><span><UiIcon name="upload" /> Upload documents</span><small>PDF, EPUB, Word, or text files</small><input type="file" multiple accept={IMPORT_ACCEPT} onChange={async (event) => {
               const files = [...(event.target.files ?? [])]; event.target.value = ""; setBusy(true); setError("");
               try { for (const file of files) { if (currentSchool.current !== school.id) break; const doc = await uploadDocument(school.id, file, setStatus, userId); if (currentSchool.current !== school.id) break; setDocuments((docs) => [doc, ...docs]); setVersionIds((ids) => [...ids, doc.id]); } if (currentSchool.current === school.id) setStatus("Documents uploaded and verified."); }
               catch (error) { setError((error as Error).message); } finally { setBusy(false); }
-            }} /></label>}
+             }} /></label>}
+            {!locked && <button type="button" disabled={busy} onClick={() => setScanOpen(true)}><UiIcon name="upload" /> Scan physical pages</button>}
             {status && <p role="status" className={styles.notice}>{status}</p>}
           </section>
         </div>
@@ -104,5 +107,11 @@ export default function AssignmentEditor({ assignmentId }: { assignmentId?: stri
         </section></aside>
       </div><div className={styles.editorFooter}><span className={styles.muted}>{locked ? "Update the details for this reading." : "Your class can start reading after you publish."}</span><div className={styles.row}>{!locked && <button type="button" disabled={!classIds.length || !versionIds.length || !title.trim()} onClick={() => void save("draft")}>Save draft</button>}<button type="submit" className={styles.primary} disabled={!classIds.length || !versionIds.length || !title.trim()}>{busy ? "Saving…" : locked ? "Save changes" : "Publish assignment"} <UiIcon name="arrow" /></button></div></div></fieldset>
     </form>}
+    {scanOpen && <ScanDialog school={{ id: school.id, userId }} onClose={() => setScanOpen(false)} onComplete={(result) => {
+      if (!("document" in result) || currentSchool.current !== school.id) return;
+      setDocuments((docs) => [result.document, ...docs]);
+      setVersionIds((ids) => [...ids, result.document.id]);
+      setStatus("Scan recognized and ready for the assignment.");
+    }} />}
   </main>;
 }

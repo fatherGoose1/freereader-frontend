@@ -1,0 +1,11 @@
+.backdrop{position:fixed;inset:0;z-index:1100;background:#101927bd;display:grid;place-items:center;padding:16px}
+.dialog{background:#fff;color:#172335;border-radius:18px;width:min(620px,100%);max-height:94vh;overflow:auto;padding:24px;box-shadow:0 20px 60px #0005}
+.dialog header,.dialog footer{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.dialog h2{margin:0 0 8px}.dialog p{line-height:1.5}.dialog header p{margin:0 0 16px;color:#526174}
+.dialog button{border:1px solid #b9c8d5;border-radius:9px;padding:10px 14px;background:#f6fafc;color:#172335;cursor:pointer}
+.dialog button:disabled{opacity:.55;cursor:default}.dialog footer button,.review button:first-child{background:#164c78;color:#fff;border-color:#164c78}
+.title{display:grid;gap:8px;font-weight:600;margin:0 0 18px}.title input{padding:11px;border:1px solid #b9c8d5;border-radius:8px;font:inherit}
+.video,.review img{width:100%;max-height:45vh;object-fit:contain;background:#1d2934;border-radius:8px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.pages{display:flex;gap:10px;overflow-x:auto;padding:12px 0}
+.pages>div{min-width:95px;display:grid;gap:5px;font-size:12px}.pages img{width:95px;height:120px;object-fit:cover;border-radius:5px}
+.dialog footer{border-top:1px solid #dee5eb;padding-top:14px}.error{color:#a52222}

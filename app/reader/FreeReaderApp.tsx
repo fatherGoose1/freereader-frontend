@@ -36,7 +36,10 @@ import styles from "./reader.module.css";
 import Link from "next/link";
 import ReaderIcon from "./ReaderIcon";
 import { supabaseClient } from "./supabase";
+import EmailAuthForm from "./EmailAuthForm";
 import { synchronizeLibrary } from "./accountSync";
+import ScanDialog from "./ScanDialog";
+import { deleteScan, downloadScanPdf } from "./scanClient";
 import { fetchUsage, linkInstallation, optInToGoldOffer } from "./usage";
 import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
 import { startCheckout, startGoldOfferCheckout } from "./billing";
@@ -202,7 +205,14 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const posthog = managed ? { capture: (..._args: unknown[]) => {}, captureException: (..._args: unknown[]) => {} } : consumerPosthog;
   const recordTelemetry = (name: string, properties: TelemetryProperties = {}) => managed ? managed.event(name, properties) : recordConsumerTelemetry(name, properties);
   const saveBook = (book: LibraryBook) => managed ? managed.save(book, currentSpeechRate.current) : saveLocalBook(book);
-  const getNativeSource = (id: string) => managed ? Promise.resolve(id === initialBook?.id ? managed.original : null) : getLocalNativeSource(id);
+  const getNativeSource = async (id: string) => {
+    if (managed) return id === initialBook?.id ? managed.original : null;
+    const local = await getLocalNativeSource(id);
+    if (local || !books.some((book) => book.id === id && book.sourceIdentifier?.startsWith("scan:"))) return local;
+    const pdf = await downloadScanPdf(id);
+    await saveNativeSource(id, pdf);
+    return pdf;
+  };
   const getAudio = (key: string) => managed ? Promise.resolve(managedAudio.current.get(key)?.blob ?? null) : getLocalAudio(key);
   const saveAudio = async (key: string, blob: Blob, prepared?: PreparedAudio) => {
     if (!managed) return saveLocalAudio(key, blob);
@@ -210,6 +220,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     if (managedAudio.current.size > 16) managedAudio.current.delete(managedAudio.current.keys().next().value!);
   };
   const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [scanOpen, setScanOpen] = useState(false);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [folderName, setFolderName] = useState("");
@@ -304,6 +315,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [loginRecovery, setLoginRecovery] = useState(false);
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof fetchUsage>> | null>(null);
   const [usageOwner, setUsageOwner] = useState<string | null>(null);
   const [optedInOwner, setOptedInOwner] = useState<string | null>(null);
@@ -517,6 +529,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const supabase = supabaseClient();
     if (!supabase) { setAuthReady(true); return; }
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (_event === "PASSWORD_RECOVERY") {
+        setLoginRecovery(true);
+        setLoginOpen(true);
+      }
       if (_event === "INITIAL_SESSION" && !next) {
         // A canceled Google round trip must not consent a later, unrelated sign-in.
         try { sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY); } catch { /* Storage may be unavailable. */ }
@@ -749,6 +765,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }
 
   function signIn() {
+    setLoginRecovery(false);
     setLoginError("");
     setLoginOpen(true);
   }
@@ -830,13 +847,17 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       <button className={styles.goldOfferDismiss} type="button" onClick={leaveGoldOffer}>Back to library</button>
     </div>
   </div>;
-  const loginDialog = loginOpen && !session && <div className={styles.modalBackdrop} onMouseDown={closeLogin}>
+  const loginDialog = loginOpen && (!session || loginRecovery) && <div className={styles.modalBackdrop} onMouseDown={closeLogin}>
     <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Sign in to generate audio" onMouseDown={(event) => event.stopPropagation()}>
       <button className={styles.goldClose} type="button" aria-label="Close" onClick={closeLogin}><ReaderIcon name="close" /></button>
-      <h2>Sign in to listen</h2>
-      <p>Sign in to generate up to 1 hour of audio each day.</p>
-      {loginError && <p role="alert">{loginError}</p>}
-      <button type="button" className={styles.primaryAction} onClick={() => void beginGoogleSignIn()}>Continue with Google</button>
+      <h2>{loginRecovery ? "Set a new password" : "Sign in to listen"}</h2>
+      {!loginRecovery && <>
+        <p>Sign in to generate up to 1 hour of audio each day.</p>
+        {loginError && <p role="alert">{loginError}</p>}
+        <button type="button" className={styles.primaryAction} onClick={() => void beginGoogleSignIn()}>Continue with Google</button>
+        <div className={styles.emailAuthDivider}>or use email</div>
+      </>}
+      <EmailAuthForm key={loginRecovery ? "recovery" : "email"} recovery={loginRecovery} />
     </div>
   </div>;
 
@@ -1641,6 +1662,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
 
   async function deleteBook(book: LibraryBook) {
     if (!window.confirm(`Remove "${book.title}" from ${session ? "your synced library" : "this browser"}?`)) return;
+    if (book.sourceIdentifier?.startsWith("scan:")) {
+      try { await deleteScan(book.id); }
+      catch { setMessage("Could not remove the scanned PDF from cloud storage. Please retry."); return; }
+    }
     await removeBook(book.id);
     libraryChanged();
     setBooks((current) => current.filter((value) => value.id !== book.id));
@@ -1665,7 +1690,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     setMessage("");
     audioPrimed.current = false;
     let prepared = book;
-    if (book.format === "pdf" && book.pdfNarrationRevision !== PDF_NARRATION_REVISION) {
+    if (book.format === "pdf" && !book.sourceIdentifier?.startsWith("scan:") && book.pdfNarrationRevision !== PDF_NARRATION_REVISION) {
       setBusy(true);
       setMessage("Preparing PDF narration without headers, footers, or footnotes…");
       try {
@@ -2063,7 +2088,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     : undefined;
   return (
     <main className={styles.appShell} onClickCapture={(event) => { if (!panel && !organizingBook) dialogTrigger.current = (event.target as Element).closest("button"); }}>
-      <header className={styles.libraryHero} inert={!!panel || !!organizingBook}>
+      <header className={styles.libraryHero} inert={!!panel || !!organizingBook || scanOpen}>
         <Link href="/" className={styles.libraryBrand} aria-label="FreeReader home">
           <span className={styles.appMark} aria-hidden="true"><i /><i /><i /><i /></span>
           <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
@@ -2081,7 +2106,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         </div>
       </header>
       {accountNotice}
-      <div className={styles.libraryLayout} inert={!!panel || !!organizingBook}>
+      <div className={styles.libraryLayout} inert={!!panel || !!organizingBook || scanOpen}>
         <section className={styles.shelf}>
           <div className={styles.workspaceHeading}>
             <div>
@@ -2103,6 +2128,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           )}
           <div className={styles.importGrid} aria-label="Add to your library">
             <button disabled={busy} onClick={() => fileInputRef.current?.click()}><span className={styles.importIcon}><ReaderIcon name="upload" /></span><span><strong>Upload File</strong><small>EPUB, PDF, DOCX & more</small></span><ReaderIcon name="plus" /></button>
+            <button disabled={busy} onClick={() => setScanOpen(true)}><span className={styles.importIcon}><ReaderIcon name="upload" /></span><span><strong>Scan Pages</strong><small>Photograph a physical document</small></span><ReaderIcon name="plus" /></button>
             <button onClick={() => setPanel("url")}><span className={styles.importIcon}><ReaderIcon name="link" /></span><span><strong>Web Link</strong><small>Turn an article into audio</small></span><ReaderIcon name="plus" /></button>
             <button onClick={() => setPanel("paste")}><span className={styles.importIcon}><ReaderIcon name="text" /></span><span><strong>Insert Text</strong><small>Notes, scripts, or a passage</small></span><ReaderIcon name="plus" /></button>
             <button className={styles.freeBooksButton} onClick={openGutenbergBrowser}><span className={styles.importIcon}><ReaderIcon name="book" /></span><span><strong>Free Books</strong><small>New Author Works + Public Domain Books</small></span><ReaderIcon name="arrow" /><span className="always-free-badge">New</span></button>
@@ -2177,6 +2203,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 <span><strong>Upload File</strong><small>EPUB, PDF, TXT, DOCX, HTML, or Markdown</small></span>
                 <i>&gt;</i>
               </button>
+              <button onClick={() => { setPanel(null); setScanOpen(true); }}><span className={styles.addChoiceIcon}><ReaderIcon name="upload" /></span><span><strong>Scan Pages</strong><small>Photograph and recognize printed text</small></span><i>&gt;</i></button>
               <button onClick={openGutenbergBrowser}>
                 <span className={`${styles.addChoiceIcon} ${styles.gutenbergChoiceIcon}`}><ReaderIcon name="book" /></span>
                 <span><strong>Free Books</strong><small>New Author Works + Public Domain Books</small></span>
@@ -2197,6 +2224,17 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </div>
         </div>
       )}
+      {scanOpen && <ScanDialog onClose={() => setScanOpen(false)} onComplete={async (result) => {
+        if (!("book" in result)) return;
+        const book = { ...result.book, parentId: activeFolderId ?? undefined };
+        await saveNativeSource(book.id, result.pdf);
+        await saveBook(book);
+        libraryChanged();
+        setBooks((current) => [book, ...current]);
+        setLibrarySearch("");
+        setMessage(`${book.title} was added to your private library.`);
+        await openBook(book);
+      }} />}
       {panel === "paste" && (
         <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
           <form className={styles.modal} role="dialog" aria-modal="true" aria-label="Paste your reading" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void importPastedText(); }}>
