@@ -2,30 +2,30 @@ import type { Metadata } from "next";
 import { LegalPage } from "../../components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "VoiceReader Privacy Policy",
+  title: "FreeReader Privacy Policy",
   description:
-    "Privacy Policy for VoiceReader and FreeReader on the web and Chrome.",
+    "Privacy Policy for FreeReader on iOS, the web, and Chrome.",
   alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPolicy() {
   return (
     <LegalPage
-      title="VoiceReader Privacy Policy"
+      title="FreeReader Privacy Policy"
       updated="October 28, 2026"
-      intro="VoiceReader is the iOS app, also known as FreeReader on the web and Chrome. This policy explains the limited information these products handle."
+      intro="FreeReader is the name used across our iOS app, web reader, and Chrome extension. This policy explains the limited information these products handle."
     >
       <h2>1. Who we are</h2>
       <p>
-        VoiceReader is provided by Prism Labs LLC (&ldquo;Prism Labs,&rdquo;
-        &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). VoiceReader is
-        the name of the iOS application (the &ldquo;App&rdquo;). Its web version
-        is known as FreeReader (the &ldquo;Website&rdquo;). This Privacy Policy
-        explains how the App, Website, and FreeReader Chrome extension handle information.
+        FreeReader is provided by Prism Labs LLC (&ldquo;Prism Labs,&rdquo;
+        &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). FreeReader is
+        the name of our iOS application (the &ldquo;App&rdquo;), our web reader
+        (the &ldquo;Website&rdquo;), and our Chrome extension. This Privacy Policy
+        explains how the App, Website, and Chrome extension handle information.
       </p>
-      <h2>2. Using VoiceReader or FreeReader without an account</h2>
+      <h2>2. Using FreeReader without an account</h2>
       <p>
-        The VoiceReader iOS App and the anonymous path in FreeReader do not
+        The FreeReader iOS App and the anonymous path in the web reader do not
         require an account. Your local library is stored on your device;
         without a Gold subscription, it is not synced to your account. Locally stored
         information includes:

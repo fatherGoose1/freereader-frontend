@@ -3,23 +3,23 @@ import Link from "next/link";
 import { LegalPage } from "../../components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "VoiceReader Terms of Use and EULA",
+  title: "FreeReader Terms of Use and EULA",
   description:
-    "Terms of Use and End User License Agreement for the VoiceReader iOS app and its web version, FreeReader.",
+    "Terms of Use and End User License Agreement for the FreeReader app on iOS, the web, and Chrome.",
   alternates: { canonical: "/terms" },
 };
 
 export default function Terms() {
   return (
     <LegalPage
-      title="VoiceReader Terms of Use and EULA"
+      title="FreeReader Terms of Use and EULA"
       updated="September 5, 2026"
-      intro="These terms govern your use of the VoiceReader iPhone app and the FreeReader website, including document imports and generated audio."
+      intro="These terms govern your use of the FreeReader app on iPhone, the web, and Chrome, including document imports and generated audio."
     >
       <aside className="legal-callout">
         <strong>Important notice about generated speech</strong>
         <p>
-          VoiceReader and FreeReader use text-to-speech technology to generate
+          FreeReader uses text-to-speech technology to generate
           spoken audio.
           Generated speech may mispronounce words, misinterpret abbreviations,
           skip or repeat content, or render formatting incorrectly. Do not rely
@@ -34,9 +34,8 @@ export default function Terms() {
         are a binding agreement between you and Prism Labs LLC
         (&quot;Prism Labs,&rdquo; &ldquo;we,&rdquo;
         &ldquo;us,&rdquo; or &ldquo;our&rdquo;). They govern your use of the
-        VoiceReader iOS application (the &quot;App&quot;) and related services.
-        VoiceReader is also available on the web under the name FreeReader (the
-        &quot;Website&quot;).
+        FreeReader iOS application (the &quot;App&quot;), the FreeReader website
+        (the &quot;Website&quot;), and the FreeReader Chrome extension.
       </p>
       <p>
         By downloading, installing, accessing, or using the App or Website, you
@@ -45,9 +44,9 @@ export default function Terms() {
         legal guardian must review and agree to these Terms on your behalf.
       </p>
 
-      <h2>2. What VoiceReader and FreeReader provide</h2>
+      <h2>2. What FreeReader provides</h2>
       <p>
-        VoiceReader and FreeReader are tools for turning supported documents into
+        FreeReader is a tool for turning supported documents into
         spoken audio. The App&apos;s document import, text extraction, speech
         generation, and playback features are designed to operate locally on a
         compatible iPhone. The web reader also supports optional account sync,
@@ -72,7 +71,7 @@ export default function Terms() {
 
       <h2>4. Generated speech</h2>
       <p>
-        VoiceReader and FreeReader use automated text-to-speech technology to
+        FreeReader uses automated text-to-speech technology to
         generate spoken audio from your documents. Generated speech may contain
         pronunciation errors, awkward phrasing, incorrect pacing, omissions, or repetition,
         and may handle tables, footnotes, images, and unusual formatting poorly.
@@ -122,7 +121,7 @@ export default function Terms() {
       <p>
         You are responsible for your device, its security, available storage,
         backups, and any content you choose to import or submit.
-        VoiceReader data and anonymous FreeReader libraries are stored locally;
+        FreeReader data and anonymous web libraries are stored locally;
         however, web speech generation sends the passages being narrated to
         our speech service. If you have an active Gold subscription, parsed
         books, folders, and reading progress sync to your account. Generated
@@ -199,8 +198,8 @@ export default function Terms() {
 
       <h2>10. Website</h2>
       <p>
-        The Website provides the web version of VoiceReader under the FreeReader
-        name. We do not guarantee compatibility or availability in any country.
+        The Website provides the web version of FreeReader.
+        We do not guarantee compatibility or availability in any country.
         We may suspend or discontinue the Website without liability.
       </p>
 
@@ -216,7 +215,7 @@ export default function Terms() {
 
       <h2>12. Updates, compatibility, and availability</h2>
       <p>
-        VoiceReader may require a compatible device, operating-system version,
+        FreeReader may require a compatible device, operating-system version,
         and sufficient local resources. We may add, change, suspend, or remove
         features and may issue updates for security, compatibility, or product
         improvements. We do not promise that the App or Website will always be
@@ -233,7 +232,7 @@ export default function Terms() {
       <ul>
         <li>
           Apple has no obligation to provide maintenance or support for the App.
-          Support is available through the link on VoiceReader&apos;s App Store
+          Support is available through the link on FreeReader&apos;s App Store
           listing.
         </li>
         <li>
@@ -273,12 +272,12 @@ export default function Terms() {
 
       <h2>14. Disclaimer of warranties</h2>
       <p>
-        TO THE MAXIMUM EXTENT PERMITTED BY LAW, VOICEREADER, FREEREADER, AND ALL
+        TO THE MAXIMUM EXTENT PERMITTED BY LAW, FREEREADER AND ALL
         GENERATED AUDIO ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE.&quot; PRISM
         LABS DISCLAIMS ALL EXPRESS, IMPLIED, AND STATUTORY WARRANTIES,
         INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY,
         QUIET ENJOYMENT, AND NON-INFRINGEMENT. PRISM LABS DOES NOT WARRANT THAT
-        VOICEREADER, FREEREADER, OR THEIR OUTPUT WILL BE ACCURATE, COMPLETE, SAFE,
+        FREEREADER OR ITS OUTPUT WILL BE ACCURATE, COMPLETE, SAFE,
         AVAILABLE, OR FREE OF ERRORS OR HARMFUL COMPONENTS.
       </p>
       <p>
@@ -293,7 +292,7 @@ export default function Terms() {
         MANAGERS, EMPLOYEES, CONTRACTORS, LICENSORS, AND AFFILIATES WILL NOT BE
         LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR
         PUNITIVE DAMAGES, OR FOR LOST DATA, PROFITS, REVENUE, GOODWILL, OR
-        OPPORTUNITIES, ARISING OUT OF OR RELATED TO VOICEREADER, FREEREADER, OR
+        OPPORTUNITIES, ARISING OUT OF OR RELATED TO FREEREADER OR
         GENERATED AUDIO.
       </p>
       <p>

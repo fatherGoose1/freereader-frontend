@@ -62,7 +62,7 @@ test("landing page shows the iPhone preview and the language demo with rotating 
   await expect(page.getByText("A wider world of voices")).toHaveCount(0);
   await expect(page.getByText("The live preview detects the language of your text automatically.")).toHaveCount(0);
   const final = page.locator(".final-actions");
-  for (const name of ["Start listening", "Download VoiceReader on the App Store"]) {
+  for (const name of ["Start listening", "Download FreeReader on the App Store"]) {
     const button = await final.getByRole("link", { name }).boundingBox();
     expect(button).not.toBeNull();
     expect(button!.x).toBeGreaterThanOrEqual(0);

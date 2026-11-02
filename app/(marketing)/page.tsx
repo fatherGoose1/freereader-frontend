@@ -82,7 +82,7 @@ export default function Home() {
         <div className="wrap final-cta-inner">
           <span className="eyebrow">Ready when you are</span>
           <h2>Give your words a voice.</h2>
-          <p>Listen to books for free in your browser or take VoiceReader with you on iPhone and Android.</p>
+          <p>Listen to books for free in your browser or take FreeReader with you on iPhone and Android.</p>
           <div className="final-actions">
             <Link className="button" href="/reader/audiobooks">Start listening <ArrowIcon /></Link>
             <AppDownloadButtons />

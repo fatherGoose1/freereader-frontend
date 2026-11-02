@@ -17,7 +17,7 @@ test("landing demo lists supported languages and routes non-English speech", asy
   }));
   await page.goto("/");
 
-  const appStoreLinks = page.getByRole("link", { name: "Download VoiceReader on the App Store" });
+  const appStoreLinks = page.getByRole("link", { name: "Download FreeReader on the App Store" });
   await expect(appStoreLinks).toHaveCount(2);
   await expect(appStoreLinks.first()).toHaveAttribute("href", "https://apps.apple.com/app/voicereader-text-to-speech/id6808351587");
   const canHover = await page.evaluate(() => matchMedia("(hover: hover)").matches);
