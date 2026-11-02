@@ -36,11 +36,11 @@ export default function Home() {
               Natural voices, no signup required, always free.
             </p>
             <div className="hero-actions">
-              <Link className="button audiobook-cta" href="/reader/audiobooks">Open audiobook reader <ArrowIcon /><span className="always-free-badge">Always free</span></Link>
               <AppDownloadButtons />
+              <Link className="button audiobook-cta" href="/reader/audiobooks">Open Web App <ArrowIcon /></Link>
             </div>
             <div className="hero-assurances" aria-label="FreeReader product highlights">
-              <span><CheckIcon /> 100% free</span>
+              <span><CheckIcon /> Start free</span>
               <span><CheckIcon /> 32 languages</span>
               <span><CheckIcon /> No signup required</span>
             </div>
