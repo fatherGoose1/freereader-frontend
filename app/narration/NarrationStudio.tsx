@@ -1204,7 +1204,7 @@ export default function NarrationStudio() {
         </div>
       </section>
 
-      {profileOpen && <StudioDialog title="Your narration usage" description="Your monthly allowance is for video voiceovers only. Audiobook reading is always free." onClose={() => setProfileOpen(false)}>
+      {profileOpen && <StudioDialog title="Your narration usage" description="Your monthly allowance is for video voiceovers only. Free audiobook audio has a separate one-hour-per-day limit; Gold offers unlimited audiobook audio." onClose={() => setProfileOpen(false)}>
         <div className={styles.profilePlan}><span>{usage?.plan === "premium" ? "Premium" : usage?.plan === "pro" ? "Pro" : "Free"} plan</span><small>{usage?.period ?? "Monthly allowance"}</small></div>
         {usage ? <div className={styles.usageChart}>
           <UsageMeter name="Video narration" used={usage.used_seconds} budget={usage.budget_seconds} remaining={usage.remaining_seconds} />

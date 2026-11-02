@@ -4,6 +4,7 @@ import NarrationStudio from "./NarrationStudio";
 export const metadata: Metadata = {
   title: "YouTube Narration",
   description: "Turn a YouTube script into polished, segment-by-segment narration.",
+  alternates: { canonical: "/narration" },
 };
 
 export default function NarrationPage() {

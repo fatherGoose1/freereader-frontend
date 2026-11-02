@@ -4,7 +4,7 @@ import styles from "./school.module.css";
 
 export const metadata: Metadata = {
   title: "FreeReader for Schools",
-  description: "Reading accessibility for students with dyslexia, ADHD, and other challenges. Bring FreeReader to your school for $3 per student per year.",
+  description: "FreeReader EDU helps students with dyslexia, ADHD, and other reading challenges listen and follow along with school reading assignments. $3 per student per year.",
   alternates: { canonical: "/school" },
 };
 
@@ -21,7 +21,7 @@ export default function SchoolPage() {
         <div className={`wrap ${styles.inner}`}>
           <div className={styles.copy}>
             <h1 id="school-heading">Reading accessibility for students with dyslexia, ADHD, and other challenges.</h1>
-            <p className={styles.lede}>Tools to turn PDFs, textbooks, web pages, and anything into audio.</p>
+            <p className={styles.lede}>FreeReader EDU helps students listen and follow along with school reading assignments. Turn PDFs, textbooks, and web pages into audio with read-along highlighting.</p>
             <ul className={styles.benefits} aria-label="School benefits">
               {benefits.map(({ title, detail }) => (
                 <li key={title}>

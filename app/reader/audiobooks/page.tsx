@@ -3,7 +3,8 @@ import FreeReaderApp from "../FreeReaderApp";
 
 export const metadata: Metadata = {
   title: "Audiobook Reader",
-  description: "A local-first audiobook reader with optional account sync for your library and reading progress.",
+  description: "Listen to EPUBs, PDFs, documents, and articles. One free hour of audiobook audio per day; Gold adds unlimited audio and sync across devices.",
+  alternates: { canonical: "/reader/audiobooks" },
 };
 
 export default function AudiobookReaderPage() {

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s — FreeReader",
   },
   description:
-    "Turn books, documents, and articles into audiobooks. Built for readers with dyslexia and ADHD. Start free with FreeReader's text-to-speech tools in 32 languages.",
+    "Listen to books, documents, articles, and Reddit threads on the web, iPhone, and Chrome. One hour of free listening per day, with unlimited audiobook audio on Gold.",
   icons: { icon: "/icon.svg?v=3" },
   manifest: "/manifest.webmanifest",
 };

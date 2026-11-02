@@ -8,7 +8,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "YouTube narration pricing: Free includes 1 hour, Pro includes 10 hours with 1 hour of premium voices and voice cloning, and Premium includes 20 hours with 5 hours of premium voices. Audiobook reading is always free.",
+    "Listen for one hour free each day, or get unlimited audiobook audio with FreeReader Gold for $39/year or $5/month. Separate plans are available for video narration.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -95,12 +95,42 @@ export default async function Pricing() {
     <main className="wrap pricing">
       <div className="pricing-hero">
         <span className="eyebrow">Pricing</span>
-        <h1>Find your voiceover plan.</h1>
+        <h1>FreeReader pricing.</h1>
         <p>
-          Start creating video narration for free. Choose more hours or your own
-          cloned voice when your scripts grow. Audiobook listening stays free, without a monthly limit.
+          Listen for one hour free each day. Choose Gold for unlimited audiobook audio,
+          or explore separate plans for video narration.
         </p>
       </div>
+
+      <section aria-labelledby="gold-pricing-heading">
+        <h2 id="gold-pricing-heading" className="pricing-section-heading">Audiobook listening</h2>
+        <div className="pricing-grid gold-grid">
+          <div className="price-card">
+            <div className="price-card-head"><h3>Free</h3></div>
+            <p className="price-amount"><strong>$0</strong><span>no subscription</span></p>
+            <p className="price-summary">One hour of audiobook listening each day.</p>
+            <ul className="price-features">
+              <li><CheckIcon /> Read EPUBs, PDFs, documents, and articles</li>
+              <li><CheckIcon /> Listen on the web, iPhone, and Chrome</li>
+            </ul>
+            <Link className="button" href="/reader/audiobooks">Start listening</Link>
+          </div>
+          <div className="price-card">
+            <div className="price-card-head"><h3>FreeReader Gold</h3></div>
+            <p className="price-amount"><strong>$39</strong><span>per year, or $5 per month</span></p>
+            <p className="price-summary">Unlimited audiobook audio and more ways to make reading yours.</p>
+            <ul className="price-features">
+              <li><CheckIcon /> Unlimited audiobook listening</li>
+              <li><CheckIcon /> Sync parsed books and reading progress across devices</li>
+              <li><CheckIcon /> Voice cloning for signed-in Gold accounts</li>
+            </ul>
+            <Link className="button" href="/reader/audiobooks">Explore Gold in the reader</Link>
+          </div>
+        </div>
+      </section>
+
+      <h2 className="pricing-section-heading">Video narration plans</h2>
+      <p className="pricing-section-intro">Create voiceovers from scripts. These monthly video narration allowances are separate from the audiobook reader&apos;s daily listening allowance.</p>
 
       <div className="pricing-grid">
         {tiers.map((tier) => (
@@ -145,16 +175,22 @@ export default async function Pricing() {
       <section className="pricing-faq" aria-labelledby="pricing-faq-heading">
         <h2 id="pricing-faq-heading">Pricing questions</h2>
 
+        <h3>How much free audiobook listening do I get?</h3>
+        <p>FreeReader includes one hour of audiobook audio per day. Gold removes the daily audiobook audio limit for $39 per year or $5 per month.</p>
+
+        <h3>Do Gold and video narration plans cover the same thing?</h3>
+        <p>No. Gold is for audiobook listening and reader features. The Pro and Premium plans below are for creating video voiceovers and have separate monthly allowances.</p>
+
         <h3>How is audio generation measured?</h3>
         <p>
           We count the duration of the narration you generate. Reading,
           editing, importing, and exporting text do not use your allowance.
         </p>
 
-        <h3>Does this limit the audiobook reader?</h3>
+        <h3>Do the video narration limits apply to the audiobook reader?</h3>
         <p>
-          No. Audiobook listening and generation are free with no monthly limit.
-          Only video voiceovers use the allowances shown above.
+          No. The monthly allowances above apply to video voiceovers. Free audiobook
+          audio has a separate one-hour-per-day limit; Gold removes that daily limit.
         </p>
 
         <h3>What happens when I reach my limit?</h3>
@@ -167,8 +203,8 @@ export default async function Pricing() {
         <h3>Do I need an account?</h3>
         <p>
           Video narration needs a free Google sign-in so your monthly allowance can
-          be tracked. No card is required, and the audiobook reader stays free
-          without an account.
+          be tracked. No card is required for the free plan. The web audiobook reader
+          can be opened without an account, but generating new audio requires free sign-in.
         </p>
 
         <h3>Can I cancel my subscription?</h3>

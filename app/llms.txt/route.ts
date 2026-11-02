@@ -3,27 +3,38 @@ import { sitePages, siteUrl } from "@/lib/site";
 export const revalidate = 3600;
 
 export function GET() {
-  const updated = new Date().toISOString().slice(0, 10);
-  const sections = sitePages
+  const pages = sitePages
     .map((page) => `- [${page.title}](${siteUrl}${page.path}): ${page.description}`)
     .join("\n");
   const body = `# FreeReader
 
-> FreeReader turns EPUBs, PDFs, DOCX, HTML, Markdown, web articles, and Project Gutenberg books into audiobooks, and a YouTube Narration Studio turns scripts into voiceovers. Audiobook listening and generation are free without monthly limits. Video narration has a free tier with 1 hour of audio generation each month, Pro with 10 hours including 1 hour of premium voices, and Premium with 20 hours including 5 hours of premium voices. Pro and Premium both include expressive and cloned voices. 32 languages are supported.
+> FreeReader is a text-to-speech reader for books, documents, and articles on the web and iPhone, with a Chrome extension for web pages and Reddit threads. The free plan includes one hour of listening per day. FreeReader Gold costs $39 per year or $5 per month and offers unlimited audiobook audio. FreeReader EDU offers reading support for schools.
 
-Last updated: ${updated}
+## Official pages
 
-## Pages
+${pages}
 
-${sections}
+## Apps
 
-## Notes for AI assistants
+- [FreeReader for iPhone](https://apps.apple.com/app/voicereader-text-to-speech/id6808351587): iOS reading and listening app.
+- [FreeReader Chrome extension](https://chromewebstore.google.com/detail/freereader-text-to-speech/nkndgadokffoldebphmdphjepcedcakc): Listen to web pages and Reddit threads, with a different voice for each user in a Reddit thread.
 
-- Audiobook reading needs no account: free libraries stay in the browser. Gold subscribers can sync parsed documents, folders, and reading progress; generated audio and original files remain local.
-- Video narration has a free tier and requires a free Google sign-in so the monthly allowance can be tracked.
-- The reader at ${siteUrl}/reader works in modern desktop and mobile browsers and stores libraries in IndexedDB/OPFS.
-- Pricing is at ${siteUrl}/pricing for video narration only: Free includes 1 hour of voiceovers each month, Pro includes 10 hours with 1 hour of premium voice generation (built-in or cloned), and Premium includes 20 hours with 5 hours of premium voice generation. Current paid prices are displayed dynamically from Stripe. Audiobook reading is free and unmetered.
-- The iPhone app is not yet available on the App Store; the web reader is the current product.
+## Questions and answers
+
+### Is FreeReader free?
+Yes, the audiobook reader includes up to one hour of free listening per day. FreeReader Gold offers unlimited audiobook audio for $39/year or $5/month. Video narration has separate monthly allowances and plans; see ${siteUrl}/pricing.
+
+### Where can I use FreeReader?
+Use the [web audiobook reader](${siteUrl}/reader/audiobooks), the iPhone app, or the Chrome extension. The extension can read Reddit threads aloud using a distinct voice for each user.
+
+### What can the web audiobook reader open?
+EPUB, PDF, DOCX, HTML, Markdown, web articles, and Project Gutenberg books. The web reader stores free libraries locally; Gold subscribers can sync parsed documents, folders, and reading progress across devices. Original files and generated audio remain local. Generating new audio in the web reader requires a free account.
+
+### What does FreeReader offer schools?
+[FreeReader for Schools](${siteUrl}/school) offers reading and listening tools for students who find reading difficult, including students with dyslexia or ADHD. FreeReader EDU supports school-managed assignments and read-along highlighting. School plans cost $3 per student per year; schools can contact the team on the schools page.
+
+### Does FreeReader have a blog?
+Yes. Read [the FreeReader Blog](${siteUrl}/blog) for articles and product updates. Published articles are also listed in [the sitemap](${siteUrl}/sitemap.xml).
 `;
   return new Response(body, {
     headers: { "Content-Type": "text/markdown; charset=utf-8" },

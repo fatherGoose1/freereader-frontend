@@ -18,10 +18,10 @@ export type BlogPost = {
 
 export type BlogPostSummary = Pick<
   BlogPost,
-  "id" | "slug" | "title" | "excerpt" | "cover_image_url" | "author_name" | "category" | "read_time_minutes" | "published_at"
+  "id" | "slug" | "title" | "excerpt" | "cover_image_url" | "author_name" | "category" | "read_time_minutes" | "published_at" | "updated_at"
 >;
 
-const SUMMARY_COLUMNS = "id,slug,title,excerpt,cover_image_url,author_name,category,read_time_minutes,published_at";
+const SUMMARY_COLUMNS = "id,slug,title,excerpt,cover_image_url,author_name,category,read_time_minutes,published_at,updated_at";
 
 // Anonymous key only: public blog routes obey the same publication RLS as readers.
 function publicBlogClient() {

@@ -14,10 +14,10 @@ export default function ModeChooser() {
     <main className={styles.shell}>
       <header className={styles.header}>
         <Link href="/" className={styles.brand}><img src="/icon.svg" alt="" />FreeReader</Link>
-        <span>Free text to speech, two ways</span>
+        <span>Text to speech, two ways</span>
       </header>
       <section className={styles.intro}>
-        <h1>Are you listening or creating??</h1>
+        <h1>Are you listening or creating?</h1>
       </section>
       <section className={styles.choices} aria-label="FreeReader workspaces">
         <Link href="/reader/audiobooks" className={styles.choice}>
@@ -37,7 +37,7 @@ export default function ModeChooser() {
           <strong>Open narration studio <i>→</i></strong>
         </Link>
       </section>
-      <p className={styles.note}>Both workspaces use the same FreeReader voices. Your projects and generated audio stay in this browser.</p>
+      <p className={styles.note}>Both workspaces use FreeReader voices. Listen for up to one hour free per day in the audiobook reader; Gold offers unlimited audiobook audio. Video narration has separate monthly plans.</p>
     </main>
   );
 }

@@ -4,6 +4,7 @@ import ModeChooser from "./ModeChooser";
 export const metadata: Metadata = {
   title: "Choose a Workspace",
   description: "Create an audiobook from reading material or polished narration from a YouTube script.",
+  alternates: { canonical: "/reader" },
 };
 
 export default function ReaderPage() {
