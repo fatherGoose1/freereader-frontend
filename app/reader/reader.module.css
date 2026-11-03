@@ -529,8 +529,8 @@
 
 /* PDF controls float in the side gutters so pages get the full canvas height. */
 .readingShell .pdfPane { position: relative; background: #edf0f5; }
-.pdfPane .readingToolbar { position: absolute; z-index: 5; inset: 12px; display: block; padding: 0; border: 0; pointer-events: none; }
-.pdfPane .viewToggle { position: absolute; top: 0; left: 0; flex-direction: column; max-width: 112px; background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
+.pdfPane .readingToolbar { position: absolute; z-index: 5; inset: 12px; display: block; padding: 0; border: 0; background: transparent; pointer-events: none; }
+.pdfPane .viewToggle { position: absolute; top: 0; left: 0; background: #ffffffdc; box-shadow: 0 2px 8px #24365c0d; pointer-events: auto; }
 .pdfPane .readingToolbarActions { position: absolute; top: 0; right: 0; pointer-events: auto; }
 .pdfPane .textSizing { flex-direction: row; gap: 2px; }
 .pdfPane .eReaderViewport { padding: 12px 84px 12px 132px; }

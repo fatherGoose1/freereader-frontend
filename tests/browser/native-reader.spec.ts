@@ -176,6 +176,24 @@ test("Original PDF keeps its page artwork while E-reader uses the chosen tint", 
   await expect(page.locator('[class*="eReaderViewport"]')).toHaveCSS("background-color", "rgb(29, 36, 48)");
 });
 
+test("PDF reading controls do not cover either view on desktop", async ({ page }) => {
+  test.skip((await page.evaluate(() => innerWidth)) <= 800, "Desktop PDF controls");
+  await setup(page);
+  await page.locator('input[type="file"]').first().setInputFiles({ name: "Original PDF.pdf", mimeType: "application/pdf", buffer: pdf() });
+  const toolbar = page.locator('article [id="reader-reading-tools"]');
+  const original = page.getByRole("button", { name: "Original", exact: true });
+  const eReader = page.getByRole("button", { name: "E-reader", exact: true });
+  await expect(page.locator('article [class*="pdfPage"] canvas').first()).toBeVisible();
+  await expect(toolbar).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const originalBounds = (await original.boundingBox())!;
+  const eReaderBounds = (await eReader.boundingBox())!;
+  expect(eReaderBounds.x).toBeGreaterThan(originalBounds.x + originalBounds.width - 1);
+  expect(Math.abs(eReaderBounds.y - originalBounds.y)).toBeLessThan(2);
+  await eReader.click();
+  await expect(page.locator('article [class*="eReaderViewport"] p').first()).toBeVisible();
+  await expect(toolbar).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});
+
 test("EPUB preserves publisher styling and images, follows chapters, and switches views without stopping playback", async ({ page }, testInfo) => {
   await setup(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: "original.epub", mimeType: "application/epub+zip", buffer: await epub() });
