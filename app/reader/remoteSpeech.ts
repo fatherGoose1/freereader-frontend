@@ -69,7 +69,8 @@ export class RemoteSpeechClient {
         if (isCatalogVoice(requestedVoice)) {
           const token = await currentSessionAccessToken();
           if (!token) throw new Error("sign_in_required");
-          response = await speakPhononCatalog(token, requestedVoice.slice(8), texts, speechSpeed, controller.signal);
+          response = await speakPhononCatalog(token, requestedVoice.slice(8), texts, speechSpeed, controller.signal,
+            telemetryContext(options?.source));
         } else if (requestedVoice === PUBLIC_PARKER_VOICE) {
           const token = await currentSessionAccessToken();
           if (!token) throw new Error("sign_in_required");
@@ -83,7 +84,8 @@ export class RemoteSpeechClient {
         } else {
           const token = await currentSessionAccessToken();
           if (!token) throw new Error("Sign in to use your custom voice.");
-          response = await speakPhononVoice(token, requestedVoice.slice(7), texts, speechSpeed, controller.signal);
+          response = await speakPhononVoice(token, requestedVoice.slice(7), texts, speechSpeed, controller.signal,
+            telemetryContext(options?.source));
         }
         if (items.length === 1) {
           const blob = await response.blob();

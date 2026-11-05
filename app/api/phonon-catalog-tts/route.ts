@@ -23,7 +23,8 @@ export async function POST(request: Request) {
   try {
     response = await fetch(`${backend}/api/v1/freereader/phonon/catalog/speech`, {
       method: "POST", cache: "no-store", signal: controller.signal,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-FreeReader-Client": "web",
+        "X-FreeReader-Context": (request.headers.get("x-freereader-context") ?? "").slice(0, 2048) },
       body: JSON.stringify({ voice_id: body.voice_id, texts: body.texts, speed: body.speed }),
     });
   } catch {

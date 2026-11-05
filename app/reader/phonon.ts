@@ -85,13 +85,17 @@ export async function deletePhononVoice(token: string, id: string): Promise<void
   await request(`voices/${encodeURIComponent(id)}`, token, { method: "DELETE" });
 }
 
-export function speakPhononVoice(token: string, id: string, texts: string[], speed: number, signal?: AbortSignal): Promise<Response> {
-  return request("speech", token, { method: "POST", headers: { "Content-Type": "application/json" },
+export function speakPhononVoice(token: string, id: string, texts: string[], speed: number, signal?: AbortSignal,
+  context?: unknown): Promise<Response> {
+  return request("speech", token, { method: "POST",
+    headers: { "Content-Type": "application/json", ...(context ? { "X-FreeReader-Context": JSON.stringify(context) } : {}) },
     body: JSON.stringify({ voice_id: id, texts, speed }), signal });
 }
 
-export function speakPhononCatalog(token: string, id: string, texts: string[], speed: number, signal?: AbortSignal): Promise<Response> {
+export function speakPhononCatalog(token: string, id: string, texts: string[], speed: number, signal?: AbortSignal,
+  context?: unknown): Promise<Response> {
   return fetch("/api/phonon-catalog-tts", { method: "POST", signal,
-    headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": token },
+    headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": token,
+      ...(context ? { "X-FreeReader-Context": JSON.stringify(context) } : {}) },
     body: JSON.stringify({ voice_id: id, texts, speed }) }).then(phononResponse);
 }
