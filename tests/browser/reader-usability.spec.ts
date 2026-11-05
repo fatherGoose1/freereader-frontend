@@ -17,6 +17,7 @@ function playableWav(seconds = 20): Buffer {
 }
 
 async function upload(page: Page, title: string, chapters = 1) {
+  await expect(page.getByText("Loading your library…")).toHaveCount(0, { timeout: 30_000 });
   await page.locator('input[type="file"]').setInputFiles({
     name: `${title}.html`, mimeType: "text/html",
     buffer: Buffer.from(`<html lang="en"><title>${title}</title><body>${Array.from({ length: chapters }, (_, i) => `<h1>Chapter ${i + 1}</h1><p>${paragraph.repeat(7)}</p>`).join("")}</body></html>`),
@@ -34,6 +35,11 @@ async function openControls(page: Page) {
   if (await player.isVisible()) await player.click();
 }
 
+async function openVoicePicker(page: Page) {
+  await page.getByRole("dialog", { name: "Audio settings" }).getByRole("button", { name: /Choose voice/ }).click();
+  return page.getByRole("dialog", { name: "Voice selection" });
+}
+
 async function signInFreeReader(page: Page, optedIn: boolean) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
@@ -42,8 +48,23 @@ async function signInFreeReader(page: Page, optedIn: boolean) {
   const session = { access_token: "free-offer-token", refresh_token: "free-offer-refresh", token_type: "bearer", expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200,
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200,
     json: { plan: "free", gold_offer_opted_in: optedIn } }));
+  const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
+}
+
+async function signInGoldReader(page: Page) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
+  const user = { id: "11111111-1111-4111-8111-111111111111", email: "gold@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() };
+  const session = { access_token: "gold-voice-test-token", refresh_token: "gold-voice-refresh", token_type: "bearer", expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
   const storageKey = `sb-${new URL(url!).hostname.split(".")[0]}-auth-token`;
   await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
   await page.reload();
@@ -52,13 +73,14 @@ async function signInFreeReader(page: Page, optedIn: boolean) {
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/telemetry", (route) => route.fulfill({ status: 202, json: {} }));
-  await page.route("**/api/v1/freereader/billing/price?plan=gold_*", (route) => {
+  await page.route("**/api/billing/price?plan=gold_*", (route) => {
     const yearly = new URL(route.request().url()).searchParams.get("plan") === "gold_yearly";
     return route.fulfill({ status: 200, json: {
       amount_cents: yearly ? 3900 : 500, currency: "usd", interval: yearly ? "year" : "month",
     } });
   });
   await page.goto("/reader/audiobooks");
+  await expect(page.getByText("Loading your library…")).toHaveCount(0, { timeout: 30_000 });
 });
 
 test("free-account sign-in has no email deal checkbox", async ({ page }) => {
@@ -71,30 +93,45 @@ test("free-account sign-in has no email deal checkbox", async ({ page }) => {
   await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
 });
 
-test("email signup requests Supabase confirmation and does not sign in before verification", async ({ page }) => {
+test("email signup stays signed out until the confirmation code is verified", async ({ page }) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
   let signupRequests = 0;
+  const user = { id: "88888888-8888-4888-8888-888888888888", email: "new-reader@example.com", aud: "authenticated", role: "authenticated",
+    app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, created_at: new Date().toISOString() };
   await page.route("**/auth/v1/signup?**", async (route) => {
     const request = route.request();
     expect(request.postDataJSON()).toMatchObject({ email: "new-reader@example.com", password: "a-long-password" });
     expect(new URL(request.url()).searchParams.get("redirect_to")).toBe(new URL("/reader/audiobooks", page.url()).href);
     signupRequests += 1;
     await route.fulfill({ status: 200, json: {
-      user: { id: "88888888-8888-4888-8888-888888888888", email: "new-reader@example.com",
-        app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, identities: [] },
+      user,
       session: null,
     } });
   });
+  let verified = 0;
+  await page.route("**/auth/v1/verify", async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ email: "new-reader@example.com", token: "123456", type: "signup" });
+    verified += 1;
+    await route.fulfill({ status: 200, json: { access_token: "confirmed-token", refresh_token: "confirmed-refresh",
+      token_type: "bearer", expires_in: 3600, user } });
+  });
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200,
+    json: { plan: "free", gold_offer_opted_in: false } }));
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Sign in to generate audio" });
   await dialog.getByRole("button", { name: "Create an account" }).click();
   await dialog.getByRole("textbox", { name: "Email address" }).fill("new-reader@example.com");
   await dialog.getByLabel("Password", { exact: true }).fill("a-long-password");
   await dialog.getByRole("button", { name: "Create account" }).click();
-  await expect(dialog.getByRole("status")).toContainText("Check your email to confirm");
+  await expect(dialog.getByRole("status")).toContainText("Check your email for a confirmation code or link");
   expect(signupRequests).toBe(1);
   await expect(page.getByRole("button", { name: "Account settings" })).toHaveCount(0);
+  await dialog.getByRole("textbox", { name: "Confirmation code" }).fill("123456");
+  await dialog.getByRole("button", { name: "Confirm email" }).click();
+  await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
+  expect(verified).toBe(1);
 });
 
 test("a confirmed email account can sign in and reach the reader", async ({ page }) => {
@@ -110,7 +147,7 @@ test("a confirmed email account can sign in and reach the reader", async ({ page
       token_type: "bearer", expires_in: 3600, user } });
   });
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200,
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200,
     json: { plan: "free", gold_offer_opted_in: false } }));
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Sign in to generate audio" });
@@ -129,7 +166,7 @@ test("a new web signup sends the Gold offer opt-in after Google returns", async 
   const session = { access_token: "opt-in-token", refresh_token: "opt-in-refresh", token_type: "bearer", expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
   let submitted = 0;
   await page.route("**/api/v1/freereader/usage/gold-offer-opt-in", (route) => {
     expect(route.request().headers().authorization).toBe("Bearer opt-in-token");
@@ -145,8 +182,9 @@ test("a new web signup sends the Gold offer opt-in after Google returns", async 
   await page.reload();
   await expect.poll(() => submitted).toBe(1);
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem("freereader-gold-offer-opt-in-pending"))).toBeNull();
-  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
-  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toBeVisible();
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toBeVisible();
 });
 
 test("an iOS or extension account signing in on the web is not enrolled in Brevo", async ({ page }) => {
@@ -157,7 +195,7 @@ test("an iOS or extension account signing in on the web is not enrolled in Brevo
   const session = { access_token: "existing-token", refresh_token: "existing-refresh", token_type: "bearer", expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
   let submitted = 0;
   await page.route("**/api/v1/freereader/usage/gold-offer-opt-in", (route) => {
     submitted += 1;
@@ -228,7 +266,7 @@ test("a Supabase homepage redirect resumes the email offer in the reader", async
 test("an ineligible email link explains the rejection without opening full-price checkout", async ({ page }) => {
   await signInFreeReader(page, false);
   let regularCheckouts = 0;
-  await page.route("**/api/v1/freereader/billing/checkout", (route) => { regularCheckouts += 1; return route.abort(); });
+  await page.route("**/api/billing/checkout", (route) => { regularCheckouts += 1; return route.abort(); });
   await page.route("**/api/v1/freereader/billing/gold-offer-checkout", (route) => route.fulfill({ status: 403,
     json: { error: "gold_offer_ineligible" } }));
   await page.goto("/reader/audiobooks?offer=gold50");
@@ -254,41 +292,37 @@ test("Gold plans show the configured Stripe amounts before checkout", async ({ p
   await dialog.getByRole("button", { name: "Monthly" }).click();
   await expect(dialog).toContainText("$5/month, billed monthly");
   await expect(dialog).not.toContainText("7 days free");
-  await expect(dialog).toContainText("Voice cloning");
+  await expect(dialog).toContainText("Custom voices");
   await dialog.getByRole("button", { name: "Close" }).click();
   const banner = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
-  await expect(banner).toContainText("Voice cloning");
+  await expect(banner).toContainText("Custom voices");
   await expect(banner.locator("li").first()).toHaveText("✦Unlimited audio");
   await expect(banner.locator("li small")).toHaveCount(0);
 });
 
-test("a guest can find voice cloning from Voice Settings and see the Gold gate", async ({ page }) => {
+test("a guest sees only ten free voice choices and can find custom voices", async ({ page }) => {
   await upload(page, "Clone entry");
   await page.getByRole("button", { name: /^html Clone entry/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  const settings = page.getByRole("dialog", { name: "Voice settings" });
-  await expect(settings.getByLabel("Voice").locator("option").first()).toHaveText("Parker (Founder)");
-  await settings.getByRole("button", { name: /Clone a voice/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Clone a voice" });
+  const settings = await openVoicePicker(page);
+  await expect(settings.getByRole("region", { name: "Free voices" }).locator("article")).toHaveCount(10);
+  await expect(settings.getByRole("region", { name: "Gold voices" })).toBeVisible();
+  await settings.getByRole("button", { name: "Sign in to create" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create custom voice" });
   await expect(dialog).toContainText("Sign in to save your voices");
   await expect(dialog).toContainText("shared with the iPhone app");
   await dialog.getByRole("button", { name: "Done" }).click();
-  await settings.getByLabel("Voice").selectOption("phonon:8e7e52e7-77f4-4677-a488-ded347498b1a");
-  await settings.getByRole("button", { name: "Done" }).click();
-  const publicRequests: Array<{ texts: string[]; speed: number }> = [];
-  await page.route("**/api/public-phonon-tts", (route) => {
-    publicRequests.push(route.request().postDataJSON());
-    return route.fulfill({ contentType: "audio/wav", headers: { "X-Audio-Duration": "20" }, body: playableWav() });
-  });
+  await settings.getByRole("region", { name: "Free voices" }).locator("article").filter({ hasText: "Wren (free)" })
+    .getByRole("button", { name: "Choose Wren (free)" }).click();
+  await page.getByRole("dialog", { name: "Audio settings" }).getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Sign in to generate audio" })).toBeVisible();
-  expect(publicRequests).toHaveLength(0);
   await page.getByRole("dialog", { name: "Sign in to generate audio" }).getByRole("button", { name: "Close" }).click();
   await expect(page.locator("article")).toBeVisible();
 });
 
-test("a signed-in free account can delete stored voices but must upgrade to clone", async ({ page }) => {
+test("a signed-in free account can delete stored custom voices but must upgrade to create one", async ({ page }) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
   const user = { id: "44444444-4444-4444-8444-444444444444", email: "free@example.com", aud: "authenticated", role: "authenticated",
@@ -296,7 +330,7 @@ test("a signed-in free account can delete stored voices but must upgrade to clon
   const session = { access_token: "free-phonon-token", refresh_token: "free-phonon-refresh", token_type: "bearer", expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200,
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200,
     json: { plan: "free", gold_offer_opted_in: false, daily_used_seconds: 1_560, daily_budget_seconds: 3_600, daily_remaining_seconds: 2_040 } }));
   let deleted = false;
   await page.route("**/api/v1/freereader/phonon/voices**", (route) => {
@@ -327,8 +361,8 @@ test("a signed-in free account can delete stored voices but must upgrade to clon
   expect(request.postDataJSON()).not.toHaveProperty("quality");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  await page.getByRole("dialog", { name: "Voice settings" }).getByRole("button", { name: /Clone a voice/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Clone a voice" });
+  await (await openVoicePicker(page)).getByRole("button", { name: /Manage custom voices/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Create custom voice" });
   await expect(dialog).toContainText("Old voice");
   await expect(dialog.getByRole("button", { name: "Use for books" })).toHaveCount(0);
   page.once("dialog", (confirmation) => confirmation.accept());
@@ -336,10 +370,10 @@ test("a signed-in free account can delete stored voices but must upgrade to clon
   await expect.poll(() => deleted).toBe(true);
   await expect(dialog).toContainText("Your first voice will appear here");
   await dialog.getByRole("button", { name: "Explore Gold" }).click();
-  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toContainText("Voice cloning");
+  await expect(page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" })).toContainText("Custom voices");
 });
 
-test("a Gold account shares cloned voices, quota, creation and narration with iOS", async ({ page }, testInfo) => {
+test("a Gold account shares custom voices, quota, creation and narration with iOS", async ({ page }, testInfo) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) test.skip(true, "Supabase frontend URL is needed for browser auth simulation");
   const owner = "33333333-3333-4333-8333-333333333333";
@@ -350,7 +384,7 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
   const session = { access_token: "phonon-test-token", refresh_token: "phonon-refresh", token_type: "bearer", expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
   await page.route("**/api/v1/freereader/sync/**", (route) => route.fulfill({ status: 403, json: { error: "sync_unavailable" } }));
   let pending = false;
   let active = false;
@@ -407,12 +441,11 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
   await page.getByRole("button", { name: /^html Phonon reading/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  const settings = page.getByRole("dialog", { name: "Voice settings" });
-  await expect(settings.getByLabel("Voice")).toContainText("iPhone voice (My voices)");
-  await expect(settings.getByLabel("Voice").locator("option").first()).toHaveText("Parker (Founder)");
-  await settings.getByRole("button", { name: /Clone a voice/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Clone a voice" });
-  await expect(dialog).toContainText("2 of 3 clones left this month");
+  const settings = await openVoicePicker(page);
+  await expect(settings.getByRole("region", { name: "Your custom voices" })).toContainText("iPhone voice");
+  await settings.getByRole("button", { name: "Create custom voice" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create custom voice" });
+  await expect(dialog).toContainText("2 of 3 custom voices left this month");
   await expect(dialog).toContainText("iPhone voice");
   await expect(dialog.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
   await dialog.locator('input[type="file"]').setInputFiles({ name: "sample.wav", mimeType: "audio/wav", buffer: playableWav(75) });
@@ -440,7 +473,7 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
   }
   await expect.poll(async () => Number((await dialog.locator('label[for="phonon-start"]').textContent())?.match(/Your clip: ([\d.]+)s/)?.[1])).toBeGreaterThan(20);
   await dialog.getByLabel("Voice name").fill("Web voice");
-  await dialog.getByRole("button", { name: "Clone this voice" }).click();
+  await dialog.getByRole("button", { name: "Create custom voice" }).click();
   await expect.poll(() => uploads.length).toBe(1);
   await expect(dialog.getByRole("button", { name: "Creating your voice…" })).toBeDisabled();
   await expect(dialog.locator('[class*="addSpinner"]')).toBeVisible();
@@ -448,12 +481,13 @@ test("a Gold account shares cloned voices, quota, creation and narration with iO
     name: "Web voice", length: 480044, rate: 24_000, bytes: 480_000,
   });
   releaseClone?.();
-  await expect(dialog).toContainText("1 of 3 clones left this month");
+  await expect(dialog).toContainText("1 of 3 custom voices left this month");
   await expect(dialog).toContainText("Web voice");
   await expect.poll(() => active).toBe(true);
   await dialog.getByRole("button", { name: "Use for books" }).first().click();
-  await expect(settings.getByLabel("Voice")).toHaveValue(`phonon:${voiceId}`);
-  await settings.getByRole("button", { name: "Done" }).click();
+  await expect(settings.getByRole("region", { name: "Your custom voices" }).locator("article").filter({ hasText: "iPhone voice" }).getByRole("button", { name: "iPhone voice selected" })).toHaveAttribute("aria-pressed", "true");
+  await settings.getByRole("button", { name: "Back to audio settings" }).click();
+  await page.getByRole("dialog", { name: "Audio settings" }).getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => speeches.length).toBeGreaterThan(0);
   expect(speeches[0].voice_id).toBe(voiceId);
@@ -525,10 +559,24 @@ test("signed-in free accounts without the opt-in see Gold upgrade prompts", asyn
   await expect(fontDialog).not.toContainText("These choices apply");
   await fontDialog.getByRole("button", { name: "Done" }).click();
   await voiceButton.click();
-  const voiceDialog = page.getByRole("dialog", { name: "Voice settings" });
+  const voiceDialog = page.getByRole("dialog", { name: "Audio settings" });
   await expect(voiceDialog.getByRole("switch")).toHaveCount(0);
   await expect(voiceDialog.getByLabel("Default reading view")).toHaveCount(0);
   await expect(voiceDialog).not.toContainText("Individual books remember");
+});
+
+test("free readers still see Gold prompts after email opt-in or a temporary usage failure", async ({ page }) => {
+  await signInFreeReader(page, true);
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
+  const banner = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
+  const floating = page.locator('button[class*="upgradeFab"]');
+  await expect(banner).toBeVisible();
+  if (await page.evaluate(() => innerWidth > 800)) await expect(floating).toBeVisible();
+
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 503, json: { error: "usage_unavailable" } }));
+  await page.reload();
+  await expect(banner).toBeVisible();
+  if (await page.evaluate(() => innerWidth > 800)) await expect(floating).toBeVisible();
 });
 
 test("an OAuth fallback to the homepage returns to the reader with the chosen billing interval", async ({ page }) => {
@@ -551,10 +599,10 @@ test("a Gold subscriber manages billing from the account circle in the library a
       app_metadata: { provider: "google", providers: ["google"] }, user_metadata: {}, created_at: new Date().toISOString() },
   };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 200, json: session.user }));
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200, json: { plan: "gold_yearly" } }));
   await page.route("**/api/v1/freereader/sync/**", (route) => route.fulfill({ status: 403, json: { error: "sync_unavailable" } }));
   const portalRequests: string[] = [];
-  await page.route("**/api/v1/freereader/billing/portal", (route) => {
+  await page.route("**/api/billing/portal", (route) => {
     portalRequests.push(route.request().headers().authorization ?? "");
     return route.fulfill({ status: 503, json: { error: "billing_not_configured" } });
   });
@@ -563,6 +611,8 @@ test("a Gold subscriber manages billing from the account circle in the library a
   const account = page.getByRole("button", { name: "Account settings" });
   await expect(account).toBeVisible();
   await expect(page.getByRole("button", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Upgrade to FreeReader Gold" })).toHaveCount(0);
+  await expect(page.locator('button[class*="upgradeFab"]')).toHaveCount(0);
   await account.click();
   await expect(page.getByText("FreeReader Gold", { exact: true })).toBeVisible();
   await expect(page.getByText("Yearly plan")).toBeVisible();
@@ -629,7 +679,7 @@ test("continuous scrolling, text sizing, settings and resume preserve the readin
   await page.getByRole("button", { name: "Increase text size" }).click();
   await expect(page.locator("article p").first()).not.toHaveCSS("font-size", originalSize);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Voice settings" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Audio settings" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("voice-settings.png") });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -974,6 +1024,8 @@ test("older browsers still highlight short words without changing text layout", 
 });
 
 test("voice settings generate at the chosen 0.5–3.0 speaking speed without player speed or quality controls", async ({ page }) => {
+  await signInFreeReader(page, false);
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
   const requests: Array<{ speed: number; engine?: string; quality?: string }> = [];
   await page.route("**/api/tts", (route) => {
     requests.push(route.request().postDataJSON());
@@ -984,7 +1036,7 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   await openControls(page);
   await expect(page.getByRole("combobox", { name: "Speed" })).toHaveCount(0);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Voice settings" });
+  const dialog = page.getByRole("dialog", { name: "Audio settings" });
   await expect(dialog.getByText("Quality")).toHaveCount(0);
   const slider = dialog.getByRole("slider", { name: "Speaking speed" });
   await expect(slider).toHaveAttribute("min", "0.5");
@@ -1000,14 +1052,15 @@ test("voice settings generate at the chosen 0.5–3.0 speaking speed without pla
   expect(requests[0].quality).toBeUndefined();
 
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  await dialog.getByLabel("Voice").selectOption("F4");
   await slider.focus();
   await slider.press("Home");
   await expect(slider).toHaveValue("0.5");
+  await (await openVoicePicker(page)).getByRole("region", { name: "Free voices" }).locator("article").filter({ hasText: "Wren (free)" })
+    .getByRole("button", { name: "Choose Wren (free)" }).click();
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
-  expect(requests[1]).toMatchObject({ speed: 0.5, engine: "supertonic" });
+  expect(requests[1]).toMatchObject({ speed: 0.5, engine: "paradee_lite", voice: "lite_wren" });
   expect(requests[1].quality).toBeUndefined();
 });
 
@@ -1017,8 +1070,9 @@ test("guest voice and reading defaults persist across books and visits", async (
   await page.getByRole("button", { name: /^html First default/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Voice settings" });
-  await dialog.getByRole("combobox", { name: "Voice", exact: true }).selectOption("af_river");
+  const dialog = page.getByRole("dialog", { name: "Audio settings" });
+  await (await openVoicePicker(page)).getByRole("region", { name: "Free voices" }).locator("article").filter({ hasText: "Wren (free)" })
+    .getByRole("button", { name: "Choose Wren (free)" }).click();
   await dialog.getByRole("slider", { name: "Speaking speed" }).focus();
   await dialog.getByRole("slider", { name: "Speaking speed" }).press("ArrowRight");
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -1032,7 +1086,7 @@ test("guest voice and reading defaults persist across books and visits", async (
   await page.getByRole("button", { name: /^html Second default/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  await expect(dialog.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_river");
+  await expect(dialog.getByRole("button", { name: /Choose voice, currently Wren \(free\)/ })).toBeVisible();
   await expect(dialog.getByRole("slider", { name: "Speaking speed" })).toHaveValue("1.1");
   await expect(dialog.getByRole("switch")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -1045,7 +1099,7 @@ test("guest voice and reading defaults persist across books and visits", async (
   await page.getByRole("button", { name: /^html First default/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  await expect(dialog.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_river");
+  await expect(dialog.getByRole("button", { name: /Choose voice, currently Wren \(free\)/ })).toBeVisible();
 });
 
 test("font settings preview spacing and tint immediately and retain position across documents", async ({ page }) => {
@@ -1128,8 +1182,9 @@ test("free accounts import guest defaults and restore them from account metadata
   await page.getByRole("button", { name: /^html Free account defaults/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Voice settings" });
-  await dialog.getByRole("combobox", { name: "Voice", exact: true }).selectOption("af_river");
+  const dialog = page.getByRole("dialog", { name: "Audio settings" });
+  await (await openVoicePicker(page)).getByRole("region", { name: "Free voices" }).locator("article").filter({ hasText: "Wren (free)" })
+    .getByRole("button", { name: "Choose Wren (free)" }).click();
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Font", exact: true }).click();
   const font = page.getByRole("dialog", { name: "Font settings" });
@@ -1153,20 +1208,20 @@ test("free accounts import guest defaults and restore them from account metadata
     }
     return route.fulfill({ status: 200, json: user });
   });
-  await page.route("**/api/v1/freereader/usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ status: 200, json: { plan: "free", gold_offer_opted_in: false } }));
   await page.route("**/auth/v1/logout**", (route) => route.fulfill({ status: 204, body: "" }));
   await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
   await page.reload();
   await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("button", { name: "Account settings" })).toBeVisible();
   await expect.poll(() => saved.length).toBeGreaterThan(0);
-  expect(saved[0]).toMatchObject({ openDyslexic: true, defaultVoices: { en: "af_river" }, lineSpacing: 2.5, readingBackground: "green" });
+  expect(saved[0]).toMatchObject({ openDyslexic: true, defaultVoices: { en: "lite_wren" }, lineSpacing: 2.5, readingBackground: "green" });
   await page.evaluate(() => localStorage.removeItem("freereader-reader-preferences:v1:22222222-2222-4222-8222-222222222222"));
   await page.reload();
   await page.getByRole("button", { name: /^html Free account defaults/ }).click();
   await openControls(page);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  await expect(dialog.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("af_river");
+  await expect(dialog.getByRole("button", { name: /Choose voice, currently Wren \(free\)/ })).toBeVisible();
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Font", exact: true }).click();
   await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
@@ -1182,6 +1237,8 @@ test("free accounts import guest defaults and restore them from account metadata
 });
 
 test("changing voice during first generation starts the new voice without another Listen click", async ({ page }) => {
+  await signInFreeReader(page, false);
+  await page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" }).getByRole("button", { name: "Close" }).click();
   const requests: Array<{ voice: string }> = [];
   let releaseFirst: (() => void) | undefined;
   await page.route("**/api/tts", async (route) => {
@@ -1200,8 +1257,9 @@ test("changing voice during first generation starts the new voice without anothe
     await page.getByRole("button", { name: "Listen", exact: true }).click();
     await expect.poll(() => requests.length).toBe(1);
     await page.getByRole("button", { name: "Voice", exact: true }).click();
-    await page.getByRole("dialog", { name: "Voice settings" }).getByLabel("Voice").selectOption("af_river");
-    await expect.poll(() => requests.some((request) => request.voice === "af_river")).toBe(true);
+    await (await openVoicePicker(page)).getByRole("region", { name: "Free voices" })
+      .locator("article").filter({ hasText: "Wren (free)" }).getByRole("button", { name: "Choose Wren (free)" }).click();
+    await expect.poll(() => requests.some((request) => request.voice === "lite_wren")).toBe(true);
     await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
     await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   } finally {
@@ -1210,6 +1268,7 @@ test("changing voice during first generation starts the new voice without anothe
 });
 
 test("changing language, voice, and speed restarts the current passage automatically with the new settings", async ({ page }) => {
+  await signInGoldReader(page);
   const requests: Array<{ voice: string; language?: string; engine?: string; speed: number }> = [];
   await page.route("**/api/tts", (route) => {
     requests.push(route.request().postDataJSON());
@@ -1222,13 +1281,14 @@ test("changing language, voice, and speed restarts the current passage automatic
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   const originalSource = await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.currentSrc);
   await page.getByRole("button", { name: "Voice", exact: true }).click();
-  const settings = page.getByRole("dialog", { name: "Voice settings" });
+  const settings = page.getByRole("dialog", { name: "Audio settings" });
   await settings.getByLabel("Language").selectOption("es");
   // The old audio must stop and the current passage must regenerate and resume by itself.
   await expect.poll(() => requests.some((request) => request.language === "es" && request.voice === "ef_dora" && request.engine === "kokoro")).toBe(true);
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement, previous) => audio.currentSrc && audio.currentSrc !== previous, originalSource)).toBe(true);
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
-  await settings.getByLabel("Voice").selectOption("em_alex");
+  await (await openVoicePicker(page)).getByRole("region", { name: "Gold voices" }).locator("article").filter({ hasText: "Alex" }).first()
+    .getByRole("button", { name: "Choose Alex" }).click();
   await expect.poll(() => requests.some((request) => request.voice === "em_alex")).toBe(true);
   const slider = settings.getByRole("slider", { name: "Speaking speed" });
   await slider.focus();

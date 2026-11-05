@@ -31,7 +31,7 @@ async function readSummary(response: Response): Promise<UsageSummary> {
 
 export function fetchUsage(token: string | null): Promise<UsageSummary> {
   return fetch(
-    `${API_BASE}/api/v1/freereader/usage?installation_id=${encodeURIComponent(installationId())}`,
+    `/api/reader-usage?installation_id=${encodeURIComponent(installationId())}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   ).then(readSummary);
 }

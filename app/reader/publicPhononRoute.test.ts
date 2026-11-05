@@ -47,3 +47,19 @@ test("Parker's English voice requires a session before requesting audio", async 
     { language: "en", voice: PUBLIC_PARKER_VOICE, steps: 12 }), /sign_in_required/);
   assert.equal(fetch.mock.callCount(), 0);
 });
+
+test("only the featured Parker custom voice has a selectable preview", async (t) => {
+  const previous = process.env.FREEREADER_TTS_API_TOKEN;
+  process.env.FREEREADER_TTS_API_TOKEN = "server-token";
+  t.after(() => { if (previous === undefined) delete process.env.FREEREADER_TTS_API_TOKEN; else process.env.FREEREADER_TTS_API_TOKEN = previous; });
+  const fetch = t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), { texts: ["Hello."], speed: 1, voice_id: PUBLIC_PARKER_VOICE.slice(7) });
+    return new Response(new Uint8Array([1]), { headers: { "Content-Type": "audio/mp4" } });
+  });
+  const request = (id: unknown) => new Request("http://localhost/api/public-phonon-tts", { method: "POST",
+    headers: { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" },
+    body: JSON.stringify({ texts: ["Hello."], speed: 1, voice_id: id }) });
+  assert.equal((await POST(request(PUBLIC_PARKER_VOICE.slice(7)))).status, 200);
+  assert.equal((await POST(request("402c975a-9bc5-4ee4-a73a-1b323319918c"))).status, 400);
+  assert.equal(fetch.mock.callCount(), 1);
+});

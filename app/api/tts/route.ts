@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { normalizeCapitalization } from "../../reader/speechText";
+import { isLightVoice } from "../../reader/voices";
 
 export const runtime = "nodejs";
 
@@ -18,8 +19,11 @@ export async function POST(request: Request) {
   if (!single && !texts?.length) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-  if (body.engine !== undefined && body.engine !== "supertonic" && body.engine !== "kokoro") {
+  if (body.engine !== undefined && body.engine !== "supertonic" && body.engine !== "kokoro" && body.engine !== "paradee_lite") {
     return NextResponse.json({ error: "invalid_engine" }, { status: 400 });
+  }
+  if (body.engine === "paradee_lite" && (body.language !== "en" || typeof body.voice !== "string" || !isLightVoice(body.voice) || body.detectLanguage === true)) {
+    return NextResponse.json({ error: "invalid_lite_request" }, { status: 400 });
   }
   const upstreamBody: Record<string, unknown> = texts
     ? { texts: texts.map(normalizeCapitalization), speed: body.speed }
@@ -31,7 +35,7 @@ export async function POST(request: Request) {
     if (body.engine && typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   } else {
-    if (typeof body.language === "string" && (body.language !== "en" || body.engine === "supertonic")) upstreamBody.language = body.language;
+    if (typeof body.language === "string" && (body.language !== "en" || body.engine === "supertonic" || body.engine === "paradee_lite")) upstreamBody.language = body.language;
     if (typeof body.voice === "string") upstreamBody.voice = body.voice;
     if (typeof body.steps === "number") upstreamBody.steps = body.steps;
   }

@@ -4,14 +4,14 @@ import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
 import { currentAccessToken, currentSessionAccessToken } from "./authToken";
 import { SpeechCancelledError } from "./ttsDiagnostics";
-import { clonedVoiceId, isClonedVoice, isKokoroVoiceForLanguage, isPhononVoice, isQwenVoice, PUBLIC_PARKER_VOICE, voiceDisplayName } from "./voices";
+import { clonedVoiceId, isCatalogVoice, isClonedVoice, isKokoroVoiceForLanguage, isPhononVoice, isQwenVoice, PUBLIC_PARKER_VOICE, voiceDisplayName } from "./voices";
 import { findClonedVoice } from "./cloneVoices";
-import { speakPhononVoice } from "./phonon";
+import { speakPhononCatalog, speakPhononVoice } from "./phonon";
 import type { SpeechResult } from "./mobileSpeech";
 import { parseWordTimings } from "./spokenWord";
 
 type BatchItem = { text: string; isHeading: boolean };
-type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic"; source?: TelemetrySource; instruct?: string; enhanced?: boolean };
+type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic" | "paradee_lite"; source?: TelemetrySource; instruct?: string; enhanced?: boolean };
 
 function unavailableMessage(response: Response, payload: { error?: unknown } | null): string {
   if (payload?.error === "usage_limit_reached") {
@@ -21,7 +21,7 @@ function unavailableMessage(response: Response, payload: { error?: unknown } | n
   if (payload?.error === "premium_required") return "A Pro or Premium subscription is required to use premium voices.";
   if (payload?.error === "enhanced_audio_required") return "FreeReader Gold is required for enhanced audio. Refresh your account and try again.";
   if (payload?.error === "premium_voice_limit_reached") return "You have used your monthly premium voice allowance. Try a standard voice or upgrade your plan.";
-  if (payload?.error === "voice_not_owned") return "This cloned voice belongs to another account.";
+  if (payload?.error === "voice_not_owned") return "This custom voice belongs to another account.";
   if (typeof payload?.error === "string" && payload.error) return payload.error;
   if (response.status === 413) return "This passage is too long to narrate.";
   return "Speech service is unavailable. Tap Play to retry.";
@@ -61,12 +61,16 @@ export class RemoteSpeechClient {
     const generationStartedAt = performance.timeOrigin + started;
     try {
       const requestedVoice = options?.voice;
-      if (requestedVoice && isPhononVoice(requestedVoice)) {
-        if (options?.language !== "en") throw new Error("Cloned Phonon voices are available for English books only.");
-        status?.("Generating with your cloned voice");
+      if (requestedVoice && (isPhononVoice(requestedVoice) || isCatalogVoice(requestedVoice))) {
+        if (options?.language !== "en") throw new Error("Custom Phonon voices are available for English books only.");
+        status?.("Generating with your custom voice");
         const texts = items.map((item) => normalizeForSpeech(item.text, item.isHeading, "en"));
         let response: Response;
-        if (requestedVoice === PUBLIC_PARKER_VOICE) {
+        if (isCatalogVoice(requestedVoice)) {
+          const token = await currentSessionAccessToken();
+          if (!token) throw new Error("sign_in_required");
+          response = await speakPhononCatalog(token, requestedVoice.slice(8), texts, speechSpeed, controller.signal);
+        } else if (requestedVoice === PUBLIC_PARKER_VOICE) {
           const token = await currentSessionAccessToken();
           if (!token) throw new Error("sign_in_required");
           response = await fetch("/api/public-phonon-tts", { method: "POST",
@@ -78,7 +82,7 @@ export class RemoteSpeechClient {
           }
         } else {
           const token = await currentSessionAccessToken();
-          if (!token) throw new Error("Sign in to use your cloned voice.");
+          if (!token) throw new Error("Sign in to use your custom voice.");
           response = await speakPhononVoice(token, requestedVoice.slice(7), texts, speechSpeed, controller.signal);
         }
         if (items.length === 1) {
@@ -126,7 +130,7 @@ export class RemoteSpeechClient {
           : normalizeForSpeech(item.text, item.isHeading, language)),
         speed: speechSpeed,
       };
-      if (language === "en" && requestedVoice && isKokoroVoiceForLanguage(requestedVoice, language) && !supertonic) body.word_timings = true;
+      if (language === "en" && requestedVoice && isKokoroVoiceForLanguage(requestedVoice, language) && !supertonic && options?.engine !== "paradee_lite") body.word_timings = true;
       if (options) {
         body.language = language;
         body.voice = options.voice;
@@ -198,12 +202,12 @@ export class RemoteSpeechClient {
     voiceRef: string, language: string | undefined, signal: AbortSignal, generationStartedAt: number,
     instruct?: string): Promise<SpeechResult[]> {
     const record = findClonedVoice(clonedVoiceId(voiceRef));
-    if (!record) throw new Error("This cloned voice is not available in this browser. Create it again from Clone voice.");
+    if (!record) throw new Error("This custom voice is not available in this browser. Create it again from Custom voices.");
     const parts: SpeechResult[] = [];
     for (const item of items) {
       status?.(items.length > 1
-        ? `Generating ${items.length} passages with your cloned voice`
-        : "Generating with your cloned voice");
+        ? `Generating ${items.length} passages with your custom voice`
+        : "Generating with your custom voice");
       const response = await fetch("/api/clone-tts", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(currentAccessToken() ? { Authorization: `Bearer ${currentAccessToken()}` } : {}) },

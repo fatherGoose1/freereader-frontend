@@ -39,5 +39,5 @@ export const ENHANCED_FEATURES: readonly EnhancedFeature[] = [
   { title: "Unlimited audio" },
   { title: "Device syncing" },
   { title: "Faster generation" },
-  { title: "Voice cloning" },
+  { title: "Custom voices" },
 ];

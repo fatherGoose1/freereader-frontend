@@ -3,7 +3,7 @@ import { RemoteSpeechClient } from "./remoteSpeech";
 import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
-import { clonedVoiceId, isClonedVoice, isKokoroVoice, isPhononVoice, isQwenVoice, isSupertonicVoice } from "./voices";
+import { clonedVoiceId, isCatalogVoice, isClonedVoice, isKokoroVoice, isLightVoice, isPhononVoice, isQwenVoice, isSupertonicVoice } from "./voices";
 import type { TelemetrySource } from "./telemetry";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 
@@ -31,7 +31,10 @@ export class NarrationRouter {
     this.active = undefined;
   }
 
-  async route(voice: NarratorVoice, language: SpeechLanguage): Promise<NarrationRoute> {
+  async route(voice: NarratorVoice, language: SpeechLanguage, free = false): Promise<NarrationRoute> {
+    if (isCatalogVoice(voice) && language === "en") {
+      return { model: "phonon-31m-catalog-v1", voice, provider: "Server", mobile: this.mobile };
+    }
     if (isPhononVoice(voice) && language === "en") {
       return { model: "phonon-31m-en", voice, provider: "Server", mobile: this.mobile };
     }
@@ -46,19 +49,24 @@ export class NarrationRouter {
       return { model: "qwen3-tts-customvoice-v1", voice, provider: "Server", mobile: this.mobile };
     }
     const selected = voiceForLanguage(voice, language);
+    if (free && language === "en" && isLightVoice(selected)) {
+      return { model: "paradee-v2f-lite-en-server-v1", voice: selected, provider: "Server", mobile: this.mobile };
+    }
+    // A saved light voice must not be sent as a Kokoro ID after upgrading.
+    const standard = isLightVoice(selected) && selected !== "af_heart" ? "af_heart" : selected;
     // The reader synthesizes Kokoro's trained languages with their Kokoro voices;
     // Korean and other languages without trained voices use Supertonic. The on-device WASM path is
     // retired, so `provider` is always "Server" and mobile narrates every language.
-    const model = speechEngineForVoice(selected, language) === "kokoro"
+    const model = speechEngineForVoice(standard, language) === "kokoro"
       ? "kokoro-82m-fp32-server-v1"
       : "supertonic-3-fp32-server-v1";
-    return { model, voice: selected, provider: "Server", mobile: this.mobile };
+    return { model, voice: standard, provider: "Server", mobile: this.mobile };
   }
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
     isHeading: boolean, speechSpeed: number, language: SpeechLanguage,
     isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook", instruct?: string,
-    enhanced = false): Promise<SpeechResult & { route: NarrationRoute }> {
+    enhanced = false, free = false): Promise<SpeechResult & { route: NarrationRoute }> {
     const epoch = this.epoch;
     const checkRequest = () => {
       if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
@@ -66,7 +74,7 @@ export class NarrationRouter {
     const task = this.tail.then(async () => {
       const started = performance.now();
       checkRequest();
-      const route = await this.route(voice, language);
+      const route = await this.route(voice, language, free);
       checkRequest();
       let result: SpeechResult;
       if (route.provider === "Server") {
@@ -74,7 +82,8 @@ export class NarrationRouter {
         this.active = "remote";
         result = await this.clients.remote.synthesize(text, speechSpeed, isHeading, status,
           { language, voice: String(route.voice), steps,
-            ...(isSupertonicVoice(route.voice) ? { engine: "supertonic" as const }
+            ...(route.model.startsWith("paradee-") ? { engine: "paradee_lite" as const }
+              : isSupertonicVoice(route.voice) ? { engine: "supertonic" as const }
               : language !== "en" && isKokoroVoice(route.voice) ? { engine: "kokoro" as const } : {}),
             source, instruct, enhanced });
       } else {
@@ -96,7 +105,7 @@ export class NarrationRouter {
 
   synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice, steps: number, status: TtsStatus | undefined,
     speechSpeed: number, language: SpeechLanguage,
-    isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook", enhanced = false): Promise<{ parts: SpeechResult[]; route: NarrationRoute }> {
+    isNeeded: () => boolean = () => true, source: TelemetrySource = "audiobook", enhanced = false, free = false): Promise<{ parts: SpeechResult[]; route: NarrationRoute }> {
     const epoch = this.epoch;
     const checkRequest = () => {
       if (epoch !== this.epoch || !isNeeded()) throw new SpeechCancelledError("Narration was cancelled");
@@ -104,7 +113,7 @@ export class NarrationRouter {
     const task = this.tail.then(async () => {
       const started = performance.now();
       checkRequest();
-      const route = await this.route(voice, language);
+      const route = await this.route(voice, language, free);
       checkRequest();
       let parts: SpeechResult[];
       if (route.provider === "Server") {
@@ -113,7 +122,8 @@ export class NarrationRouter {
         parts = await this.clients.remote.synthesizeBatch(
           texts.map((text, position) => ({ text, isHeading: headings[position] ?? false })), speechSpeed, status,
           { language, voice: String(route.voice), steps,
-            ...(isSupertonicVoice(route.voice) ? { engine: "supertonic" as const }
+            ...(route.model.startsWith("paradee-") ? { engine: "paradee_lite" as const }
+              : isSupertonicVoice(route.voice) ? { engine: "supertonic" as const }
               : language !== "en" && isKokoroVoice(route.voice) ? { engine: "kokoro" as const } : {}), source, enhanced });
       } else {
         // Retired local WASM path, kept disabled unless server narration is unavailable.
@@ -148,8 +158,8 @@ function getRouter() {
   return router;
 }
 
-export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage) {
-  return getRouter().route(voice, language);
+export function narrationRoute(voice: NarratorVoice, language: SpeechLanguage, free = false) {
+  return getRouter().route(voice, language, free);
 }
 
 export function cancelNarration() {
@@ -157,11 +167,11 @@ export function cancelNarration() {
 }
 
 export function synthesize(text: string, voice: NarratorVoice = "af_heart", steps = 8, status?: TtsStatus,
-  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook", instruct?: string, enhanced = false) {
-  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded, source, instruct, enhanced);
+  isHeading = false, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook", instruct?: string, enhanced = false, free = false) {
+  return getRouter().synthesize(text, voice, steps, status, isHeading, speechSpeed, language, isNeeded, source, instruct, enhanced, free);
 }
 
 export function synthesizeBatch(texts: string[], headings: boolean[], voice: NarratorVoice = "af_heart", steps = 8,
-  status?: TtsStatus, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook", enhanced = false) {
-  return getRouter().synthesizeBatch(texts, headings, voice, steps, status, speechSpeed, language, isNeeded, source, enhanced);
+  status?: TtsStatus, speechSpeed = 0.9, language: SpeechLanguage = "en", isNeeded?: () => boolean, source: TelemetrySource = "audiobook", enhanced = false, free = false) {
+  return getRouter().synthesizeBatch(texts, headings, voice, steps, status, speechSpeed, language, isNeeded, source, enhanced, free);
 }

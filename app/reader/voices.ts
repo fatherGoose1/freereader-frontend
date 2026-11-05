@@ -42,6 +42,24 @@ export const KOKORO_VOICES = [
 ] as const;
 
 export type KokoroVoice = (typeof KOKORO_VOICES)[number][0];
+// Heart is Paradee v2f lite; the other nine use separate distilled Phonon weights.
+// These IDs never overlap with paid Kokoro, Supertonic or cloned voice IDs.
+export const LIGHT_VOICES = [
+  ["af_heart", "Heart (free)"],
+  ["lite_wren", "Wren (free)"],
+  ["lite_everly", "Everly (free)"],
+  ["lite_hadley", "Hadley (free)"],
+  ["lite_bryony", "Bryony (free)"],
+  ["lite_maeve", "Maeve (free)"],
+  ["lite_miles", "Miles (free)"],
+  ["lite_trevor", "Trevor (free)"],
+  ["lite_edwin", "Edwin (free)"],
+  ["lite_hugh", "Hugh (free)"],
+] as const;
+export type LightVoice = (typeof LIGHT_VOICES)[number][0];
+export function isLightVoice(voice: string): voice is LightVoice {
+  return LIGHT_VOICES.some(([id]) => id === voice);
+}
 const KOKORO_LANGUAGE_PREFIXES: Record<string, readonly string[]> = {
   en: ["a", "b"], es: ["e"], fr: ["f"], hi: ["h"], it: ["i"],
   ja: ["j"], pt: ["p"], zh: ["z"],
@@ -64,13 +82,18 @@ export function isKokoroVoiceForLanguage(voice: string, language: string): voice
 export type ClonedVoice = `clone:${string}`;
 export type PhononVoiceRef = `phonon:${string}`;
 export const PUBLIC_PARKER_VOICE: PhononVoiceRef = "phonon:8e7e52e7-77f4-4677-a488-ded347498b1a";
+export type CatalogVoiceRef = `catalog:${string}`;
+export function catalogVoiceRef(id: string): CatalogVoiceRef { return `catalog:${id}`; }
+export function isCatalogVoice(voice: string): voice is CatalogVoiceRef {
+  return /^catalog:(?:[a-zA-Z0-9_-]{16}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(voice);
+}
 export const QWEN_VOICES = [
   ["qwen_ryan", "Ryan"], ["qwen_aiden", "Aiden"], ["qwen_vivian", "Vivian"],
   ["qwen_serena", "Serena"], ["qwen_ono_anna", "Ono Anna"], ["qwen_sohee", "Sohee"],
   ["qwen_eric", "Eric"], ["qwen_dylan", "Dylan"], ["qwen_uncle_fu", "Uncle Fu"],
 ] as const;
 export type QwenVoice = (typeof QWEN_VOICES)[number][0];
-export type NarratorVoice = KokoroVoice | Voice | ClonedVoice | PhononVoiceRef | QwenVoice;
+export type NarratorVoice = KokoroVoice | LightVoice | Voice | ClonedVoice | PhononVoiceRef | CatalogVoiceRef | QwenVoice;
 export const QWEN_LANGUAGES = new Set(["en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"]);
 export function isQwenVoice(voice: string): voice is QwenVoice {
   return QWEN_VOICES.some(([id]) => id === voice);
@@ -139,8 +162,9 @@ export function narratorVoices(): Array<[NarratorVoice, string]> {
 }
 
 export function voiceDisplayName(voice: NarratorVoice | string): string | undefined {
-  if (isClonedVoice(voice) || isPhononVoice(voice)) return undefined;
+  if (isClonedVoice(voice) || isPhononVoice(voice) || isCatalogVoice(voice)) return undefined;
   if (isQwenVoice(voice)) return QWEN_VOICES.find(([id]) => id === voice)?.[1];
+  if (voice.startsWith("lite_")) return LIGHT_VOICES.find(([id]) => id === voice)?.[1];
   return narratorVoices().find(([value]) => value === voice)?.[1];
 }
 

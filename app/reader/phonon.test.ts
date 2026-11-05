@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPhononVoice, deletePhononVoice, listPhononVoices, phononVoiceStatus, speakPhononVoice } from "./phonon";
+import { createPhononVoice, deletePhononVoice, listPhononCatalog, listPhononVoices, phononVoiceStatus, speakPhononCatalog, speakPhononVoice } from "./phonon";
 
 test("Phonon catalog and quota come from the authenticated account, not browser storage", async (t) => {
   const calls: Array<{ path: string; authorization: string | null; method: string }> = [];
@@ -32,5 +32,20 @@ test("Phonon catalog and quota come from the authenticated account, not browser 
 
 test("the backend's shared quota errors are shown without a local counter", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ error: "monthly_limit_reached" }, { status: 409 }));
-  await assert.rejects(createPhononVoice("token", "Voice", new Blob()), /three monthly voice clones/);
+  await assert.rejects(createPhononVoice("token", "Voice", new Blob()), /three monthly custom voices/);
+});
+
+test("Phonon Gold catalogue lists publicly but its narration uses account authorization", async (t) => {
+  const calls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(String(input));
+    if (calls.length === 1) return Response.json({ voices: [{ id: "NbpkqMVS3CJeq2j8", name: "Zoey", feeling: "Playful" }] });
+    assert.equal(new Headers(init?.headers).get("X-FreeReader-User-Token"), "gold-token");
+    assert.deepEqual(JSON.parse(String(init?.body)), { voice_id: "NbpkqMVS3CJeq2j8", texts: ["Hello"], speed: 1 });
+    return new Response("audio", { headers: { "Content-Type": "audio/mp4" } });
+  });
+  assert.equal((await listPhononCatalog())[0].name, "Zoey");
+  assert.equal((await speakPhononCatalog("gold-token", "NbpkqMVS3CJeq2j8", ["Hello"], 1)).status, 200);
+  assert.equal(calls[0], "/api/phonon-catalog");
+  assert.equal(calls[1], "/api/phonon-catalog-tts");
 });

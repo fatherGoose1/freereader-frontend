@@ -122,7 +122,7 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
     setError("");
     try {
       const token = await currentSessionAccessToken();
-      if (!token) throw new Error("Sign in to clone a voice.");
+      if (!token) throw new Error("Sign in to create a custom voice.");
       await createPhononVoice(token, name.trim(), await preparePhononClip(audio, start));
       setName("");
       await refresh();
@@ -133,7 +133,7 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
   }
 
   async function remove(id: string, voiceName: string) {
-    if (!window.confirm(`Delete ${voiceName}? Successful clones still count toward this month's three voices.`)) return;
+    if (!window.confirm(`Delete ${voiceName}? Custom voices you've created still count toward this month's three-voice allowance.`)) return;
     setBusy(true);
     setError("");
     try {
@@ -148,8 +148,8 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
   }
 
   return <div className={styles.settingsBackdrop} onMouseDown={onClose}>
-    <div className={`${styles.voicePopover} ${styles.phononDialog}`} role="dialog" aria-modal="true" aria-label="Clone a voice" onMouseDown={(event) => event.stopPropagation()}>
-      <div className={styles.settingsTitle}><strong>Clone a voice</strong><button type="button" onClick={onClose}>Done</button></div>
+    <div className={`${styles.voicePopover} ${styles.phononDialog}`} role="dialog" aria-modal="true" aria-label="Create custom voice" onMouseDown={(event) => event.stopPropagation()}>
+      <div className={styles.settingsTitle}><strong>Custom voices</strong><button type="button" onClick={onClose}>Done</button></div>
       <p>Record or import a familiar voice for your English books. Your voices and monthly allowance are shared with the iPhone app.</p>
       {!session ? <div className={styles.phononSection}><p>Sign in to save your voices to your account.</p>
         <button type="button" onClick={onSignIn}>Sign in</button></div>
@@ -161,7 +161,7 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
             <p>A linked FreeReader Gold subscription is required to create and use a voice. You can still delete saved voices.</p>
             <button type="button" onClick={onUpgrade}>Explore Gold</button>
           </div> : <div className={styles.phononSection}>
-            <strong>{catalog.monthly_remaining} of 3 clones left this month · {catalog.stored_remaining} storage slots open</strong>
+            <strong>{catalog.monthly_remaining} of 3 custom voices left this month · {catalog.stored_remaining} storage slots open</strong>
             <div className={styles.phononActions}>
               <button type="button" onClick={() => void toggleRecording()} disabled={busy}>{recording ? "Stop recording" : "Record"}</button>
               <button type="button" onClick={() => fileInput.current?.click()} disabled={busy || recording}>Import audio</button>
@@ -175,7 +175,7 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
             {audio && !recording && <>
               <label htmlFor="phonon-name">Voice name <span className={styles.phononRequired} aria-label="required">*</span></label>
               <input id="phonon-name" type="text" required maxLength={80} value={name} placeholder="e.g. Grandma's stories" onChange={(event) => setName(event.target.value)} />
-              <small>Drag the window to choose the ten seconds you want to clone.</small>
+              <small>Drag the window to choose ten seconds for your custom voice.</small>
               <PhononWaveformWindow peaks={peaks} duration={audio.duration} visibleStart={visibleStart}
                 visibleDuration={Math.min(audio.duration, 60)} start={start} onChange={setStart} />
               {audio.duration > 60 && <label htmlFor="phonon-timeline">Explore the recording: {visibleStart.toFixed(1)}s – {(visibleStart + 60).toFixed(1)}s
@@ -194,13 +194,13 @@ export default function PhononDialog({ session, onClose, onUpgrade, onSignIn, on
               <button className={styles.primaryAction} type="button" onClick={() => void create()}
                 disabled={busy || !name.trim() || !catalog.monthly_remaining || !catalog.stored_remaining}>
                 {creating && <span className={styles.addSpinner} aria-hidden="true" />}
-                {creating ? "Creating your voice…" : name.trim() ? "Clone this voice" : "Please name your voice"}
+                {creating ? "Creating your voice…" : name.trim() ? "Create custom voice" : "Please name your voice"}
               </button>
               {!catalog.monthly_remaining && <small>Your monthly voices refresh next month.</small>}
             </>}
           </div>}
           <div className={styles.phononSection}>
-            <strong>Your voices</strong>
+            <strong>Your custom voices</strong>
             {!catalog.voices.length && <p>Your first voice will appear here.</p>}
             {catalog.voices.map((voice) => <div className={styles.phononVoice} key={voice.id}>
               <span><b>{voice.name}</b><small>{voice.status === "active" ? "Ready for your books" : voice.status === "pending"

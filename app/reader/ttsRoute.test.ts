@@ -105,6 +105,31 @@ test("English Supertonic requests tell the backend which model to use", async (t
   assert.equal(fetch.mock.callCount(), 1);
 });
 
+test("lite is an explicit English Heart opt-in and does not request Kokoro word timings", async (t) => {
+  const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
+  process.env.FREEREADER_TTS_API_TOKEN = "test-token";
+  t.after(() => {
+    if (originalToken === undefined) delete process.env.FREEREADER_TTS_API_TOKEN;
+    else process.env.FREEREADER_TTS_API_TOKEN = originalToken;
+  });
+  const fetch = t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const voice = (JSON.parse(String(init?.body)) as { voice: string }).voice;
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      texts: ["Hello reader."], speed: 1, voice, language: "en", engine: "paradee_lite", steps: 12,
+    });
+    assert.ok(voice === "af_heart" || voice === "lite_wren");
+    return new Response(new Uint8Array([1]), { headers: { "Content-Type": "audio/mp4", "X-TTS-Model": "paradee-v2f-lite-en" } });
+  });
+  const headers = { "Content-Type": "application/json", "X-FreeReader-User-Token": "reader-token" };
+  const body = { texts: ["Hello reader."], speed: 1, voice: "af_heart", language: "en", engine: "paradee_lite", steps: 12 };
+  assert.equal((await POST(new Request("http://localhost/api/tts", { method: "POST", headers, body: JSON.stringify(body) }))).status, 200);
+  assert.equal((await POST(new Request("http://localhost/api/tts", { method: "POST", headers,
+    body: JSON.stringify({ ...body, voice: "lite_wren" }) }))).status, 200);
+  assert.equal((await POST(new Request("http://localhost/api/tts", { method: "POST", headers,
+    body: JSON.stringify({ ...body, voice: "af_bella" }) }))).status, 400);
+  assert.equal(fetch.mock.callCount(), 2);
+});
+
 test("all signed-in requests use the same audio quality and anonymous requests are rejected", async (t) => {
   const originalToken = process.env.FREEREADER_TTS_API_TOKEN;
   process.env.FREEREADER_TTS_API_TOKEN = "test-token";

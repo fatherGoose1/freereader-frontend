@@ -1,5 +1,5 @@
 import { SPEECH_LANGUAGES, voicesForLanguage, type SpeechLanguage } from "./speech";
-import { isPhononVoice, type NarratorVoice } from "./voices";
+import { isCatalogVoice, isLightVoice, isPhononVoice, type NarratorVoice } from "./voices";
 import type { LibraryBook } from "./types";
 import { READING_BACKGROUNDS, type ReadingBackground } from "./readingAppearance";
 
@@ -37,7 +37,7 @@ export function parseReaderPreferences(value: unknown): ReaderPreferences | null
     for (const [language, voice] of Object.entries(record.defaultVoices)) {
       if (SPEECH_LANGUAGES.some(([code]) => code === language) && typeof voice === "string"
         && (voicesForLanguage(language as SpeechLanguage).some(([id]) => id === voice)
-          || language === "en" && isPhononVoice(voice))) {
+          || language === "en" && (isPhononVoice(voice) || isCatalogVoice(voice) || isLightVoice(voice)))) {
         defaultVoices[language as SpeechLanguage] = voice as NarratorVoice;
       }
     }

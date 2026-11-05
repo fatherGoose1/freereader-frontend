@@ -1,6 +1,8 @@
 import {
   englishVoices,
   isClonedVoice,
+  isCatalogVoice,
+  isLightVoice,
   isKokoroVoiceForLanguage,
   isQwenVoice,
   isPhononVoice,
@@ -50,6 +52,8 @@ export function voicesForLanguage(language: SpeechLanguage): readonly (readonly 
 }
 
 export function voiceForLanguage(voice: NarratorVoice, language: SpeechLanguage): NarratorVoice {
+  if (language === "en" && isLightVoice(voice)) return voice;
+  if (language === "en" && isCatalogVoice(voice)) return voice;
   // Phonon only synthesizes English; never send another language to its endpoint.
   if (isPhononVoice(voice) && language === "en") return voice;
   // Cloned voices are language-agnostic; never remap them to a built-in default.

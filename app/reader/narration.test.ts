@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NarrationRouter } from "./narration";
 import { SpeechCancelledError } from "./ttsDiagnostics";
+import { LIGHT_VOICES } from "./voices";
 
 const audio = { blob: new Blob(), duration: 2, generationSeconds: 1, generationStartedAt: 1_000, provider: "Server" };
 function setup(mobile: boolean, remoteError?: Error) {
   const calls: string[] = [];
+  const engines: Array<string | undefined> = [];
   const router = new NarrationRouter(mobile, {
     supertonic: {
       async synthesize(request) { calls.push(`supertonic:${request.mobile}:${request.voice}:${request.language}`); return { ...audio, provider: "WASM" }; },
@@ -13,11 +15,13 @@ function setup(mobile: boolean, remoteError?: Error) {
     },
     remote: {
       async synthesize(text, _speed, _isHeading, _status, options) {
+        engines.push(options?.engine);
         calls.push(`remote:${text}${options ? `:${options.language}:${options.voice}:${options.steps}${options.instruct ? `:${options.instruct}` : ""}` : ""}`);
         if (remoteError) throw remoteError;
         return audio;
       },
       async synthesizeBatch(items, _speed, _status, options) {
+        engines.push(options?.engine);
         calls.push(`remote-batch:${items.map((item) => item.text).join("|")}${options ? `:${options.language}:${options.voice}:${options.steps}` : ""}`);
         if (remoteError) throw remoteError;
         return items.map(() => audio);
@@ -26,7 +30,7 @@ function setup(mobile: boolean, remoteError?: Error) {
     },
   });
   return {
-    router, calls,
+    router, calls, engines,
     speakEnglish: () => router.synthesize("Hello", "af_heart", 4, undefined, false, 1, "en"),
     speakFrench: () => router.synthesize("Bonjour", "M3", 4, undefined, false, 1, "fr"),
   };
@@ -55,6 +59,23 @@ test("batches English passages into a single remote call", async () => {
   assert.equal(parts.length, 3);
   assert.equal(route.provider, "Server");
   assert.deepEqual(calls, ["remote-batch:One|Two|Three:en:af_heart:4"]);
+});
+
+test("all ten light voices keep their own cache keys and engine; paid/non-English routes stay separate", async () => {
+  const { router, calls, engines } = setup(false);
+  for (const [voice] of LIGHT_VOICES) {
+    const route = await router.route(voice, "en", true);
+    assert.equal(route.model, "paradee-v2f-lite-en-server-v1");
+    assert.equal(route.voice, voice);
+  }
+  assert.equal((await router.route("af_bella", "en", true)).model, "kokoro-82m-fp32-server-v1");
+  assert.equal((await router.route("af_heart", "fr", true)).model, "kokoro-82m-fp32-server-v1");
+  assert.equal((await router.route("af_heart", "en", false)).model, "kokoro-82m-fp32-server-v1");
+  assert.equal((await router.route("lite_wren", "en", false)).voice, "af_heart");
+  const result = await router.synthesize("Hello", "lite_wren", 4, undefined, false, 1, "en", undefined, "audiobook", undefined, false, true);
+  assert.equal(result.route.model, "paradee-v2f-lite-en-server-v1");
+  assert.deepEqual(calls, ["remote:Hello:en:lite_wren:4"]);
+  assert.deepEqual(engines, ["paradee_lite"]);
 });
 
 test("English Supertonic selections use their chosen voice and server model", async () => {
@@ -95,6 +116,15 @@ test("a shared Phonon voice uses the English backend route, not the legacy clone
   assert.equal(result.route.model, "phonon-31m-en");
   assert.deepEqual(calls, [`remote:Hello:en:${voice}:12`]);
   assert.equal((await router.route(voice, "fr")).model, "kokoro-82m-fp32-server-v1");
+});
+
+test("a Gold Phonon catalogue voice has its own model and keeps its voice ID", async () => {
+  const { router, calls } = setup(false);
+  const voice = "catalog:NbpkqMVS3CJeq2j8";
+  const result = await router.synthesize("Hello", voice, 12, undefined, false, 1, "en");
+  assert.equal(result.route.model, "phonon-31m-catalog-v1");
+  assert.deepEqual(calls, [`remote:Hello:en:${voice}:12`]);
+  assert.equal((await router.route(voice, "fr")).voice, "ff_siwis");
 });
 
 for (const mobile of [false, true]) {

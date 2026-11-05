@@ -275,6 +275,7 @@
 
 /* Consistent dialogs, inputs, and selection lists. */
 .modalBackdrop, .settingsBackdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; padding: 24px; background: #17253e66; backdrop-filter: blur(4px); }
+.modalBackdrop { z-index: 60; }
 .modal { width: min(550px, 100%); max-height: calc(100dvh - 48px); overflow: auto; padding: 30px; background: #fff; border: 1px solid #e4e9f3; border-radius: 18px; box-shadow: 0 24px 80px #17253e33; }
 .modal h2 { margin: 8px 0 12px; font-size: 25px; overflow-wrap: anywhere; }
 .modal p { color: var(--app-secondary); font-size: 13px; line-height: 1.65; }
@@ -392,6 +393,9 @@
 .settingsRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; color: #67758d; font-size: 13px; }
 .settingsRow > span { display: flex; align-items: center; gap: 6px; }
 .settingsRow select { min-width: 0; max-width: 62%; min-height: 40px; padding: 8px; color: #425d98; background: #f3f6fc; border: 1px solid #e1e8f5; border-radius: 7px; }
+.settingsVoiceTrigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; max-width: 70%; min-height: 42px; padding: 8px 12px; color: #425d98; background: #f3f6fc; border: 1px solid #e1e8f5; border-radius: 7px; font-size: 13px; cursor: pointer; }
+.settingsVoiceTrigger span { color: #7285ad; font-size: 22px; line-height: 1; }
+.settingsVoiceTrigger:hover { border-color: #7391cf; background: #eef3ff; }
 .preferenceAction { justify-self: start; padding: 0; color: var(--app-blue); background: transparent; border: 0; font-size: 12px; cursor: pointer; }
 .preferenceAction:disabled { color: #8792a5; cursor: default; }
 .wordHighlightSetting input { appearance: none; position: relative; width: 42px; height: 24px; flex: none; margin: 0; background: #cbd4e3; border-radius: 99px; cursor: pointer; }
@@ -407,6 +411,30 @@
 .voicePopover > small { color: #7c879a; font-size: 11px; line-height: 1.6; }
 .phononEntry { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 10px 12px; color: #694812; background: #fff5dd; border: 1px solid #dfc486; border-radius: 9px; text-align: left; font-weight: 650; }
 .phononEntry span { color: #806733; font-size: 11px; font-weight: 400; }
+.voiceSelector { position: relative; top: auto; right: auto; display: block; width: min(760px, 100%); max-height: min(560px, calc(100dvh - 64px)); padding: 0; overflow-y: auto; overscroll-behavior: contain; }
+.voiceSelectorHeader { position: sticky; z-index: 4; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fff; border-bottom: 1px solid #e7ecf4; }
+.voiceSelectorHeader h2 { margin: 0; color: #273b5d; font-size: 16px; }
+.voiceSelectorHeader > button { width: 30px; height: 30px; color: #647491; background: #f4f6fa; border: 0; border-radius: 8px; cursor: pointer; }
+.voiceCloneSpotlight { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin: 10px 16px 14px; padding: 12px 14px; background: linear-gradient(115deg, #fff8e8, #f3f5ff); border: 1px solid #e6d3a7; border-radius: 11px; }
+.voiceCloneSpotlight h3, .voiceSection h3 { margin: 0; color: #3a4a68; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.voiceCloneSpotlight p, .voiceSection p { margin: 2px 0 0; color: #7a869b; font-size: 11px; line-height: 1.45; }
+.voiceCloneSpotlight > button { padding: 7px 11px; min-height: 32px; color: #4e3510; background: #f5d98d; border: 1px solid #dab868; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.voiceCloneSpotlight > .voiceGrid, .voiceCloneSpotlight > small { grid-column: 1 / -1; }
+.voiceSection { margin: 0 16px 14px; }
+.voiceSectionTitle { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 7px; }
+.voiceGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.voiceChoice { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 50px; padding: 6px 8px 6px 10px; background: #fff; border: 1.5px solid #e1e8f3; border-radius: 13px; }
+.voiceChoiceFemale { color: #e070b3; border-color: #e070b3; }
+.voiceChoiceMale { color: #7b96db; border-color: #7b96db; }
+.voiceChoiceCharacter { color: #e79a4c; border-color: #e79a4c; }
+.voiceChoiceNeutral { color: #c4bcdd; border-color: #c4bcdd; }
+.voiceChoiceSelected { box-shadow: inset 0 0 0 2px currentColor; }
+.voiceChoose { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; color: #293e5c; background: transparent; border: 0; text-align: left; }
+.voiceName { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #293e5c; font-size: 12.5px; font-weight: 700; }
+.voiceFeeling { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .01em; }
+.voiceListen { display: grid; place-items: center; flex: none; width: 26px; height: 26px; padding: 0; color: #4b6392; background: #f6f8fc; border: 1px solid #e2e8f3; border-radius: 50%; font-size: 9px; line-height: 1; }
+.voiceListen:hover:not(:disabled) { background: #eef3ff; }
+.voicePreviewError { margin: 0 16px 10px; color: #b3261e; font-size: 12px; }
 .phononDialog { position: relative; top: auto; right: auto; width: min(600px, 100%); max-height: calc(100dvh - 48px); }
 .phononDialog > p { margin: 0; color: #697386; font-size: 13px; }
 .phononSection { display: grid; gap: 12px; padding: 16px; background: #f9fafc; border: 1px solid var(--border); border-radius: 10px; }
@@ -525,6 +553,15 @@
   .bookPreview img, .previewCover { width: 88px; height: 122px; }
   .voicePopover { top: 18px; right: 16px; max-height: calc(100dvh - 36px); }
   .phononDialog { top: auto; right: auto; width: 100%; }
+  .voiceSelector { top: auto; right: auto; width: 100%; max-height: calc(100dvh - 20px); }
+  .voiceSelectorHeader { padding: 8px 12px; }
+  .voiceCloneSpotlight { grid-template-columns: 1fr; margin: 10px 12px 14px; padding: 12px; }
+  .voiceCloneSpotlight > button { justify-self: start; }
+  .voiceSection { margin: 0 12px 16px; }
+  .voiceGrid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 5px; }
+}
+@media (max-width: 560px) {
+  .voiceGrid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
 }
 
 /* PDF controls float in the side gutters so pages get the full canvas height. */

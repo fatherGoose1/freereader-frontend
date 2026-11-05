@@ -16,6 +16,8 @@ test("routes trained Kokoro languages to Kokoro and the rest to Supertonic", () 
   assert.equal(speechEngineForVoice("ff_siwis", "fr"), "kokoro");
   assert.equal(voiceForLanguage("F1", "en"), "F1");
   assert.equal(voiceForLanguage("bf_emma", "en"), "bf_emma");
+  assert.equal(voiceForLanguage("lite_wren", "en"), "lite_wren");
+  assert.equal(voiceForLanguage("lite_wren", "fr"), "ff_siwis");
   assert.equal(voiceForLanguage("unknown" as never, "en"), "af_heart");
   assert.equal(voiceForLanguage("af_bella", "fr"), "ff_siwis");
   assert.equal(voiceForLanguage("af_heart", "zh"), "zf_xiaobei");

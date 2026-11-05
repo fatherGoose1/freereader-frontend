@@ -17,7 +17,7 @@ test("landing demo lists supported languages and routes non-English speech", asy
   }));
   await page.goto("/");
 
-  const appStoreLinks = page.locator(".app-store-button").filter({ has: page.getByText("App Store", { exact: true }) });
+  const appStoreLinks = page.locator(".app-store-button").filter({ has: page.getByText("iOS app", { exact: true }) });
   await expect(appStoreLinks).toHaveCount(2);
   await expect(appStoreLinks.first()).toHaveAttribute("href", "https://apps.apple.com/app/voicereader-text-to-speech/id6808351587");
   const canHover = await page.evaluate(() => matchMedia("(hover: hover)").matches);

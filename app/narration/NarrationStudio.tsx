@@ -873,7 +873,7 @@ export default function NarrationStudio() {
     if (!cloneDraft || !cloneName.trim() || cloneBusy) return;
     if (cloneListLoading || cloneListError) return;
     if (clonedVoices.length >= MAX_CLONED_VOICES) {
-      setCloneError("You can have up to 3 cloned voices. Remove one before adding another.");
+      setCloneError("You can have up to 3 custom voices. Remove one before adding another.");
       return;
     }
     setCloneBusy(true);
@@ -882,7 +882,7 @@ export default function NarrationStudio() {
       const supabase = supabaseClient();
       const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
       const session = data.session;
-      if (!session) throw new Error("Sign in with a Pro or Premium account to clone a voice.");
+      if (!session) throw new Error("Sign in with a Pro or Premium account to create a custom voice.");
       const response = await fetch("/api/voices/clone", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -898,9 +898,9 @@ export default function NarrationStudio() {
       } | null;
       if (!response.ok || typeof payload?.voice_id !== "string") {
         if (payload?.error === "voice_limit_reached") void loadClonedVoices(session.access_token);
-        throw new Error(payload?.error === "premium_required" ? "A Pro or Premium subscription is required to clone a voice."
-          : payload?.error === "voice_limit_reached" ? "You already have 3 cloned voices. Remove one before adding another."
-            : typeof payload?.error === "string" ? payload.error : "Voice cloning failed. Try again.");
+        throw new Error(payload?.error === "premium_required" ? "A Pro or Premium subscription is required to create a custom voice."
+          : payload?.error === "voice_limit_reached" ? "You already have 3 custom voices. Remove one before adding another."
+            : typeof payload?.error === "string" ? payload.error : "Custom voice creation failed. Try again.");
       }
       const record: ClonedVoiceRecord = {
         id: payload.voice_id,
@@ -918,13 +918,13 @@ export default function NarrationStudio() {
         language: projectRef.current.language,
         duration_seconds: record.durationSeconds,
       }, "youtube_narration");
-      setGenerationMessage(`Cloned voice "${record.name}" is ready. Generate a passage to hear it.`);
+      setGenerationMessage(`Custom voice "${record.name}" is ready. Generate a passage to hear it.`);
       revokeDraftUrl();
       setCloneName("");
       setCloneOpen(false);
       setCloneMode("upload");
     } catch (error) {
-      setCloneError(error instanceof Error ? error.message : "Voice cloning failed. Try again.");
+      setCloneError(error instanceof Error ? error.message : "Custom voice creation failed. Try again.");
     } finally {
       setCloneBusy(false);
     }
@@ -949,7 +949,7 @@ export default function NarrationStudio() {
       if (projectRef.current.defaultVoice === voice) changeDefaults({ defaultVoice: voiceForLanguage("af_heart", projectRef.current.language) });
       commit((current) => ({ ...current, segments: current.segments.map((segment) => segment.voiceId === voice
         ? invalidateSegment({ ...segment, voiceId: null }) : segment) }));
-      setGenerationMessage(`Removed cloned voice "${record.name}".`);
+      setGenerationMessage(`Removed custom voice "${record.name}".`);
     } catch (error) {
       setCloneError(error instanceof Error ? error.message : "Could not remove this voice.");
     } finally {
@@ -962,7 +962,7 @@ export default function NarrationStudio() {
     const epoch = playbackEpoch.current;
     const voice = voiceForLanguage(voiceId, language);
     if (isClonedVoice(voice)) {
-      setGenerationMessage("Cloned voices have no instant preview. Generate a passage to hear this voice.");
+      setGenerationMessage("Custom voices have no instant preview. Generate a passage to hear this voice.");
       return;
     }
     const audio = audioRef.current;
@@ -1200,7 +1200,7 @@ export default function NarrationStudio() {
           <button type="button" className={styles.toolButton} onClick={() => void previewVoice()}>▶ <span>Preview voice</span></button>
           <span className={styles.toolDivider} aria-hidden="true" />
           <button type="button" className={styles.toolButton} onClick={() => setGlobalPronunciationsOpen(true)}>Pronunciations{project.pronunciations.length > 0 && <span className={styles.toolCount}>{project.pronunciations.length}</span>}</button>
-          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Clone a voice{!hasVoicePlan && <span className={styles.toolCount}>Pro</span>}</button>
+          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Custom voices{!hasVoicePlan && <span className={styles.toolCount}>Pro</span>}</button>
         </div>
       </section>
 
@@ -1210,7 +1210,7 @@ export default function NarrationStudio() {
           <UsageMeter name="Video narration" used={usage.used_seconds} budget={usage.budget_seconds} remaining={usage.remaining_seconds} />
           {usage.premium_voice_budget_seconds > 0 && <UsageMeter name="Premium voice generation" used={usage.premium_voice_used_seconds} budget={usage.premium_voice_budget_seconds} remaining={usage.premium_voice_remaining_seconds} />}
         </div> : <p className={styles.profileNote} role="status">Loading your narration allowance…</p>}
-        <p className={styles.profileNote}>Allowance resets each calendar month. Premium voices and cloned voices share the premium voice allowance and also count toward video narration time.</p>
+        <p className={styles.profileNote}>Allowance resets each calendar month. Premium voices and custom voices share the premium voice allowance and also count toward video narration time.</p>
         {profileError && <p className={styles.cloneError} role="alert">{profileError}</p>}
         <div className={styles.profileActions}>
           <Link href="/pricing" className={styles.secondaryButton}>View plans</Link>
@@ -1244,18 +1244,18 @@ export default function NarrationStudio() {
           {!qwenAvailable && <p className={styles.voicePremiumNote}>Premium voices are not available for {languageName(pickerLanguage)}. Choose a supported language to use them.</p>}
           {!hasVoicePlan && <p className={styles.voicePremiumNote}>Unlock these voices and delivery instructions with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>}
         </section>
-        <section className={styles.voicePremiumSection} aria-label="Premium cloned voices">
+        <section className={styles.voicePremiumSection} aria-label="Premium custom voices">
           <div className={styles.voicePremiumHeading}>
-            <div><span className={styles.kicker}>Pro & Premium</span><h3>Your cloned voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
+            <div><span className={styles.kicker}>Pro & Premium</span><h3>Your custom voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
             {hasVoicePlan ? <button type="button" className={styles.addCloneButton} disabled={clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
               : <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
           </div>
-          {!hasVoicePlan ? <p className={styles.voicePremiumNote}>Cloned voices are available with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>
+          {!hasVoicePlan ? <p className={styles.voicePremiumNote}>Custom voices are available with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>
             : cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
               : cloneListError ? <p className={styles.voicePremiumNote} role="alert">{cloneListError} <button type="button" onClick={() => void retryClonedVoices()}>Retry</button></p>
                 : <>
                   {matchingClones.length > 0 ? <div className={styles.voiceGrid}>{matchingClones.map((profile) => renderVoiceCard(profile))}</div>
-                    : <p className={styles.voicePremiumNote}>{voiceSearch.trim() ? "No cloned voices match this search." : "No cloned voices yet. Add one to make your narration your own."}</p>}
+                    : <p className={styles.voicePremiumNote}>{voiceSearch.trim() ? "No custom voices match this search." : "No custom voices yet. Add one to make your narration your own."}</p>}
                   <div className={styles.cloneSlots}><span>{clonedVoices.length} of {MAX_CLONED_VOICES} voice slots used</span>
                     {clonedVoices.length >= MAX_CLONED_VOICES && <button type="button" onClick={openCloneFromPicker}>Manage voices</button>}</div>
                 </>}
@@ -1276,13 +1276,13 @@ export default function NarrationStudio() {
         </>}
       </StudioDialog>}
 
-      {cloneOpen && <StudioDialog title="Clone a voice" description={hasVoicePlan ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Pro or Premium to create and use a cloned voice."} onClose={closeClone}>
+      {cloneOpen && <StudioDialog title="Custom voices" description={hasVoicePlan ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Pro or Premium to create and use a custom voice."} onClose={closeClone}>
         {!hasVoicePlan ? <div className={styles.premiumGate}>
-          <strong>Voice cloning is included with Pro and Premium</strong>
+          <strong>Custom voices are included with Pro and Premium</strong>
           <p>Pro includes 1 hour of premium voice generation each month; Premium includes 5 hours.</p>
           <Link className={styles.importButton} href="/pricing">See plans</Link>
         </div> : <>
-        <p className={styles.cloneSlotStatus}>{clonedVoices.length} of {MAX_CLONED_VOICES} cloned voice slots used</p>
+        <p className={styles.cloneSlotStatus}>{clonedVoices.length} of {MAX_CLONED_VOICES} custom voice slots used</p>
         {cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
           : cloneListError ? <p className={styles.voicePremiumNote} role="alert">{cloneListError} <button type="button" onClick={() => void retryClonedVoices()}>Retry</button></p>
             : clonedVoices.length >= MAX_CLONED_VOICES ? <p className={styles.voicePremiumNote}>All 3 slots are full. Remove a voice below before adding a new one.</p>
@@ -1314,14 +1314,14 @@ export default function NarrationStudio() {
         </div>}
         <div className={styles.cloneActions}>
           <button type="button" className={styles.secondaryButton} disabled={cloneBusy} onClick={closeClone}>Cancel</button>
-          <button type="button" className={styles.importButton} disabled={!cloneDraft || !cloneName.trim() || cloneBusy} onClick={() => void createVoiceClone()}>{cloneBusy ? "Cloning…" : "Create voice clone"}</button>
+          <button type="button" className={styles.importButton} disabled={!cloneDraft || !cloneName.trim() || cloneBusy} onClick={() => void createVoiceClone()}>{cloneBusy ? "Creating…" : "Create custom voice"}</button>
         </div>
         </>}
         {cloneError && <p className={styles.cloneError} role="alert">{cloneError}</p>}
-        {clonedVoices.length > 0 && <ul className={styles.cloneVoiceList} aria-label="Your cloned voices">
+        {clonedVoices.length > 0 && <ul className={styles.cloneVoiceList} aria-label="Your custom voices">
           {clonedVoices.map((record) => <li key={record.id}>
             <span><strong>{record.name}</strong> · {record.durationSeconds.toFixed(1)}s</span>
-            <button type="button" disabled={cloneBusy} aria-label={`Remove cloned voice ${record.name}`} onClick={() => void deleteVoiceClone(record)}>×</button>
+            <button type="button" disabled={cloneBusy} aria-label={`Remove custom voice ${record.name}`} onClick={() => void deleteVoiceClone(record)}>×</button>
           </li>)}
         </ul>}
         </>}
@@ -1416,7 +1416,7 @@ export default function NarrationStudio() {
                         {speeds.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
                       </select>
                     </label>
-                    {hasVoicePlan && selectedVoice && isVoxClone(selectedVoice) && <label className={styles.deliveryInstruction}>Delivery instruction · cloned voice
+                     {hasVoicePlan && selectedVoice && isVoxClone(selectedVoice) && <label className={styles.deliveryInstruction}>Delivery instruction · custom voice
                       <input type="text" maxLength={200} value={segment.instruct ?? ""} placeholder="e.g. Speak softly, with a hint of sadness"
                         onChange={(event) => configureSegment(segment.id, { instruct: event.target.value })} />
                       <small>Describe the emotion or delivery for this passage. Regenerate to hear changes.</small>

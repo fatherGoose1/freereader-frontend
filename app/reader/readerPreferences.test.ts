@@ -56,3 +56,9 @@ test("account preferences preserve an English Phonon voice shared with iOS", () 
     defaultVoices: { en: `phonon:${id}`, fr: `phonon:${id}`, es: "phonon:invalid" } });
   assert.deepEqual(preferences?.defaultVoices, { en: `phonon:${id}` });
 });
+
+test("English light voice selection survives account preference reload", () => {
+  const preferences = parseReaderPreferences({ ...DEFAULT_READER_PREFERENCES, updatedAt: new Date().toISOString(),
+    defaultVoices: { en: "lite_hadley", fr: "lite_hadley", es: "lite_unknown" } });
+  assert.deepEqual(preferences?.defaultVoices, { en: "lite_hadley" });
+});

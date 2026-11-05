@@ -1,9 +1,6 @@
 import { recordTelemetry } from "./telemetry";
 import { isEnhancedPlan, type EnhancedPlanId } from "./enhanced";
 
-const API_BASE = (process.env.NEXT_PUBLIC_KOKO_BACKEND_URL
-  ?? "https://koko-backend-production-c887.up.railway.app").replace(/\/$/, "");
-
 export type PaidPlan = "pro" | "premium" | EnhancedPlanId;
 
 export interface PlanPrice {
@@ -13,7 +10,12 @@ export interface PlanPrice {
 }
 
 export async function fetchPlanPrice(plan: PaidPlan): Promise<PlanPrice> {
-  const response = await fetch(`${API_BASE}/api/v1/freereader/billing/price?plan=${plan}`);
+  // The pricing page renders on the server (including at build time); the
+  // browser uses the same-origin proxy so local ports do not depend on CORS.
+  const endpoint = typeof window === "undefined"
+    ? `${(process.env.KOKO_BACKEND_URL ?? "https://koko-backend-production-c887.up.railway.app").replace(/\/$/, "")}/api/v1/freereader/billing/price?plan=${plan}`
+    : `/api/billing/price?plan=${plan}`;
+  const response = await fetch(endpoint);
   if (!response.ok) throw new Error("price_unavailable");
   const price = await response.json() as Partial<PlanPrice>;
   if (typeof price.amount_cents !== "number" || !Number.isInteger(price.amount_cents) || price.amount_cents < 0 || price.currency !== "usd" || !["month", "year"].includes(price.interval ?? "")) {
@@ -33,7 +35,7 @@ export function formatProPrice(price: PlanPrice): string {
 }
 
 async function billingUrl(path: "checkout" | "portal" | "gold-offer-checkout", token: string, plan?: PaidPlan): Promise<string> {
-  const response = await fetch(`${API_BASE}/api/v1/freereader/billing/${path}`, {
+  const response = await fetch(`/api/billing/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, ...(path === "checkout" && plan ? { "Content-Type": "application/json" } : {}) },
     ...(path === "checkout" && plan ? { body: JSON.stringify({ plan }) } : {}),
