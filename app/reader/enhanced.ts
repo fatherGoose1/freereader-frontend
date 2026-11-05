@@ -37,6 +37,8 @@ export interface EnhancedFeature {
 
 export const ENHANCED_FEATURES: readonly EnhancedFeature[] = [
   { title: "Unlimited audio" },
+  { title: "Premium voices" },
+  { title: "Highest quality audio" },
   { title: "Device syncing" },
   { title: "Faster generation" },
   { title: "Custom voices" },
