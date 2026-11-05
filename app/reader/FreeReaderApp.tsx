@@ -2024,7 +2024,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               <div className={styles.speakingRateBounds}><span>0.5×</span><span>3.0×</span></div>
             </div>
             <small>Speaking speed applies to newly generated passages and becomes your default.</small>
-            {!managed && <Link href="/reader/lite-test" className={styles.preferenceAction}>Compare the free voices</Link>}
           </div>
         </div>}
         {panel === "voicePicker" && <VoiceSelectionDialog language={narrationLanguage} selected={narrationVoice} gold={enhanced} suspended={upgradeOpen}

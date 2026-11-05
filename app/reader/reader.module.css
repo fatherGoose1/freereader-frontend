@@ -396,8 +396,6 @@
 .settingsVoiceTrigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; max-width: 70%; min-height: 42px; padding: 8px 12px; color: #425d98; background: #f3f6fc; border: 1px solid #e1e8f5; border-radius: 7px; font-size: 13px; cursor: pointer; }
 .settingsVoiceTrigger span { color: #7285ad; font-size: 22px; line-height: 1; }
 .settingsVoiceTrigger:hover { border-color: #7391cf; background: #eef3ff; }
-.preferenceAction { justify-self: start; padding: 0; color: var(--app-blue); background: transparent; border: 0; font-size: 12px; cursor: pointer; }
-.preferenceAction:disabled { color: #8792a5; cursor: default; }
 .wordHighlightSetting input { appearance: none; position: relative; width: 42px; height: 24px; flex: none; margin: 0; background: #cbd4e3; border-radius: 99px; cursor: pointer; }
 .wordHighlightSetting input::after { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; content: ""; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px #17253e33; transition: transform .15s ease; }
 .wordHighlightSetting input:checked { background: var(--app-blue); }
