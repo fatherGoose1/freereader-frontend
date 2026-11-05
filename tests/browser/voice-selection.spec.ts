@@ -97,7 +97,7 @@ test("Gold readers see their custom voice and the Phonon catalogue", async ({ pa
   await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
   await page.reload();
   const dialog = await openVoicePicker(page);
-  await expect(dialog.getByRole("region", { name: "Free voices" }).locator("article")).toHaveCount(10);
+  await expect(dialog.getByRole("region", { name: "Free voices" })).toHaveCount(0);
   const clones = dialog.getByRole("region", { name: "Your custom voices" });
   await expect(clones).toContainText("My memoir voice");
   await expect(clones.locator("article").filter({ hasText: "My memoir voice" })).toHaveAttribute("title", "My memoir voice · Personal");

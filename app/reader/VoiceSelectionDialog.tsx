@@ -156,10 +156,10 @@ export default function VoiceSelectionDialog({ language, selected, gold, suspend
         {clones && !myVoices.length && <small>{gold ? "No custom voices yet." : "Your custom voices are ready when you have Gold."}</small>}
       </section>}
 
-      <section className={styles.voiceSection} aria-label="Free voices">
+      {!gold && <section className={styles.voiceSection} aria-label="Free voices">
         <div className={styles.voiceSectionTitle}><h3>Free voices</h3></div>
         <div className={styles.voiceGrid}>{available.map((item) => choice(item, language === "en" ? "free" : "builtin"))}</div>
-      </section>
+      </section>}
 
       <section className={styles.voiceSection} aria-label="Gold voices">
         <div className={styles.voiceSectionTitle}><h3>Gold voices</h3></div>
