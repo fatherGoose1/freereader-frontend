@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ENHANCED_FEATURES, isEnhancedPlan } from "./enhanced";
 
-test("Gold features lead with unlimited audio, premium voices, and highest quality audio", () => {
+test("Gold features lead with unlimited listening, premium voices, and highest quality audio", () => {
   assert.deepEqual(ENHANCED_FEATURES.map((feature) => feature.title), [
-    "Unlimited audio",
+    "Unlimited listening",
     "Premium voices",
     "Highest quality audio",
     "Device syncing",

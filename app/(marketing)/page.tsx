@@ -57,7 +57,17 @@ export default function Home() {
         <div className="hero wrap">
           <div className="hero-copy">
             {/* <span className="eyebrow hero-eyebrow"><i /> Audiobooks + video voiceovers</span> */}
-            <h1>Make audiobooks <em>from anything.</em></h1>
+            <h1 aria-label="Faster than Speechify, ElevenReader, or NaturalReader, less than half the price.">
+              Faster than
+              <span className="hero-comparison">
+                <em className="hero-competitor" aria-hidden="true">
+                  <span>Speechify</span>
+                  <span>ElevenReader</span>
+                  <span>NaturalReader</span>
+                </em><span className="hero-comparison-punctuation">,</span>
+              </span>
+              less than half the price.
+            </h1>
             <p className="lead">
               Listen to books, documents, and articles in seconds.
               Natural voices and one hour of free listening every day.

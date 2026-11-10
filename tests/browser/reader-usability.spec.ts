@@ -286,7 +286,7 @@ test("Gold plans show the configured Stripe amounts before checkout", async ({ p
   await expect(dialog).toContainText("$3.25");
   await expect(dialog).toContainText("billed $39 yearly");
   await expect(dialog).toContainText("7 days free");
-  await expect(dialog.locator("li").first()).toHaveText("Unlimited audio");
+  await expect(dialog.locator("li").first()).toHaveText("Unlimited listening");
   await expect(dialog.locator("li small")).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Start 7-day free trial" })).toBeEnabled();
   await dialog.getByRole("button", { name: "Monthly" }).click();
@@ -296,7 +296,7 @@ test("Gold plans show the configured Stripe amounts before checkout", async ({ p
   await dialog.getByRole("button", { name: "Close" }).click();
   const banner = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   await expect(banner).toContainText("Custom voices");
-  await expect(banner.locator("li").first()).toHaveText("✦Unlimited audio");
+  await expect(banner.locator("li").first()).toHaveText("✦Unlimited listening");
   await expect(banner.locator("li small")).toHaveCount(0);
 });
 
