@@ -48,7 +48,7 @@ test("free readers see ten selectable (free) voices, feelings, and locked Gold v
     const columns = await free.locator('div[class*="voiceGrid"]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
     expect(columns).toBeGreaterThanOrEqual(4);
   }
-  const heartSample = page.waitForRequest((request) => request.url().endsWith("/voice-previews/af_heart.m4a"));
+  const heartSample = page.waitForRequest((request) => request.url().endsWith("/voice-previews/af_heart.m4a?v=doc1"));
   await gold.getByRole("button", { name: "Play Heart sample" }).click();
   await heartSample;
   const zoeySample = page.waitForResponse((response) => response.url().includes("/api/phonon-sample?id=NbpkqMVS3CJeq2j8"));

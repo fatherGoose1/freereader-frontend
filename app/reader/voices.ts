@@ -174,6 +174,7 @@ export function voicePreviewPath(voice: NarratorVoice | string, language: string
   if (isKokoroVoice(voice as NarratorVoice) && language !== "en") {
     return `/api/voice-preview?language=${encodeURIComponent(language)}&voice=${encodeURIComponent(voice)}`;
   }
-  if (isQwenVoice(voice) || language === "en") return `/voice-previews/${voice}.m4a`;
+  if (isQwenVoice(voice)) return `/voice-previews/${voice}.m4a`;
+  if (language === "en") return `/voice-previews/${voice}.m4a?v=doc1`;
   return `/voice-previews/${language}/${voice}.m4a`;
 }

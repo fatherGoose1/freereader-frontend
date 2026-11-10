@@ -1,11 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "../app/languages";
-import { KOKORO_VOICES, isSupertonicVoice, supertonicVoices } from "../app/reader/voices";
+import { isSupertonicVoice, kokoroVoicesForLanguage, supertonicVoices } from "../app/reader/voices";
 import { normalizeCapitalization } from "../app/reader/speechText";
 
 // Short native-language samples make every voice comparable without generating a project passage.
 const samples: Record<SpeechLanguage, string> = {
-  en: "This is how my voice sounds when I narrate your video.",
+  en: "This is how my voice sounds when I narrate your document.",
   ko: "안녕하세요. 제 목소리로 이야기를 들려드리겠습니다.",
   ja: "こんにちは。私の声であなたに物語をお届けします。",
   ar: "مرحباً. سأروي لكم هذه القصة بصوتي.",
@@ -43,7 +43,8 @@ const token = process.env.FREEREADER_TTS_API_TOKEN ?? process.env.PARRYT_API_TOK
 if (!token) throw new Error("Set FREEREADER_TTS_API_TOKEN to generate voice previews.");
 
 const directory = new URL("../public/voice-previews/", import.meta.url);
-const requestedLanguages = process.argv.slice(2);
+const force = process.argv.includes("--force");
+const requestedLanguages = process.argv.slice(2).filter((argument) => argument !== "--force");
 for (const language of requestedLanguages) {
   if (!SPEECH_LANGUAGES.some(([code]) => code === language)) throw new Error(`Unsupported language: ${language}`);
 }
@@ -53,13 +54,13 @@ for (const [language] of SPEECH_LANGUAGES) {
   const languageDirectory = language === "en" ? directory : new URL(`${language}/`, directory);
   await mkdir(languageDirectory, { recursive: true });
   const voices = language === "en"
-    ? [...KOKORO_VOICES.map(([voice]) => voice), ...supertonicVoices().map(([voice]) => voice)]
+    ? [...kokoroVoicesForLanguage("en").map(([voice]) => voice), ...supertonicVoices().map(([voice]) => voice)]
     : supertonicVoices().map(([voice]) => voice);
   for (const voice of voices) {
     const file = new URL(`${voice}.m4a`, languageDirectory);
     try {
       const existing = await readFile(file);
-      if (existing.length > 512 && existing.toString("ascii", 4, 8) === "ftyp") continue;
+      if (!force && existing.length > 512 && existing.toString("ascii", 4, 8) === "ftyp") continue;
     } catch { /* Missing preview: generate it below. */ }
 
     const response = await fetch(`${backend}/api/v1/freereader/speech`, {
@@ -70,7 +71,7 @@ for (const [language] of SPEECH_LANGUAGES) {
         language,
         voice,
         speed: 1,
-        ...(isSupertonicVoice(voice) ? { engine: "supertonic", steps: 12 } : {}),
+        ...(isSupertonicVoice(voice) ? { engine: "supertonic", steps: 12 } : { engine: "kokoro" }),
       }),
     });
     if (!response.ok) throw new Error(`${language}/${voice}: speech service returned ${response.status} ${await response.text()}`);

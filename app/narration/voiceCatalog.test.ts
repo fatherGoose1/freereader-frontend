@@ -31,7 +31,7 @@ test("search surfaces the strongest tag match and respects language availability
 test("premium voices resolve to a cached bundled preview sample", () => {
   assert.equal(voicePreviewPath("qwen_ryan", "en"), "/voice-previews/qwen_ryan.m4a");
   assert.equal(voicePreviewPath("qwen_vivian", "zh"), "/voice-previews/qwen_vivian.m4a");
-  assert.equal(voicePreviewPath("af_heart", "en"), "/voice-previews/af_heart.m4a");
+  assert.equal(voicePreviewPath("af_heart", "en"), "/voice-previews/af_heart.m4a?v=doc1");
   assert.equal(voicePreviewPath("M3", "fr"), "/voice-previews/fr/M3.m4a");
   assert.equal(voicePreviewPath("ff_siwis", "fr"), "/api/voice-preview?language=fr&voice=ff_siwis");
   assert.equal(voicePreviewPath("zf_xiaobei", "zh"), "/api/voice-preview?language=zh&voice=zf_xiaobei");
