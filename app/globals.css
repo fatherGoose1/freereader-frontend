@@ -178,7 +178,6 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .hero-competitor span:nth-child(1) { animation-delay: -.45s; }
 .hero-competitor span:nth-child(2) { animation-delay: -6.45s; }
 .hero-competitor span:nth-child(3) { animation-delay: -3.45s; }
-.hero-comparison-punctuation { color: var(--forest); }
 @keyframes hero-competitor-cycle {
   0% { opacity: 0; transform: translateY(.25em); }
   5%, 30% { opacity: 1; transform: translateY(0); }
@@ -200,13 +199,17 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .secondary-link { display: inline-flex; align-items: center; gap: 9px; min-height: 54px; padding: 14px 19px; color: var(--forest); background: #fff; border: 1px solid var(--line); border-radius: 9px; font-size: 15px; font-weight: 700; text-decoration: none; }
 .secondary-link:hover { background: #f1f4fc; border-color: #b9c8ef; }
 .secondary-link svg { width: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.app-store-button { display: inline-flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px 17px; color: #fff; background: #202633; border: 1px solid #202633; border-radius: 9px; text-align: left; text-decoration: none; }
-.app-store-button:hover { background: #343e50; }
+.app-store-button { display: inline-flex; align-items: center; gap: 10px; min-width: 196px; min-height: 56px; padding: 7px 15px; border: 1px solid; border-radius: 10px; text-align: left; text-decoration: none; transition: background .2s ease, box-shadow .2s ease, transform .2s ease; }
+.app-store-button:hover { transform: translateY(-2px); box-shadow: 0 6px 16px #17212f1c; }
+.app-store-button--apple { color: #fff; background: #050505; border-color: #050505; }
+.app-store-button--apple:hover { background: #292929; }
+.app-store-button--chrome { color: #202633; background: #fff; border-color: #d4d9e2; }
+.app-store-button--chrome:hover { background: #f4f7ff; }
 .app-store-button:focus-visible { outline: 3px solid #8ba7ff; outline-offset: 3px; }
-.app-store-button svg { width: 27px; height: 27px; flex: none; }
+.app-store-button svg { width: 29px; height: 29px; flex: none; }
 .app-store-button span { display: flex; flex-direction: column; line-height: 1.1; }
-.app-store-button small { font-size: 10px; font-weight: 500; }
-.app-store-button strong { font-size: 18px; font-weight: 650; }
+.app-store-button small { font-size: 10px; font-weight: 550; }
+.app-store-button strong { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
 .app-downloads { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; max-width: 100%; }
 .app-download { position: relative; display: inline-flex; }
 .app-download-qr { position: absolute; z-index: 20; bottom: calc(100% + 12px); left: 50%; display: none; width: 202px; padding: 14px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 13px; box-shadow: var(--shadow-lg); text-align: center; pointer-events: none; transform: translateX(-50%); }
@@ -216,17 +219,6 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .app-download-qr span { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .app-download:focus-within .app-download-qr { display: block; }
 @media (hover: hover) { .app-download:hover .app-download-qr { display: block; } }
-.hero-assurances {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-  margin-top: 28px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-.hero-assurances span { display: inline-flex; align-items: center; gap: 6px; }
-.hero-assurances svg { width: 14px; fill: none; stroke: var(--forest); stroke-width: 2; }
 .hero-shot { position: relative; width: min(480px, 100%); padding-bottom: 26px; justify-self: end; }
 .hero-phone { display: block; width: min(100%, 400px); height: auto; aspect-ratio: 502 / 1028; margin-inline: auto; }
 .hero-phone-controls { position: absolute; right: 0; bottom: 0; display: flex; gap: 10px; }
@@ -354,7 +346,7 @@ h3 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
 .final-cta p { margin: 0 auto 20px; color: var(--muted); font-size: 17px; }
 .final-actions { justify-content: center; }
 .final-cta .button { min-width: 205px; }
-.final-actions .app-store-button { justify-content: center; min-width: 175px; }
+.final-actions .app-store-button { justify-content: center; }
 
 /* Footer */
 footer { padding: 75px 0 24px; color: var(--ink); background: #fff; border-top: 1px solid var(--line); }
@@ -456,7 +448,7 @@ footer .brand { color: var(--ink); }
   .hero-copy { text-align: center; transform: none; }
   .hero-copy .lead { margin-inline: auto; }
   .hero-eyebrow { justify-content: center; }
-  .hero-actions, .hero-assurances { justify-content: center; }
+  .hero-actions { justify-content: center; }
   .hero-shot { width: min(100%, 480px); justify-self: center; }
   .hero-phone { width: min(100%, 350px); }
   .hero-demo-language-popover { right: -6px; grid-template-columns: repeat(2, 1fr); }
@@ -483,7 +475,6 @@ footer .brand { color: var(--ink); }
   .hero-actions { flex-direction: column; gap: 17px; }
   .hero-actions .button { width: 100%; }
   .always-free-badge { right: -4px; }
-  .hero-assurances { gap: 8px 14px; }
   .hero-demo { padding: 14px; }
   .hero-demo textarea { min-height: 145px; padding: 14px; font-size: 14px; }
   .hero-demo-language-popover ul { grid-template-columns: repeat(2, 1fr); }

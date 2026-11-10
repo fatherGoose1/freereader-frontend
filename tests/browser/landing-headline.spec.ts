@@ -2,8 +2,19 @@ import { expect, test } from "@playwright/test";
 
 test("landing headline rotates competitors without shifting the layout", async ({ page }) => {
   await page.goto("/");
-  const heading = page.getByRole("heading", { level: 1, name: /Faster than Speechify, ElevenReader, or NaturalReader, less than half the price/ });
+  const heading = page.getByRole("heading", { level: 1, name: /Faster than Speechify, ElevenReader, or NaturalReader\. Less than half the price/ });
   await expect(heading).toBeVisible();
+  await expect(page.locator(".hero-copy .lead")).toHaveText(
+    "Listen to books, documents, and articles in seconds, with natural voices and accessibility features to make reading easy.");
+  await expect(page.locator(".hero-assurances")).toHaveCount(0);
+  await expect(heading.locator(".hero-comparison-punctuation")).toHaveCount(0);
+  const appStore = page.locator(".hero-actions .app-store-button--apple");
+  const chromeStore = page.locator(".hero-actions .app-store-button--chrome");
+  await expect(appStore).toContainText("Download on theApp Store");
+  await expect(chromeStore).toContainText("Get it on theChrome Web Store");
+  expect(await appStore.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(5, 5, 5)");
+  expect(await chromeStore.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(255, 255, 255)");
+  expect(await chromeStore.locator("svg path[fill]").count()).toBe(3);
   const names = heading.locator(".hero-competitor span");
   await expect(names).toHaveText(["Speechify", "ElevenReader", "NaturalReader"]);
   const slot = heading.locator(".hero-competitor");

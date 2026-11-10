@@ -23,14 +23,6 @@ function ArrowIcon() {
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true">
-      <path d="m4 10 4 4 8-9" />
-    </svg>
-  );
-}
-
 export default function Home() {
   const appStructuredData = {
     "@context": "https://schema.org",
@@ -57,29 +49,23 @@ export default function Home() {
         <div className="hero wrap">
           <div className="hero-copy">
             {/* <span className="eyebrow hero-eyebrow"><i /> Audiobooks + video voiceovers</span> */}
-            <h1 aria-label="Faster than Speechify, ElevenReader, or NaturalReader, less than half the price.">
+            <h1 aria-label="Faster than Speechify, ElevenReader, or NaturalReader. Less than half the price.">
               Faster than
               <span className="hero-comparison">
                 <em className="hero-competitor" aria-hidden="true">
                   <span>Speechify</span>
                   <span>ElevenReader</span>
                   <span>NaturalReader</span>
-                </em><span className="hero-comparison-punctuation">,</span>
+                </em>
               </span>
               less than half the price.
             </h1>
             <p className="lead">
-              Listen to books, documents, and articles in seconds.
-              Natural voices and one hour of free listening every day.
+              Listen to books, documents, and articles in seconds, with natural voices and accessibility features to make reading easy.
             </p>
             <div className="hero-actions">
               <AppDownloadButtons />
               <Link className="button audiobook-cta" href="/reader/audiobooks">Open Web App <ArrowIcon /></Link>
-            </div>
-            <div className="hero-assurances" aria-label="FreeReader product highlights">
-              <span><CheckIcon /> Start free</span>
-              <span><CheckIcon /> 32 languages</span>
-              <span><CheckIcon /> Gold for unlimited listening</span>
             </div>
           </div>
           <div className="hero-shot">
