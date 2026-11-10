@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const ACTIONS = new Set(["checkout", "portal", "gold-offer-checkout"]);
-const PLANS = new Set(["pro", "premium", "gold_yearly", "gold_monthly"]);
+const PLANS = new Set(["gold_yearly", "gold_monthly"]);
 
 export async function POST(request: Request, { params }: { params: Promise<{ action: string }> }) {
   const { action } = await params;

@@ -1,7 +1,8 @@
 import { recordTelemetry } from "./telemetry";
 import { isEnhancedPlan, type EnhancedPlanId } from "./enhanced";
 
-export type PaidPlan = "pro" | "premium" | EnhancedPlanId;
+// Pro and Premium were retired. Only the Gold intervals can be purchased.
+export type PaidPlan = EnhancedPlanId;
 
 export interface PlanPrice {
   amount_cents: number;
@@ -24,16 +25,6 @@ export async function fetchPlanPrice(plan: PaidPlan): Promise<PlanPrice> {
   return price as PlanPrice;
 }
 
-export const fetchProPrice = () => fetchPlanPrice("pro");
-
-export function formatProPrice(price: PlanPrice): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency", currency: price.currency.toUpperCase(),
-    minimumFractionDigits: price.amount_cents % 100 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(price.amount_cents / 100);
-}
-
 async function billingUrl(path: "checkout" | "portal" | "gold-offer-checkout", token: string, plan?: PaidPlan): Promise<string> {
   const response = await fetch(`/api/billing/${path}`, {
     method: "POST",
@@ -53,11 +44,11 @@ async function billingUrl(path: "checkout" | "portal" | "gold-offer-checkout", t
   if (typeof data.url !== "string") throw new Error("checkout_unavailable");
   const url = new URL(data.url);
   if (url.protocol !== "https:" || !url.hostname.endsWith(".stripe.com")) throw new Error("checkout_unavailable");
-  if (path !== "portal") recordTelemetry("checkout_viewed", { plan: plan ?? "pro" }, isEnhancedPlan(plan) ? "audiobook" : "youtube_narration");
+  if (path !== "portal") recordTelemetry("checkout_viewed", { plan: plan ?? "gold_monthly" }, isEnhancedPlan(plan) ? "audiobook" : "youtube_narration");
   return url.href;
 }
 
-export function startCheckout(token: string, plan: PaidPlan = "pro"): Promise<string> {
+export function startCheckout(token: string, plan: PaidPlan = "gold_monthly"): Promise<string> {
   return billingUrl("checkout", token, plan);
 }
 

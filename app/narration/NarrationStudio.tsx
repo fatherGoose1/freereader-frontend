@@ -12,7 +12,7 @@ import { SPEECH_LANGUAGES, type SpeechLanguage } from "../languages";
 import { currentAccessToken, initAuthToken } from "../reader/authToken";
 import { supabaseClient } from "../reader/supabase";
 import { fetchUsage, formatRemaining, linkInstallation, type UsageSummary } from "../reader/usage";
-import { manageSubscription, startCheckout } from "../reader/billing";
+import { manageSubscription } from "../reader/billing";
 import ReaderIcon from "../reader/ReaderIcon";
 import { recordTelemetry } from "../reader/telemetry";
 import { removeClonedVoice, replaceClonedVoices, saveClonedVoice, voiceRefFor, type ClonedVoiceRecord } from "../reader/cloneVoices";
@@ -537,51 +537,6 @@ export default function NarrationStudio() {
   }, []);
 
   useEffect(() => {
-    if (!session?.access_token) return;
-    const requested = new URLSearchParams(window.location.search).get("upgrade");
-    let queued: string | null = null;
-    try { queued = sessionStorage.getItem("freereaderUpgradePlan") ?? (sessionStorage.getItem("freereaderUpgradeToPro") === "1" ? "pro" : null); } catch { /* unavailable */ }
-    const plan = requested === "premium" || queued === "premium" ? "premium" : requested === "pro" || queued === "pro" ? "pro" : null;
-    if (!plan) return;
-    try { sessionStorage.removeItem("freereaderUpgradePlan"); sessionStorage.removeItem("freereaderUpgradeToPro"); } catch { /* unavailable */ }
-    window.history.replaceState({}, "", window.location.pathname);
-    void startCheckout(session.access_token, plan)
-      .then((url) => window.location.assign(url))
-      .catch(() => setGenerationMessage("Checkout could not be opened. Try again from the pricing page."));
-  }, [session?.access_token]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const checkout = params.get("checkout");
-    if (!checkout) return;
-    window.history.replaceState({}, "", window.location.pathname);
-    if (checkout === "cancelled") { setGenerationMessage("Checkout cancelled. Your plan has not changed."); return; }
-    if (checkout !== "success") return;
-    const plan = params.get("plan") === "premium" ? "premium" : "pro";
-    setGenerationMessage("Checkout complete. Confirming your narration plan…");
-    setProfileOpen(true);
-    let attempts = 0;
-    const timer = setInterval(() => {
-      const supabase = supabaseClient();
-      if (supabase) void supabase.auth.getSession().then(({ data }) => {
-        if (!data.session) return;
-        void fetchUsage(data.session.access_token).then((summary) => {
-          setUsage(summary);
-          if (summary.plan === plan) {
-            clearInterval(timer);
-            setGenerationMessage(`${plan === "premium" ? "Premium" : "Pro"} narration is ready.`);
-          }
-        }).catch(() => undefined);
-      });
-      if (++attempts >= 12) {
-        clearInterval(timer);
-        setGenerationMessage("Payment is still processing. Check your profile again shortly.");
-      }
-    }, 2500);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
     setRecorderSupported(VoiceRecorder.supported());
   }, []);
 
@@ -882,7 +837,7 @@ export default function NarrationStudio() {
       const supabase = supabaseClient();
       const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
       const session = data.session;
-      if (!session) throw new Error("Sign in with a Pro or Premium account to create a custom voice.");
+      if (!session) throw new Error("Sign in to create a custom voice.");
       const response = await fetch("/api/voices/clone", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -898,7 +853,7 @@ export default function NarrationStudio() {
       } | null;
       if (!response.ok || typeof payload?.voice_id !== "string") {
         if (payload?.error === "voice_limit_reached") void loadClonedVoices(session.access_token);
-        throw new Error(payload?.error === "premium_required" ? "A Pro or Premium subscription is required to create a custom voice."
+        throw new Error(payload?.error === "premium_required" ? "A narration subscription is required to create a custom voice."
           : payload?.error === "voice_limit_reached" ? "You already have 3 custom voices. Remove one before adding another."
             : typeof payload?.error === "string" ? payload.error : "Custom voice creation failed. Try again.");
       }
@@ -1200,7 +1155,7 @@ export default function NarrationStudio() {
           <button type="button" className={styles.toolButton} onClick={() => void previewVoice()}>▶ <span>Preview voice</span></button>
           <span className={styles.toolDivider} aria-hidden="true" />
           <button type="button" className={styles.toolButton} onClick={() => setGlobalPronunciationsOpen(true)}>Pronunciations{project.pronunciations.length > 0 && <span className={styles.toolCount}>{project.pronunciations.length}</span>}</button>
-          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Custom voices{!hasVoicePlan && <span className={styles.toolCount}>Pro</span>}</button>
+          <button type="button" className={styles.toolButton} onClick={() => setCloneOpen(true)}>Custom voices</button>
         </div>
       </section>
 
@@ -1242,15 +1197,15 @@ export default function NarrationStudio() {
               onSelect={() => selectVoice(id)}
               onPreview={() => voicePreviewPlaying && previewingVoiceId === id ? stopPlayback() : void previewVoice(id, pickerLanguage)} />)}</div>
           {!qwenAvailable && <p className={styles.voicePremiumNote}>Premium voices are not available for {languageName(pickerLanguage)}. Choose a supported language to use them.</p>}
-          {!hasVoicePlan && <p className={styles.voicePremiumNote}>Unlock these voices and delivery instructions with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>}
+          {!hasVoicePlan && <p className={styles.voicePremiumNote}>Premium voices and delivery instructions are included with a narration subscription.</p>}
         </section>
         <section className={styles.voicePremiumSection} aria-label="Premium custom voices">
           <div className={styles.voicePremiumHeading}>
-            <div><span className={styles.kicker}>Pro & Premium</span><h3>Your custom voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
+            <div><span className={styles.kicker}>Custom</span><h3>Your custom voices</h3><p>Create a voice from a recording and use it throughout your script.</p></div>
             {hasVoicePlan ? <button type="button" className={styles.addCloneButton} disabled={clonedVoices.length >= MAX_CLONED_VOICES} onClick={openCloneFromPicker}><span aria-hidden="true">＋</span> Add voice</button>
               : <span className={styles.lockedVoiceBadge}>🔒 Locked</span>}
           </div>
-          {!hasVoicePlan ? <p className={styles.voicePremiumNote}>Custom voices are available with Pro or Premium. <Link href="/pricing">Explore plans</Link></p>
+          {!hasVoicePlan ? <p className={styles.voicePremiumNote}>Custom voices are included with a narration subscription.</p>
             : cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>
               : cloneListError ? <p className={styles.voicePremiumNote} role="alert">{cloneListError} <button type="button" onClick={() => void retryClonedVoices()}>Retry</button></p>
                 : <>
@@ -1276,11 +1231,10 @@ export default function NarrationStudio() {
         </>}
       </StudioDialog>}
 
-      {cloneOpen && <StudioDialog title="Custom voices" description={hasVoicePlan ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "Sign in with Pro or Premium to create and use a custom voice."} onClose={closeClone}>
+      {cloneOpen && <StudioDialog title="Custom voices" description={hasVoicePlan ? `Upload or record ${MIN_CLONE_SECONDS}–${MAX_CLONE_SECONDS} seconds of clear speech. We use at most the first ${MAX_CLONE_SECONDS} seconds.` : "A narration subscription is required to create and use a custom voice."} onClose={closeClone}>
         {!hasVoicePlan ? <div className={styles.premiumGate}>
-          <strong>Custom voices are included with Pro and Premium</strong>
-          <p>Pro includes 1 hour of premium voice generation each month; Premium includes 5 hours.</p>
-          <Link className={styles.importButton} href="/pricing">See plans</Link>
+          <strong>Custom voices are included with a narration subscription</strong>
+          <p>Premium voice generation is included with an active narration plan.</p>
         </div> : <>
         <p className={styles.cloneSlotStatus}>{clonedVoices.length} of {MAX_CLONED_VOICES} custom voice slots used</p>
         {cloneListLoading ? <p className={styles.voicePremiumNote} role="status">Loading your voices…</p>

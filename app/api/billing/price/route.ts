@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const PLANS = new Set(["pro", "premium", "gold_yearly", "gold_monthly"]);
+const PLANS = new Set(["gold_yearly", "gold_monthly"]);
 
 export async function GET(request: Request) {
   const plan = new URL(request.url).searchParams.get("plan");
