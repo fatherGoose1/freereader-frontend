@@ -10,11 +10,28 @@ test("landing headline rotates competitors without shifting the layout", async (
   await expect(heading.locator(".hero-comparison-punctuation")).toHaveCount(0);
   const appStore = page.locator(".hero-actions .app-store-button--apple");
   const chromeStore = page.locator(".hero-actions .app-store-button--chrome");
-  await expect(appStore).toContainText("Download on theApp Store");
-  await expect(chromeStore).toContainText("Get it on theChrome Web Store");
+  const webApp = page.locator(".hero-actions .audiobook-cta");
+  await expect(appStore).toHaveText("iOS app");
+  await expect(chromeStore).toHaveText("Chrome extension");
+  await expect(webApp).toHaveText("Web App");
   expect(await appStore.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(5, 5, 5)");
   expect(await chromeStore.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(255, 255, 255)");
   expect(await chromeStore.locator("svg path[fill]").count()).toBe(3);
+  async function expectOneRow() {
+    const [apple, chrome, web] = await Promise.all([appStore.boundingBox(), chromeStore.boundingBox(), webApp.boundingBox()]);
+    const actions = (await page.locator(".hero-actions").boundingBox())!;
+    expect(apple).not.toBeNull();
+    expect(chrome).not.toBeNull();
+    expect(web).not.toBeNull();
+    expect(Math.abs(apple!.y - chrome!.y)).toBeLessThan(2);
+    expect(Math.abs(chrome!.y - web!.y)).toBeLessThan(2);
+    expect(apple!.x + apple!.width).toBeLessThan(chrome!.x);
+    expect(chrome!.x + chrome!.width).toBeLessThan(web!.x);
+    expect(web!.x + web!.width).toBeLessThanOrEqual(actions.x + actions.width + 1);
+    for (const button of [appStore, chromeStore, webApp])
+      expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }
+  await expectOneRow();
   const names = heading.locator(".hero-competitor span");
   await expect(names).toHaveText(["Speechify", "ElevenReader", "NaturalReader"]);
   const slot = heading.locator(".hero-competitor");
@@ -29,9 +46,12 @@ test("landing headline rotates competitors without shifting the layout", async (
   expect((await slot.boundingBox())!.width).toBe(initialWidth);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.setViewportSize({ width: 320, height: 740 });
+  await expectOneRow();
   const narrowSlot = await slot.boundingBox();
   expect(narrowSlot!.x).toBeGreaterThanOrEqual(0);
   expect(narrowSlot!.x + narrowSlot!.width).toBeLessThanOrEqual(320);
+  await page.setViewportSize({ width: 820, height: 900 });
+  await expectOneRow();
 });
 
 test("reduced motion keeps the comparison still", async ({ page }) => {

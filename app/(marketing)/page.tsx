@@ -65,7 +65,7 @@ export default function Home() {
             </p>
             <div className="hero-actions">
               <AppDownloadButtons />
-              <Link className="button audiobook-cta" href="/reader/audiobooks">Open Web App <ArrowIcon /></Link>
+              <Link className="button audiobook-cta" href="/reader/audiobooks">Web App <ArrowIcon /></Link>
             </div>
           </div>
           <div className="hero-shot">
