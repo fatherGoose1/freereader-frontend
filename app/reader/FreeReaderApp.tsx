@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, type GutenbergDetails } from "./gutenberg";
+import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, gutenbergLanguageName, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
 import { chunkText, parseFile, parsePastedText, parseWebLink, urlFileTypeHint } from "./importers";
 import { READING_CHUNK_REVISION, rechunkPdfBook } from "./readingChunks";
@@ -53,6 +53,10 @@ import ReaderAccountMenu from "./ReaderAccountMenu";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
+import { deleteLibraryFolder, folderContents } from "./folderDeletion";
+import { paginateLibrary } from "./libraryPagination";
+import { libraryTimeRemaining } from "./libraryReadingTime";
+import { prepareCoverArt } from "./coverArt";
 import { matchWordTimings, wordAtTime, type SpokenWord, type TimedSpokenWord, type WordTiming } from "./spokenWord";
 import ContinuousReader from "./ContinuousReader";
 import { readingColors, READING_BACKGROUNDS, type ReadingBackground } from "./readingAppearance";
@@ -62,7 +66,7 @@ import { ACCOUNT_PREFERENCES_FIELD, DEFAULT_READER_PREFERENCES, parseReaderPrefe
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
 
-type Panel = "voice" | "voicePicker" | "clone" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "add" | "paste" | null;
+type Panel = "voice" | "voicePicker" | "clone" | "font" | "url" | "gutenberg" | "freeBooks" | "folder" | "deleteFolder" | "add" | "paste" | null;
 // Backend English synthesis is batched: several short passages share one round trip.
 const BATCH_MAX_BLOCKS = 2;
 const BATCH_MAX_CHARS = 1200;
@@ -225,8 +229,19 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [folderName, setFolderName] = useState("");
+  const [folderDeleteError, setFolderDeleteError] = useState("");
   const [librarySearch, setLibrarySearch] = useState("");
   const [librarySort, setLibrarySort] = useState("recent");
+  const [libraryPage, setLibraryPage] = useState(1);
+  const [libraryGridHeight, setLibraryGridHeight] = useState(0);
+  const libraryGridRef = useRef<HTMLDivElement>(null);
+  const libraryScrollRef = useRef<number | null>(null);
+  useEffect(() => { setLibraryPage(1); setLibraryGridHeight(0); }, [activeFolderId, librarySearch, librarySort]);
+  useLayoutEffect(() => {
+    if (libraryScrollRef.current === null) return;
+    window.scrollTo({ top: libraryScrollRef.current, behavior: "instant" });
+    libraryScrollRef.current = null;
+  }, [libraryPage]);
   const [textSize, setTextSize] = useState(20);
   const [compactSpacing, setCompactSpacing] = useState(false);
   useEffect(() => {
@@ -270,6 +285,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [sourceError, setSourceError] = useState("");
   const nativeFileInput = useRef<HTMLInputElement>(null);
   const [organizingBook, setOrganizingBook] = useState<LibraryBook | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverError, setCoverError] = useState("");
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
   const [selected, setSelected] = useState<LibraryBook | null>(initialBook ?? null);
   const [navigationJump, setNavigationJump] = useState<{ bookId: string; index: number; revision: number } | null>(null);
@@ -300,7 +317,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [panel, setPanel] = useState<Panel>(null);
   const settingsOpen = panel === "voice" || panel === "voicePicker" || panel === "clone" || panel === "font";
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(initialBook ? "" : "Your books and generated audio stay in this browser.");
+  const [message, setMessage] = useState("");
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -335,7 +352,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [pastedTitle, setPastedTitle] = useState("");
   const [pastedText, setPastedText] = useState("");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<number | undefined>();
+  const [category, setCategory] = useState<number | "indie" | undefined>();
   const [gutenberg, setGutenberg] = useState<GutenbergBook[]>([]);
   const [featuredBooks, setFeaturedBooks] = useState<FeaturedBook[]>([]);
   const [previewBook, setPreviewBook] = useState<FeaturedBook | null>(null);
@@ -365,6 +382,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [spoken, setSpoken] = useState<{ bookId: string; index: number; word: SpokenWord } | null>(null);
   const [ttsProgress, setTtsProgress] = useState<number | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const dialogTrigger = useRef<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const activeAudio = useRef<ActiveAudio | null>(null);
@@ -941,7 +959,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     const controls = () => Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'));
     if (!dialog.contains(document.activeElement)) controls()[0]?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) {
+      if (event.key === "Escape" && !busy && !coverBusy) {
         if (upgradeOpen) setUpgradeOpen(false);
         else { setPanel(panel === "voicePicker" ? "voice" : null); setOrganizingBook(null); }
       }
@@ -955,7 +973,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     };
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); if (previous?.isConnected) previous.focus(); };
-  }, [panel, organizingBook, busy, previewBook, previewGutenberg, upgradeOpen]);
+  }, [panel, organizingBook, busy, coverBusy, previewBook, previewGutenberg, upgradeOpen]);
 
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
@@ -1142,6 +1160,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }
 
   async function searchGutenberg(search = query, bookshelfId = category) {
+    if (bookshelfId === "indie") {
+      setGutenberg([]);
+      return;
+    }
     setBusy(true);
     setMessage("Loading Project Gutenberg directly...");
     if (search.trim()) {
@@ -1150,7 +1172,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
     try {
       setGutenberg(await browseGutenberg(search, search.trim() ? undefined : bookshelfId));
-      setMessage("Project Gutenberg results are fetched directly and are not stored until imported.");
+      setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Project Gutenberg could not be reached.");
     } finally {
@@ -1816,7 +1838,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       })
       .then(({ books }) => setFeaturedBooks(books))
       .catch(() => setFeaturedBooks([]));
-    if (!gutenberg.length) void searchGutenberg("");
+    if (category !== "indie" && !gutenberg.length) void searchGutenberg("");
   }
 
   function addFeaturedBook(book: FeaturedBook) {
@@ -1846,6 +1868,34 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
   }
 
+  async function deleteFolderAndContents(folder: LibraryFolder, deleteDocuments: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setFolderDeleteError("");
+    try {
+      const count = await deleteLibraryFolder(folder, folders, books, deleteDocuments, session?.access_token);
+      const [storedBooks, storedFolders] = await Promise.all([listBooks(), listFolders()]);
+      setBooks(storedBooks);
+      setFolders(storedFolders);
+      setActiveFolderId(folder.parentId ?? null);
+      setPanel(null);
+      libraryChanged();
+      setMessage(count === 0 ? `${folder.name} was deleted.`
+        : deleteDocuments ? `${folder.name} and ${count} ${count === 1 ? "document" : "documents"} were deleted.`
+          : `${folder.name} was deleted. ${count} ${count === 1 ? "document was" : "documents were"} returned to My library.`);
+    } catch {
+      setFolderDeleteError("The folder could not be deleted. Please try again.");
+      try {
+        const [storedBooks, storedFolders] = await Promise.all([listBooks(), listFolders()]);
+        setBooks(storedBooks);
+        setFolders(storedFolders);
+        libraryChanged();
+      } catch { /* Keep the dialog open for retry. */ }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function moveBookToFolder(book: LibraryBook, parentId?: string) {
     const updated = { ...book, parentId, updatedAt: new Date().toISOString() };
     try {
@@ -1859,6 +1909,24 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         : `${book.title} was removed from its folder.`);
     } catch {
       setMessage("The book could not be moved.");
+    }
+  }
+
+  async function updateBookCover(book: LibraryBook, file: File) {
+    setCoverBusy(true);
+    setCoverError("");
+    try {
+      const cover = await prepareCoverArt(file);
+      const updated = { ...book, cover, updatedAt: new Date().toISOString() };
+      await saveBook(updated);
+      setBooks((current) => current.map((item) => item.id === book.id ? updated : item));
+      setOrganizingBook(updated);
+      libraryChanged();
+      setMessage(`Cover art updated for ${book.title}.`);
+    } catch (error) {
+      setCoverError(error instanceof Error ? error.message : "The cover art could not be saved.");
+    } finally {
+      setCoverBusy(false);
     }
   }
 
@@ -2106,6 +2174,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       : librarySort === "added"
         ? b.createdAt.localeCompare(a.createdAt)
         : (b.position.updatedAt ?? b.updatedAt).localeCompare(a.position.updatedAt ?? a.updatedAt));
+  const paginatedBooks = paginateLibrary(visibleBooks, libraryPage);
   const continueBook = [...books]
     .filter((book) => book.position.blockIndex > 0 || book.position.offsetSeconds > 0)
     .sort((a, b) => (b.position.updatedAt ?? b.updatedAt).localeCompare(a.position.updatedAt ?? a.updatedAt))[0];
@@ -2114,6 +2183,13 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const parentFolder = activeFolder?.parentId
     ? folders.find((folder) => folder.id === activeFolder.parentId)
     : undefined;
+  const deletingFolderContents = panel === "deleteFolder" && activeFolder ? folderContents(activeFolder, folders, books) : undefined;
+  const folderDocumentCount = deletingFolderContents?.books.length ?? 0;
+  function changeLibraryPage(page: number) {
+    libraryScrollRef.current = window.scrollY;
+    setLibraryGridHeight(Math.max(libraryGridHeight, libraryGridRef.current?.getBoundingClientRect().height ?? 0));
+    setLibraryPage(page);
+  }
   return (
     <main className={styles.appShell} onClickCapture={(event) => { if (!panel && !organizingBook) dialogTrigger.current = (event.target as Element).closest("button"); }}>
       <header className={styles.libraryHero} inert={!!panel || !!organizingBook || scanOpen}>
@@ -2168,7 +2244,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                 {activeFolder && <button className={styles.backFolder} onClick={() => { setActiveFolderId(parentFolder?.id ?? null); setLibrarySearch(""); }}><ReaderIcon name="back" />{parentFolder?.name ?? "Library"}</button>}
                 <h2>{search ? "Search results" : activeFolder?.name ?? "Saved reading"} <span>{visibleBooks.length}</span></h2>
               </div>
-              <button className={styles.newFolderButton} onClick={() => { setFolderName(""); setPanel("folder"); }}><ReaderIcon name="folder" /> New folder</button>
+              <div className={styles.folderHeadingActions}>
+                {activeFolder && <button className={styles.deleteFolderButton} onClick={() => { setFolderDeleteError(""); setPanel("deleteFolder"); }}>Delete folder</button>}
+                <button className={styles.newFolderButton} onClick={() => { setFolderName(""); setPanel("folder"); }}><ReaderIcon name="folder" /> New folder</button>
+              </div>
             </div>
             <div className={styles.filterRow}>
               <label className={styles.librarySearch}><ReaderIcon name="search" /><input type="search" aria-label="Search library" placeholder={activeFolder ? "Search this folder…" : "Search titles or authors…"} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} /></label>
@@ -2187,8 +2266,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             </div>
           )}
           {!libraryLoaded ? <p role="status" className={styles.emptyLibrary}>Loading your library…</p> : visibleBooks.length ? (
-            <div className={styles.libraryGrid} aria-label="Local library">
-              {visibleBooks.map((book, index) => {
+            <div ref={libraryGridRef} className={styles.libraryGrid} aria-label="Local library" style={{ minHeight: libraryGridHeight || undefined }}>
+              {paginatedBooks.items.map((book, index) => {
                 const progress = readingProgress(book);
                 return (
                   <article key={book.id} className={styles.bookCard}>
@@ -2196,13 +2275,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                       <BookCover book={book} index={index} />
                       <span className={styles.bookInfo}>
                         <strong>{book.title}</strong>
-                        {book.author && <span>{book.author}</span>}
-                        <span>{wordCount(book).toLocaleString()} words · {formatBytes(book.size)}</span>
-                        <span className={styles.bookReadingState}>{progress > 0 ? `${Math.round(progress * 100)}% read · Continue reading` : "Ready to read"}</span>
+                        <span className={styles.bookReadingState}>{Math.round(progress * 100)}% complete · {libraryTimeRemaining(wordCount(book), progress, book.position.speed)}</span>
                         <span className={styles.bookProgress}><i style={{ width: `${progress * 100}%` }} /></span>
                       </span>
                     </button>
-                    <button className={styles.moreButton} onClick={() => setOrganizingBook(book)} aria-label={`Organize ${book.title}`}><ReaderIcon name="more" /></button>
+                    <button className={styles.moreButton} onClick={() => { setCoverError(""); setOrganizingBook(book); }} aria-label={`Organize ${book.title}`}><ReaderIcon name="more" /></button>
                   </article>
                 );
               })}
@@ -2217,7 +2294,14 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               <small>EPUB · PDF · TXT · DOCX · HTML · Markdown</small>
             </div>
           ) : null}
-          <div className={styles.libraryFootnote} role="status">{busy && <span className={styles.addSpinner} />} {message}</div>
+          {libraryLoaded && paginatedBooks.pageCount > 1 && (
+            <nav className={styles.libraryPagination} aria-label="Document pages">
+              <button type="button" aria-label="Previous page" disabled={paginatedBooks.page === 1} onClick={() => changeLibraryPage(paginatedBooks.page - 1)}><ReaderIcon name="back" /></button>
+              <span aria-live="polite">Page {paginatedBooks.page} of {paginatedBooks.pageCount}</span>
+              <button type="button" aria-label="Next page" disabled={paginatedBooks.page === paginatedBooks.pageCount} onClick={() => changeLibraryPage(paginatedBooks.page + 1)}><ReaderIcon name="arrow" /></button>
+            </nav>
+          )}
+          {(busy || message) && <div className={styles.libraryFootnote} role="status">{busy && <span className={styles.addSpinner} />} {message}</div>}
         </section>
       </div>
       {panel === "add" && (
@@ -2302,20 +2386,49 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           </form>
         </div>
       )}
+      {panel === "deleteFolder" && activeFolder && deletingFolderContents && (
+        <div className={styles.modalBackdrop} onMouseDown={() => !busy && setPanel(null)}>
+          <div className={`${styles.modal} ${styles.folderModal}`} role="dialog" aria-modal="true" aria-label={`Delete ${activeFolder.name}`} onMouseDown={(event) => event.stopPropagation()}>
+            <span className={styles.kicker}>Delete folder</span>
+            <h2>Delete {activeFolder.name}?</h2>
+            <p>{folderDocumentCount ? `Should the ${folderDocumentCount} ${folderDocumentCount === 1 ? "document" : "documents"} inside be deleted too?` : "This folder has no documents."} {deletingFolderContents.folders.length > 1 && "Folders inside it will also be removed."}</p>
+            {folderDeleteError && <p role="alert" className={styles.folderDeleteError}>{folderDeleteError}</p>}
+            <div className={styles.folderDeleteActions}>
+              <button disabled={busy} onClick={() => setPanel(null)}>Cancel</button>
+              {!!folderDocumentCount && <button disabled={busy} onClick={() => void deleteFolderAndContents(activeFolder, false)}>Keep documents in My library</button>}
+              <button className={styles.deleteFolderConfirm} disabled={busy} onClick={() => void deleteFolderAndContents(activeFolder, true)}>{folderDocumentCount ? "Delete documents too" : "Delete folder"}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {organizingBook && (
-        <div className={styles.modalBackdrop} onMouseDown={() => setOrganizingBook(null)}>
+        <div className={styles.modalBackdrop} onMouseDown={() => !coverBusy && setOrganizingBook(null)}>
           <div className={`${styles.modal} ${styles.organizeModal}`} role="dialog" aria-modal="true" aria-label="Organize book" onMouseDown={(event) => event.stopPropagation()}>
             <span className={styles.kicker}>Organize Book</span>
             <h2>{organizingBook.title}</h2>
             <p>Move this book to a folder, or return it to the main library.</p>
+            <div className={styles.organizeCover}>
+              <BookCover book={organizingBook} index={0} />
+              <div>
+                <strong>Cover art</strong>
+                <button type="button" disabled={coverBusy} onClick={() => coverInputRef.current?.click()}>{coverBusy ? "Saving cover…" : "Change cover"}</button>
+                <small>JPG, PNG, or WebP</small>
+              </div>
+              <input ref={coverInputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file) void updateBookCover(organizingBook, file);
+              }} />
+            </div>
+            {coverError && <p role="alert" className={styles.coverError}>{coverError}</p>}
             <div className={styles.folderChoices}>
-              <button disabled={!organizingBook.parentId} onClick={() => void moveBookToFolder(organizingBook)}>
+              <button disabled={coverBusy || !organizingBook.parentId} onClick={() => void moveBookToFolder(organizingBook)}>
                 <span className={styles.libraryGlyph}>B</span>
-                <span><strong>{organizingBook.parentId ? "Remove from Folder" : "Library Root"}</strong><small>Keep the book without a folder</small></span>
+                <span><strong>{organizingBook.parentId ? "Remove from Folder" : "My library"}</strong><small>Keep the book without a folder</small></span>
                 {!organizingBook.parentId && <i>Current</i>}
               </button>
               {folderList.map((folder) => (
-                <button key={folder.id} disabled={organizingBook.parentId === folder.id} onClick={() => void moveBookToFolder(organizingBook, folder.id)}>
+                <button key={folder.id} disabled={coverBusy || organizingBook.parentId === folder.id} onClick={() => void moveBookToFolder(organizingBook, folder.id)}>
                   <span className={styles.folderGlyph} />
                   <span><strong>{folder.name}</strong><small>{folderPath(folder, folders)}</small></span>
                   {organizingBook.parentId === folder.id && <i>Current</i>}
@@ -2323,8 +2436,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               ))}
             </div>
             <div className={styles.organizeActions}>
-              <button onClick={() => setOrganizingBook(null)}>Done</button>
-              <button className={styles.destructiveButton} onClick={() => void deleteBook(organizingBook)}>Delete Book</button>
+              <button disabled={coverBusy} onClick={() => setOrganizingBook(null)}>Done</button>
+              <button className={styles.destructiveButton} disabled={coverBusy} onClick={() => void deleteBook(organizingBook)}>Delete Book</button>
             </div>
           </div>
         </div>
@@ -2362,9 +2475,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               <button className={styles.previewBack} onClick={() => setPreviewGutenberg(null)}><ReaderIcon name="back" /> Free Books</button>
               <div className={styles.bookPreview}>
                 <GutenbergCover book={previewGutenberg} preview />
-                <div><span className={styles.kicker}>eBook #{previewGutenberg.id}</span><h2>{gutenbergPreviewDetails?.title ?? previewGutenberg.title}</h2>
+                <div><h2>{gutenbergPreviewDetails?.title ?? previewGutenberg.title}</h2>
                   <p>by {gutenbergPreviewDetails?.authors.join(", ") || previewGutenberg.author || "Project Gutenberg"}</p>
-                  {gutenbergPreviewDetails && <small>{[gutenbergPreviewDetails.languages.join(", "), gutenbergPreviewDetails.epubSize ? `EPUB · ${formatBytes(gutenbergPreviewDetails.epubSize)}` : "EPUB"].filter(Boolean).join(" · ")}</small>}
+                  {gutenbergPreviewDetails && <small>{[gutenbergPreviewDetails.languages.map(gutenbergLanguageName).join(", "), gutenbergPreviewDetails.epubSize ? `EPUB · ${formatBytes(gutenbergPreviewDetails.epubSize)}` : "EPUB"].filter(Boolean).join(" · ")}</small>}
                 </div>
               </div>
               {gutenbergPreviewLoading && <p role="status">Loading book details…</p>}
@@ -2383,10 +2496,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               </form>
               <div className={styles.categoryChips}>
                 <button className={category === undefined && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory(undefined); void searchGutenberg("", undefined); }}>Popular</button>
+                <button className={category === "indie" && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory("indie"); setGutenberg([]); }}>Indie</button>
                 {gutenbergCategories.map(([id, name]) => <button key={id} className={category === id && !query ? styles.categoryActive : ""} onClick={() => { setQuery(""); setCategory(id); void searchGutenberg("", id); }}>{name}</button>)}
               </div>
               <div className={styles.catalogList}>
-                {category === undefined && featuredBooks.filter((book) => !query.trim() || `${book.title} ${book.author_name}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map((book) => (
+                {(category === "indie" || (category === undefined && !!query.trim())) && featuredBooks.filter((book) => !query.trim() || `${book.title} ${book.author_name}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map((book) => (
                   <article key={book.id}>
                     <button className={styles.catalogPreviewButton} onClick={() => setPreviewBook(book)} aria-label={`Preview ${book.title}`}>
                       {book.cover_path ? <img src={assetUrl(book.cover_path)} alt="" loading="lazy" /> : <span className={styles.miniCover}>FR</span>}
@@ -2395,11 +2509,11 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
                     <button onClick={() => addFeaturedBook(book)}>Add</button>
                   </article>
                 ))}
-                {gutenberg.map((book) => (
+                {category !== "indie" && gutenberg.map((book) => (
                   <article key={book.id}>
                     <button className={styles.catalogPreviewButton} onClick={() => setPreviewGutenberg(book)} aria-label={`Preview ${book.title}`}>
                       <GutenbergCover book={book} />
-                      <span className={styles.catalogBookInfo}><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small><small>eBook #{book.id}</small></span>
+                      <span className={styles.catalogBookInfo}><strong>{book.title}</strong><small>{book.author || "Project Gutenberg"}</small></span>
                     </button>
                     <button disabled={busy} onClick={() => importGutenberg(book)}>
                       {importingBookId === book.id && <span className={styles.addSpinner} aria-label="Adding book" />}

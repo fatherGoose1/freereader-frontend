@@ -145,6 +145,8 @@ test("stores cover artwork without passing Blob data to IndexedDB", async () => 
   assert.deepEqual({ ...stored, cover: undefined }, { ...book, cover: undefined });
   assert.equal(stored.cover?.type, "image/jpeg");
   assert.equal(await stored.cover?.text(), "cover bytes");
+  await saveBook({ ...stored, cover: new Blob(["replacement artwork"], { type: "image/jpeg" }), updatedAt: new Date(Date.now() + 1000).toISOString() });
+  assert.equal(await (await listBooks()).find((item) => item.id === book.id)?.cover?.text(), "replacement artwork");
 });
 
 test("stores narration metadata and resets interrupted generation after reload", async () => {

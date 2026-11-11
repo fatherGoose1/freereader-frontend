@@ -49,7 +49,7 @@ export default function Home() {
         <div className="hero wrap">
           <div className="hero-copy">
             {/* <span className="eyebrow hero-eyebrow"><i /> Audiobooks + video voiceovers</span> */}
-            <h1 aria-label="Faster than Speechify, ElevenReader, or NaturalReader. Less than half the price.">
+            <h1 aria-label="Faster than Speechify, ElevenReader, or NaturalReader. Less than 1/3 the price.">
               Faster than
               <span className="hero-comparison">
                 <em className="hero-competitor" aria-hidden="true">
@@ -58,7 +58,7 @@ export default function Home() {
                   <span>NaturalReader</span>
                 </em>
               </span>
-              less than half the price.
+              less than <strong className="hero-price-fraction">1/3</strong> the price.
             </h1>
             <p className="lead">
               Listen to books, documents, and articles in seconds, with natural voices and accessibility features to make reading easy.
@@ -92,12 +92,16 @@ export default function Home() {
           <h2 id="listening-questions-heading">Questions about FreeReader</h2>
           <h3>Is FreeReader free?</h3>
           <p>Yes. Listen for up to one hour a day for free. <Link href="/pricing">FreeReader Gold</Link> gives you unlimited audiobook listening for $39 per year or $5 per month.</p>
-          <h3>Can I listen to Reddit threads?</h3>
-          <p>Yes. The <a href="https://chromewebstore.google.com/detail/freereader-text-to-speech/nkndgadokffoldebphmdphjepcedcakc">FreeReader Chrome extension</a> reads Reddit threads aloud with a different voice for each user. You can also listen to web pages.</p>
+          <h3>Does FreeReader help with Dyslexia and ADHD?</h3>
+          <p>Yes, FreeReader was specifically built with dyslexic and ADHD readers in mind. FreeReader supports word-level highlighting to help with focus and dyslexic-friendly fonts, screen tinting, and word spacing controls.</p>
           <h3>Is FreeReader available on iPhone?</h3>
           <p>Yes. <a href="https://apps.apple.com/app/voicereader-text-to-speech/id6808351587">Download FreeReader on the App Store</a>, or use the web reader in your browser.</p>
+          <h3>Does FreeReader read Google Docs?</h3>
+          <p>Yes, the FreeReader chrome extension can read both editable and public Google Docs.</p>
           <h3>Does FreeReader work for schools?</h3>
           <p>Yes. <Link href="/school">FreeReader EDU</Link> helps students who struggle with reading listen and follow along with assigned materials.</p>
+          <h3>Can I listen to Reddit threads?</h3>
+          <p>Yes. The <a href="https://chromewebstore.google.com/detail/freereader-text-to-speech/nkndgadokffoldebphmdphjepcedcakc">FreeReader Chrome extension</a> reads Reddit threads aloud with a different voice for each user. You can also listen to web pages.</p>
         </div>
       </section>
 

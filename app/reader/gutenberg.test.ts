@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMParser as LinkeDOMParser } from "linkedom";
-import { browseGutenberg, gutenbergDetails } from "./gutenberg";
+import { browseGutenberg, gutenbergDetails, gutenbergLanguageName } from "./gutenberg";
+
+test("Gutenberg preview language codes are shown as readable names", () => {
+  assert.equal(gutenbergLanguageName("en"), "English");
+  assert.equal(gutenbergLanguageName("fr"), "French");
+  assert.equal(gutenbergLanguageName("not-a-language-code"), "not-a-language-code");
+});
 
 function installDom(): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "DOMParser");

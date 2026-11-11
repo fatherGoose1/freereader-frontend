@@ -189,6 +189,10 @@ export function saveFolder(folder: LibraryFolder): Promise<IDBValidKey> {
   return transact("folders", "readwrite", (store) => store.put(folder));
 }
 
+export function removeFolder(id: string): Promise<undefined> {
+  return transact("folders", "readwrite", (store) => store.delete(id));
+}
+
 export async function listAccountSyncRecords(ownerId: string): Promise<AccountSyncRecord[]> {
   return (await listAllAccountSyncRecords()).filter((record) => record.ownerId === ownerId);
 }

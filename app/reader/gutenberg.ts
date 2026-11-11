@@ -6,6 +6,15 @@ export type GutenbergDetails = {
 };
 
 const GUTENBERG = "https://www.gutenberg.org";
+const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
+
+export function gutenbergLanguageName(code: string): string {
+  try {
+    return languageNames.of(code.trim()) ?? code;
+  } catch {
+    return code;
+  }
+}
 
 function safeUrl(value: string, base = GUTENBERG): string | undefined {
   try {

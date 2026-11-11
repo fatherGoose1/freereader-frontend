@@ -230,6 +230,10 @@ export function deleteCloudDocument(token: string, documentId: string): Promise<
   return api(`/documents/${documentId}`, token, { method: "DELETE" });
 }
 
+export function deleteCloudFolder(token: string, folderId: string): Promise<void> {
+  return api(`/folders/${folderId}`, token, { method: "DELETE" });
+}
+
 export async function deleteCloudAccount(token: string, ownerId: string): Promise<void> {
   await api("/account", token, { method: "DELETE" });
   const records = await listAccountSyncRecords(ownerId);

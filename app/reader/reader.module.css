@@ -130,6 +130,9 @@
 .newFolderButton:hover, .backFolder:hover { background: #e9edf5; }
 .newFolderButton svg, .backFolder svg { width: 17px; }
 .backFolder { margin: -8px 0 6px -10px; }
+.folderHeadingActions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.deleteFolderButton { min-height: 40px; padding: 7px 10px; color: #b33d45; background: transparent; border: 0; border-radius: 7px; font-size: 12px; }
+.deleteFolderButton:hover { background: #fbecef; }
 .filterRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .librarySearch { display: flex; align-items: center; gap: 10px; width: min(390px, 100%); min-width: 0; padding: 0 14px; color: #8b96a9; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
 .librarySearch input { width: 100%; min-width: 0; min-height: 43px; color: var(--app-label); background: transparent; border: 0; }
@@ -145,10 +148,16 @@
 .folderCard strong { overflow: hidden; color: var(--app-label); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .folderCard small { margin-top: 3px; color: var(--app-secondary); font-size: 11px; }
 .folderCard > svg:last-child { width: 16px; color: #929eb2; }
-.libraryGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.libraryGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(128px, max-content); align-content: start; gap: 16px; }
+.libraryPagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 28px 0 8px; }
+.libraryPagination button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; color: var(--app-blue); background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+.libraryPagination button:hover:not(:disabled) { background: #eef2fc; }
+.libraryPagination button:disabled { color: #929eb2; cursor: default; }
+.libraryPagination button svg { width: 18px; height: 18px; }
+.libraryPagination span { color: var(--app-secondary); font-size: 12px; white-space: nowrap; }
 .bookCard { position: relative; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
 .bookCard:hover { border-color: #a8b9ed; box-shadow: 0 4px 16px #29395909; }
-.bookOpen { display: flex; align-items: flex-start; gap: 17px; width: 100%; min-height: 170px; padding: 22px 20px; color: inherit; background: none; border: 0; border-radius: inherit; text-align: left; }
+.bookOpen { display: flex; align-items: flex-start; gap: 17px; width: 100%; min-height: 128px; padding: 16px 20px; color: inherit; background: none; border: 0; border-radius: inherit; text-align: left; }
 .cover, .coverImage { display: grid; place-items: center; width: 60px; height: 84px; flex: none; border-radius: 3px 6px 6px 3px; object-fit: cover; box-shadow: 0 5px 10px #23375b18; }
 .cover { color: #fff; background: #7389b8; box-shadow: inset 5px 0 #00000012, 0 5px 10px #23375b18; }
 .cover small { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
@@ -158,7 +167,7 @@
 .bookInfo { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 5px; }
 .bookInfo > strong { display: -webkit-box; padding-right: 16px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #30394a; font-size: 15px; font-weight: 600; line-height: 1.4; }
 .bookInfo > span { overflow: hidden; color: var(--app-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.bookInfo .bookReadingState { margin-top: 12px; color: #5470ae; font-size: 10px; }
+.bookInfo .bookReadingState { margin-top: 2px; color: var(--app-secondary); font-size: 11px; }
 .bookProgress { display: block; width: 100%; height: 3px; background: var(--app-fill); border-radius: 9px; }
 .bookProgress i { display: block; height: 100%; background: #7590e2; border-radius: inherit; }
 .moreButton { position: absolute; top: 9px; right: 6px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: #8490a6; background: transparent; border: 0; border-radius: 7px; }
@@ -287,6 +296,12 @@
 .pasteMeta { margin-top: 6px; color: #8390a3; font-size: 11px; text-align: right; }
 .modalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .modalActions button:not(.primaryAction), .catalogSearch button, .catalogList button, .catalog > button { min-height: 44px; padding: 10px 16px; color: #536584; background: #f5f7fc; border: 1px solid var(--border); border-radius: 8px; font-weight: 500; }
+.folderDeleteActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.folderDeleteActions button { min-height: 44px; padding: 10px 14px; color: #536584; background: #f5f7fc; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 600; }
+.folderDeleteActions .deleteFolderConfirm { color: #fff; background: #b33d45; border-color: #b33d45; }
+.folderDeleteActions .deleteFolderConfirm:hover:not(:disabled) { background: #992e38; }
+.folderDeleteActions button:disabled { opacity: .55; cursor: wait; }
+.modal .folderDeleteError { color: #b3261e; }
 .modalPrivacy { margin-top: 22px; padding-top: 16px; color: #7f8c9e; border-top: 1px solid #edf0f5; font-size: 11px; text-align: center; }
 .goldModal { position: relative; width: min(440px, 100%); border-color: #d9b76b; box-shadow: 0 0 0 2px #d7a93f50, 0 24px 80px #674d1b40; }
 .goldOfferDismiss { display: block; margin: 12px auto 0; padding: 8px 12px; color: #536584; background: transparent; border: 0; text-decoration: underline; }
@@ -335,6 +350,13 @@
 .pasteChoiceIcon { color: #8474a9; background: #f2eff9; }
 .folderGlyph { position: relative; width: 30px; height: 23px; flex: none; background: #9aafd9; border-radius: 4px; }
 .folderGlyph::before { position: absolute; top: -4px; left: 2px; width: 12px; height: 5px; content: ""; background: inherit; border-radius: 3px 3px 0 0; }
+.organizeCover { display: flex; align-items: center; gap: 18px; margin-top: 20px; padding: 16px; background: #f7f9fc; border: 1px solid var(--border); border-radius: 12px; }
+.organizeCover > :first-child { width: 72px; height: 100px; }
+.organizeCover > div { display: flex; align-items: flex-start; flex-direction: column; gap: 8px; }
+.organizeCover strong { font-size: 13px; }
+.organizeCover button { min-height: 36px; padding: 7px 12px; color: var(--app-blue); background: #fff; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.organizeCover small { color: var(--app-secondary); font-size: 11px; }
+.modal .coverError { margin: 10px 0 0; color: #b3261e; }
 .organizeActions { display: flex; justify-content: space-between; margin-top: 22px; }
 .organizeActions button { min-height: 44px; padding: 8px 12px; color: var(--app-blue); background: transparent; border: 0; border-radius: 8px; }
 .appShell .destructiveButton { color: #bf434b; }
@@ -516,7 +538,7 @@
   .sortLabel { margin-left: auto; font-size: 11px; }
   .sortLabel select { min-height: 36px; padding-block: 6px; }
   .libraryGrid, .folderGrid { grid-template-columns: 1fr; gap: 12px; }
-  .bookOpen { min-height: 145px; padding: 20px; }
+  .bookOpen { padding: 16px; }
   .emptyLibrary { padding: 32px 16px; }
   .emptyLibrary h2 { font-size: 20px; }
   .emptyLibrary p { font-size: 13px; }

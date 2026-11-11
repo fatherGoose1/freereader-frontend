@@ -36,6 +36,38 @@ test("cloud documents gzip content and keep progress in its separate record", as
   assert.equal(await decoded.cover?.text(), "cover bytes");
 });
 
+test("changing a cover uploads the replacement artwork with the document's next revision", async (t) => {
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
+  const id = crypto.randomUUID();
+  const old = "2026-09-01T00:00:00.000Z";
+  const updatedAt = "2026-09-02T00:00:00.000Z";
+  const book: LibraryBook = {
+    id, title: "Cover edit", format: "txt", sourceName: "cover.txt", size: 20,
+    createdAt: old, updatedAt, chapters: [], blocks: [{ index: 0, text: "Book text", chapterIndex: 0, isHeading: false }],
+    position: { blockIndex: 0, offsetSeconds: 0, speed: 1, updatedAt: old },
+    cover: new Blob(["new artwork"], { type: "image/jpeg" }),
+  };
+  await saveBook(book);
+  let uploads = 0;
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/manifest")) return Response.json({ schemaVersion: 1, documentLimit: 100, maxDocumentBytes: 10485760,
+      folders: [], documents: [{ id, updatedAt: old, revision: 1 }],
+      progress: [{ documentId: id, blockIndex: 0, offsetSeconds: 0, speed: 1, updatedAt: old, revision: 1 }] });
+    if (path.endsWith(`/documents/${id}`) && init?.method === "PUT") {
+      assert.equal(new Headers(init.headers).get("If-Match"), "1");
+      const uploaded = await decodeCloudDocument(init.body as Blob);
+      assert.equal(await uploaded.cover?.text(), "new artwork");
+      uploads += 1;
+      return Response.json({ document: { id, updatedAt, revision: 2 } });
+    }
+    throw new Error(`Unexpected sync request: ${path}`);
+  });
+  const result = await synchronizeLibrary("token", "cover-owner", [book], []);
+  assert.equal(result.uploaded, 1);
+  assert.equal(uploads, 1);
+});
+
 test("sync uploads a guest book and its reading progress, then preserves newer local progress when downloading document edits", async (t) => {
   Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIndexedDB });
   const id = crypto.randomUUID();
