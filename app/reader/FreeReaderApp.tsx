@@ -2195,7 +2195,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       <header className={styles.libraryHero} inert={!!panel || !!organizingBook || scanOpen}>
         <Link href="/" className={styles.libraryBrand} aria-label="FreeReader home">
           <span className={styles.appMark} aria-hidden="true"><i /><i /><i /><i /></span>
-          <span>FreeReader<span className={styles.brandSubtitle}>Your reading workspace</span></span>
+          <span>FreeReader</span>
         </Link>
         <div className={styles.actions}>
           {showUpgradePrompts && <button type="button" className={styles.librarySignIn} onClick={() => setUpgradeOpen(true)}>Get {ENHANCED_TIER_NAME}</button>}

@@ -1,4 +1,4 @@
-type FeedbackSource = "Reddit" | "X" | "Instagram" | "TikTok";
+type FeedbackSource = "Reddit" | "X" | "Instagram" | "TikTok" | "Email";
 
 // Placeholder copy and source assignments; replace with the supplied real comments.
 const feedback = [
@@ -6,6 +6,7 @@ const feedback = [
   { source: "X", quote: "I can bring in a book and start listening without setting anything up." },
   { source: "Reddit", quote: "Picking up right where I left off makes reading fit into my day." },
   { source: "Instagram", quote: "Listening to articles while following the text is exactly what I needed." },
+  { source: "Email", quote: "I am liking it and think it will be very useful for my students." },
   { source: "Reddit", quote: "I can switch between reading and listening without losing my place." },
   { source: "TikTok", quote: "Turning my documents into something I can listen to is so convenient." },
 ] satisfies { source: FeedbackSource; quote: string }[];
@@ -30,6 +31,12 @@ function SourceIcon({ source }: { source: FeedbackSource }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4.2" />
       <circle cx="17.5" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+  if (source === "Email") return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="m3.5 7.5 8.5 6 8.5-6" />
     </svg>
   );
   return (
