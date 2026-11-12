@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { browseGutenberg, downloadGutenbergBook, gutenbergDetails, gutenbergLanguageName, type GutenbergDetails } from "./gutenberg";
 import { isPausedArchiveUrl } from "./pausedSources";
@@ -50,6 +50,7 @@ import VoiceSelectionDialog from "./VoiceSelectionDialog";
 import { listPhononCatalog, listPhononVoices, type PhononCatalog, type PhononCatalogVoice } from "./phonon";
 import { currentSessionAccessToken } from "./authToken";
 import ReaderAccountMenu from "./ReaderAccountMenu";
+import { forgetPendingLicense, pendingLicense, redeemLicense, rememberPendingLicense } from "./licenses";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
@@ -74,6 +75,16 @@ const BATCH_MAX_CHARS = 1200;
 // are shown to readers who have not subscribed yet.
 const SHOW_UPGRADE_PROMPTS = true;
 const GOLD_OFFER_PENDING_KEY = "freereader-gold-offer-opt-in-pending";
+const LICENSE_CODE = /^[A-Z0-9]{8}$/;
+
+function clearPendingLicense() {
+  forgetPendingLicense();
+  const url = new URL(window.location.href);
+  if (url.searchParams.has("redeem")) {
+    url.searchParams.delete("redeem");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }
+}
 type PreparedAudio = {
   blob: Blob; provider: string; model: string; cached: boolean; duration: number;
   wordTimings?: WordTiming[];
@@ -327,12 +338,18 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }, []);
   const [localRevision, setLocalRevision] = useState(0);
   const [plan, setPlan] = useState<string>("free");
-  const [billingSource, setBillingSource] = useState<"stripe" | "apple">("stripe");
+  const [billingSource, setBillingSource] = useState<"stripe" | "apple" | "license">("stripe");
   const [planReady, setPlanReady] = useState(false);
   const [phononCatalog, setPhononCatalog] = useState<PhononCatalog | null>(null);
   const [goldCatalog, setGoldCatalog] = useState<PhononCatalogVoice[] | null>(null);
   const [goldCatalogError, setGoldCatalogError] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeemInput, setRedeemInput] = useState("");
+  const [redeemError, setRedeemError] = useState("");
+  const [redeemBusy, setRedeemBusy] = useState(false);
+  const redeemAttempt = useRef("");
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginRecovery, setLoginRecovery] = useState(false);
@@ -579,6 +596,19 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     return () => data.subscription.unsubscribe();
   }, []);
 
+  // Preserve a link's code across OAuth or email verification. A code is only
+  // claimed later, after the backend validates a signed-in account token.
+  useEffect(() => {
+    if (managed) return;
+    const raw = new URL(window.location.href).searchParams.get("redeem");
+    const code = (raw ?? pendingLicense() ?? "").trim().toUpperCase();
+    if (!code) return;
+    setRedeemInput(code);
+    if (!LICENSE_CODE.test(code)) { setRedeemError("That code is not valid."); setRedeemOpen(true); return; }
+    rememberPendingLicense(code);
+    setRedeemCode(code);
+  }, [managed]);
+
   useEffect(() => {
     let returning = false;
     try {
@@ -657,7 +687,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   // Email-offer consent is unrelated to Gold entitlement. A signed-in reader
   // without a confirmed Gold plan should always see the upgrade entry points,
   // even if usage is temporarily unavailable or they opted in to an offer.
-  const showUpgradePrompts = SHOW_UPGRADE_PROMPTS && !goldOfferActive && !managed && !!session && planReady &&
+  const showUpgradePrompts = SHOW_UPGRADE_PROMPTS && !goldOfferActive && !redeemCode && !managed && !!session && planReady &&
     usageOwner === session.user.id && !enhanced;
 
   // Resolve membership and today's audiobook usage together.
@@ -683,6 +713,53 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       window.removeEventListener("focus", refreshOnReturn);
     };
   }, [managed, session]);
+
+  const claimLicense = useCallback(async (code: string, current: Session) => {
+    setRedeemBusy(true);
+    setRedeemError("");
+    try {
+      await redeemLicense(current.access_token, code);
+      // The successful claim is the source of truth even if the usage refresh
+      // is temporarily unavailable. Reloading later will resolve the same Gold grant.
+      setPlan("gold_yearly");
+      setBillingSource("license");
+      setUsageOwner(current.user.id);
+      setPlanReady(true);
+      setUpgradeOpen(false);
+      setLoginOpen(false);
+      clearPendingLicense();
+      setRedeemCode("");
+      setRedeemInput("");
+      setRedeemOpen(false);
+      setMessage("FreeReader Gold is active.");
+      try {
+        const summary = await fetchUsage(current.access_token);
+        setUsage(summary);
+        setPlan(summary.plan);
+        setBillingSource(summary.billing_source ?? "license");
+      } catch { setUsage(null); }
+    } catch (cause) {
+      setRedeemError(cause instanceof Error ? cause.message : "Could not redeem the code.");
+      setRedeemOpen(true);
+    } finally { setRedeemBusy(false); }
+  }, []);
+
+  useEffect(() => {
+    if (!redeemCode || managed || !authReady) return;
+    if (!session) { setLoginOpen(true); return; }
+    if (!planReady || usageOwner !== session.user.id) return;
+    if (enhanced) {
+      clearPendingLicense();
+      setRedeemCode("");
+      setMessage("This account already has Gold. The code was not used.");
+      return;
+    }
+    const key = `${session.user.id}:${redeemCode}`;
+    if (redeemAttempt.current === key) return;
+    redeemAttempt.current = key;
+    setRedeemOpen(true);
+    void claimLicense(redeemCode, session);
+  }, [redeemCode, managed, authReady, session, planReady, usageOwner, enhanced, claimLicense]);
 
   useEffect(() => {
     if (!showUpgradePrompts || !session) return;
@@ -824,7 +901,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
     setLoginError("");
     try {
-      sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
+      if (!redeemCode) sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
+      else rememberPendingLicense(redeemCode);
     } catch {
       setLoginError("Browser storage is unavailable. Please enable it to complete sign-in.");
       return;
@@ -866,13 +944,34 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const accountButton = !managed && session && <ReaderAccountMenu session={session} plan={plan} billingSource={billingSource}
     usage={usageOwner === session.user.id ? usage : null}
     showUpgrade={showUpgradePrompts}
-    onUpgrade={() => setUpgradeOpen(true)} onSignOut={() => void signOut()} />;
+    onUpgrade={() => setUpgradeOpen(true)} onRedeem={() => { setRedeemError(""); setRedeemInput(""); setRedeemOpen(true); }}
+    onSignOut={() => void signOut()} />;
   const upgradeFab = showUpgradePrompts && !upgradeOpen && (
     <button type="button" className={styles.upgradeFab} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`} title={`Upgrade to ${ENHANCED_TIER_NAME}`} onClick={() => setUpgradeOpen(true)}>
       <ReaderIcon name="crown" /><span>Upgrade</span>
     </button>
   );
   const upgradeDialog = upgradeOpen && <GoldDialog session={session} initialInterval={upgradeInterval} initialError={upgradeError} onClose={() => { setUpgradeOpen(false); setUpgradeError(""); }} />;
+  const redeemDialog = redeemOpen && session && !loginRecovery && <div className={styles.modalBackdrop} onMouseDown={() => !redeemBusy && setRedeemOpen(false)}>
+    <form className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Redeem a code"
+      onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => {
+        event.preventDefault();
+        const code = redeemInput.trim().toUpperCase();
+        if (!LICENSE_CODE.test(code)) { setRedeemError("Enter an 8-character code."); return; }
+        void claimLicense(code, session);
+      }}>
+      <h2>Redeem a code</h2>
+      <label className={styles.fieldLabel}>License code
+        <input type="text" autoCapitalize="characters" autoComplete="off" maxLength={8} required value={redeemInput}
+          onChange={(event) => setRedeemInput(event.target.value.toUpperCase())} disabled={redeemBusy} />
+      </label>
+      {redeemError && <p role="alert">{redeemError}</p>}
+      <div className={styles.modalActions}>
+        <button type="button" disabled={redeemBusy} onClick={() => setRedeemOpen(false)}>Cancel</button>
+        <button className={styles.primaryAction} type="submit" disabled={redeemBusy}>{redeemBusy ? "Redeeming…" : "Redeem"}</button>
+      </div>
+    </form>
+  </div>;
   const goldOfferDialog = goldOfferActive && <div className={styles.modalBackdrop}>
     <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Your 50% off Gold offer">
       <h2>50% off FreeReader Gold</h2>
@@ -891,7 +990,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const loginDialog = loginOpen && (!session || loginRecovery) && <div className={styles.modalBackdrop} onMouseDown={closeLogin}>
     <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label="Sign in to generate audio" onMouseDown={(event) => event.stopPropagation()}>
       <button className={styles.goldClose} type="button" aria-label="Close" onClick={closeLogin}><ReaderIcon name="close" /></button>
-      <h2>{loginRecovery ? "Set a new password" : "Sign in to listen"}</h2>
+      <h2>{loginRecovery ? "Set a new password" : redeemCode ? "Sign in to redeem your code" : "Sign in to listen"}</h2>
       {!loginRecovery && <>
         <p>Sign in to generate up to 1 hour of audio each day.</p>
         {loginError && <p role="alert">{loginError}</p>}
@@ -950,17 +1049,18 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   }, []);
 
   useEffect(() => {
-    if (!panel && !organizingBook && !upgradeOpen) return;
-    const previous = upgradeOpen ? document.activeElement as HTMLElement | null
+    if (!panel && !organizingBook && !upgradeOpen && !redeemOpen) return;
+    const previous = upgradeOpen || redeemOpen ? document.activeElement as HTMLElement | null
       : dialogTrigger.current ?? document.activeElement as HTMLElement | null;
-    const dialog = upgradeOpen ? document.querySelector<HTMLElement>(`.${styles.goldModal}`)
+    const dialog = upgradeOpen || redeemOpen ? document.querySelector<HTMLElement>(`.${styles.goldModal}`)
       : document.querySelector<HTMLElement>(`.${styles.modal}, .${styles.voicePopover}`);
     if (!dialog) return;
     const controls = () => Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'));
     if (!dialog.contains(document.activeElement)) controls()[0]?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy && !coverBusy) {
+      if (event.key === "Escape" && !busy && !coverBusy && !redeemBusy) {
         if (upgradeOpen) setUpgradeOpen(false);
+        else if (redeemOpen) setRedeemOpen(false);
         else { setPanel(panel === "voicePicker" ? "voice" : null); setOrganizingBook(null); }
       }
       if (event.key === "Tab") {
@@ -973,7 +1073,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     };
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); if (previous?.isConnected) previous.focus(); };
-  }, [panel, organizingBook, busy, coverBusy, previewBook, previewGutenberg, upgradeOpen]);
+  }, [panel, organizingBook, busy, coverBusy, previewBook, previewGutenberg, upgradeOpen, redeemOpen, redeemBusy]);
 
   async function importDocument(file: File, sourceIdentifier?: string, gutenbergId?: string) {
     setBusy(true);
@@ -2154,6 +2254,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         )}
         {upgradeFab}
         {upgradeDialog}
+        {redeemDialog}
         {goldOfferDialog}
         {loginDialog}
       </main>
@@ -2529,6 +2630,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       )}
       {upgradeFab}
       {upgradeDialog}
+      {redeemDialog}
       {goldOfferDialog}
       {loginDialog}
     </main>

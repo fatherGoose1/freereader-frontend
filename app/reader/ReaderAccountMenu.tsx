@@ -8,8 +8,9 @@ import { formatRemaining, type UsageSummary } from "./usage";
 import ReaderIcon from "./ReaderIcon";
 import styles from "./reader.module.css";
 
-export default function ReaderAccountMenu({ session, plan, billingSource, usage, showUpgrade, onUpgrade, onSignOut }: {
-  session: Session; plan: string; billingSource: "stripe" | "apple"; usage: UsageSummary | null; showUpgrade: boolean; onUpgrade: () => void; onSignOut: () => void;
+export default function ReaderAccountMenu({ session, plan, billingSource, usage, showUpgrade, onUpgrade, onRedeem, onSignOut }: {
+  session: Session; plan: string; billingSource: "stripe" | "apple" | "license"; usage: UsageSummary | null; showUpgrade: boolean; onUpgrade: () => void; onSignOut: () => void;
+  onRedeem: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,16 +52,18 @@ export default function ReaderAccountMenu({ session, plan, billingSource, usage,
       <strong>{gold ? ENHANCED_TIER_NAME : "Free account"}</strong>
       <span className={styles.accountEmail}>{session.user.email ?? "Signed in"}</span>
       {gold ? <>
-        <small>{plan === ENHANCED_PLANS.yearly ? "Yearly plan" : "Monthly plan"}</small>
-        {billingSource === "apple" ? <small>Purchased through Apple. Manage or cancel your subscription in iPhone Settings → Subscriptions.</small> : <>
+        <small>{billingSource === "license" ? "Gold license" : plan === ENHANCED_PLANS.yearly ? "Yearly plan" : "Monthly plan"}</small>
+        {billingSource === "license" ? null : billingSource === "apple" ? <small>Purchased through Apple. Manage or cancel your subscription in iPhone Settings → Subscriptions.</small> : <>
           <button type="button" disabled={busy} onClick={() => void manage()}>{busy ? "Opening Stripe…" : "Manage subscription"}</button>
           <small>Change billing, switch plans, or cancel in Stripe.</small>
         </>}
       </> : <>
         {usage && Number.isFinite(usage.daily_used_seconds) &&
           <small>Today: {formatRemaining(usage.daily_used_seconds)} of 1 hr of audio used</small>}
+        <button type="button" onClick={() => { setOpen(false); onRedeem(); }}>Redeem a code</button>
         {showUpgrade && <button type="button" onClick={() => { setOpen(false); onUpgrade(); }}>Upgrade to {ENHANCED_TIER_NAME}</button>}
       </>}
+      {usage?.administrator_account && <button type="button" onClick={() => { window.location.assign("/reader/admin"); }}>Admin</button>}
       {error && <p role="alert" className={styles.accountError}>{error}</p>}
       <button type="button" onClick={() => { setOpen(false); onSignOut(); }}>Sign out</button>
     </div>}
