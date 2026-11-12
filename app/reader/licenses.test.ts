@@ -35,8 +35,9 @@ test("a license link survives email confirmation in a different tab, without cla
   assert.equal(pendingLicense(), null);
 });
 
-test("redemption sends the code only with an account bearer token and surfaces used codes", async () => {
-  globalThis.fetch = async (_url, init) => {
+test("redemption uses the same-origin proxy with an account bearer token and surfaces used codes", async () => {
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "/api/reader-licenses");
     assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer confirmed-account-token");
     assert.deepEqual(JSON.parse(init?.body as string), { code: "AB12CD34" });
     return Response.json({ error: "already_redeemed" }, { status: 409 });
