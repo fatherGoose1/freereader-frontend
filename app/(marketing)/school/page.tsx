@@ -37,7 +37,7 @@ export default function SchoolPage() {
             <h2 id="school-contact-heading">Bring FreeReader to your school.</h2>
             <p>Tell us a little about your school or district and we&apos;ll help you get started.</p>
             <SchoolContactForm />
-            <p className={styles.direct}>Prefer to communicate via email? <a href="mailto:parker@birdseye.gg?subject=FreeReader%20for%20Schools">Email our team</a></p>
+            <p className={styles.direct}>Prefer to communicate via email? <a href="mailto:parker@freereaderforschools.com?subject=FreeReader%20for%20Schools">Email our team</a></p>
           </aside>
         </div>
       </section>

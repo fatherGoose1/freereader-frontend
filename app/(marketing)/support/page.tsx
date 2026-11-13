@@ -24,14 +24,14 @@ export default function Support() {
         <p>
           For technical help, questions, feedback, or to report a problem,
           email us at{" "}
-          <a href="mailto:parker@birdseye.gg?subject=FreeReader%20Support">
-            parker@birdseye.gg
+          <a href="mailto:parker@freereaderforschools.com?subject=FreeReader%20Support">
+            parker@freereaderforschools.com
           </a>
           . We review every support request and will reply as soon as possible.
         </p>
         <a
           className="button"
-          href="mailto:parker@birdseye.gg?subject=FreeReader%20Support"
+          href="mailto:parker@freereaderforschools.com?subject=FreeReader%20Support"
         >
           Email support
         </a>

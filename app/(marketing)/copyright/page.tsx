@@ -17,7 +17,7 @@ export default function CopyrightPolicy() {
     >
       <h2>Report a copyright concern</h2>
       <p>
-        Email <a href="mailto:parker@birdseye.gg?subject=FreeReader%20Copyright%20Notice">parker@birdseye.gg</a>
+        Email <a href="mailto:parker@freereaderforschools.com?subject=FreeReader%20Copyright%20Notice">parker@freereaderforschools.com</a>
         {" "}with enough information for us to locate and assess the material. Please include:
       </p>
       <ul>
