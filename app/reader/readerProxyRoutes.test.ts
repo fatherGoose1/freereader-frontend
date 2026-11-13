@@ -29,6 +29,20 @@ test("same-origin Gold price and checkout proxy to the configured backend", asyn
   assert.equal(fetch.mock.callCount(), 2);
 });
 
+test("the signup offer proxy forwards only the authenticated request", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
+    assert.match(String(url), /\/billing\/signup-offer-checkout$/);
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer account-token");
+    assert.equal(init?.body, undefined);
+    return Response.json({ url: "https://checkout.stripe.com/c/pay/gold25" });
+  });
+  const response = await billingAction(new Request("http://localhost/api/billing/signup-offer-checkout", {
+    method: "POST", headers: { Authorization: "Bearer account-token" },
+  }), { params: Promise.resolve({ action: "signup-offer-checkout" }) });
+  assert.equal(response.status, 200);
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
 test("usage and catalogue speech remain authenticated through same-origin proxies", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url).includes("/usage?")) {

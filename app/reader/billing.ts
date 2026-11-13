@@ -25,14 +25,14 @@ export async function fetchPlanPrice(plan: PaidPlan): Promise<PlanPrice> {
   return price as PlanPrice;
 }
 
-async function billingUrl(path: "checkout" | "portal" | "gold-offer-checkout", token: string, plan?: PaidPlan): Promise<string> {
+async function billingUrl(path: "checkout" | "portal" | "gold-offer-checkout" | "signup-offer-checkout", token: string, plan?: PaidPlan): Promise<string> {
   const response = await fetch(`/api/billing/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, ...(path === "checkout" && plan ? { "Content-Type": "application/json" } : {}) },
     ...(path === "checkout" && plan ? { body: JSON.stringify({ plan }) } : {}),
   });
   if (!response.ok) {
-    if (path === "gold-offer-checkout") throw new Error(response.status === 403 ? "gold_offer_ineligible" : "gold_offer_unavailable");
+    if (path === "gold-offer-checkout" || path === "signup-offer-checkout") throw new Error(response.status === 403 ? "gold_offer_ineligible" : "gold_offer_unavailable");
     if (path === "checkout" && response.status === 409) {
       const detail = await response.json().catch(() => null) as { error?: string } | null;
       if (detail?.error === "manage_existing_subscription") return billingUrl("portal", token);
@@ -54,6 +54,10 @@ export function startCheckout(token: string, plan: PaidPlan = "gold_monthly"): P
 
 export function startGoldOfferCheckout(token: string): Promise<string> {
   return billingUrl("gold-offer-checkout", token, "gold_yearly");
+}
+
+export function startSignupOfferCheckout(token: string): Promise<string> {
+  return billingUrl("signup-offer-checkout", token, "gold_yearly");
 }
 
 export function manageSubscription(token: string): Promise<string> {

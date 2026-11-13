@@ -12,3 +12,4 @@ playwright-report/
 public/onnxruntime-web/*/*.mjs
 public/onnxruntime-web/*/*.jsep.wasm
 public/scan-opencv.js
+free_signup_gold_prospects_*.csv

@@ -62,6 +62,8 @@ The reader also supports email/password account creation, sign-in, and password 
 
 Brevo's `freereader_gold_50_opt_in` automation email button links to `https://www.freereader.io/reader/audiobooks?offer=gold50`. The reader signs in if needed and automatically opens a separate, authenticated yearly Stripe Checkout with a server-applied 50% coupon, no trial and the same discounted renewal price. If the account is not eligible or checkout fails, the offer screen explains the problem instead of switching to a full-price checkout. Deploy the backend's `20261027_0033` migration and Brevo/Stripe offer API before deploying this frontend link.
 
+For the three-day free-signup Brevo automation, use `https://www.freereader.io/reader/audiobooks?offer=gold25` as the email button URL. The reader signs in and opens an authenticated yearly Gold checkout with a server-applied 25% coupon (no trial, discounted renewals); only accounts added to the list by the backend and still eligible can open it. The backend's hourly cron job adds eligible accounts across web, iOS and Chrome to the existing Brevo list at the three-day mark; Brevo handles the email. See the backend README for the cron setup and historical-signup cutoff.
+
 ## Author publishing
 
 The book submission form is at `/authors/submissions`, with management at `/authors/dashboard`. The `/authors` route is reserved for a future author index.
