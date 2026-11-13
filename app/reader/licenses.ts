@@ -1,25 +1,42 @@
 export const PENDING_LICENSE_KEY = "freereader-pending-license";
 const CROSS_TAB_KEY = `${PENDING_LICENSE_KEY}-cross-tab`;
+const MAX_AGE_MS = 86_400_000;
 
 // Email confirmation may open in a different tab. Keep the code for at most
 // one day, but never claim it until a confirmed account is authenticated.
 export function rememberPendingLicense(code: string) {
-  try { sessionStorage.setItem(PENDING_LICENSE_KEY, code); } catch { /* unavailable */ }
-  try { localStorage.setItem(CROSS_TAB_KEY, JSON.stringify({ code, expires: Date.now() + 86_400_000 })); }
-  catch { /* unavailable */ }
+  const entry = JSON.stringify({ code, expires: Date.now() + MAX_AGE_MS });
+  try { sessionStorage.setItem(PENDING_LICENSE_KEY, entry); } catch { /* unavailable */ }
+  try { localStorage.setItem(CROSS_TAB_KEY, entry); } catch { /* unavailable */ }
+}
+
+function unexpiredCode(entry: string | null): string | null {
+  if (!entry) return null;
+  try {
+    const value = JSON.parse(entry) as { code?: unknown; expires?: unknown };
+    if (typeof value.code === "string" && typeof value.expires === "number" && value.expires > Date.now()) return value.code;
+  } catch { /* Legacy plain-code entries have no expiry to honor. */ }
+  return null;
 }
 
 export function pendingLicense(): string | null {
   try {
     const stored = localStorage.getItem(CROSS_TAB_KEY);
     if (stored) {
-      const entry = JSON.parse(stored);
-      if (typeof entry.code === "string" && typeof entry.expires === "number" && entry.expires > Date.now())
-        return entry.code;
+      const code = unexpiredCode(stored);
+      if (code) return code;
       localStorage.removeItem(CROSS_TAB_KEY);
     }
   } catch { /* unavailable */ }
-  try { return sessionStorage.getItem(PENDING_LICENSE_KEY); } catch { return null; }
+  try {
+    const stored = sessionStorage.getItem(PENDING_LICENSE_KEY);
+    if (stored) {
+      const code = unexpiredCode(stored);
+      if (code) return code;
+      sessionStorage.removeItem(PENDING_LICENSE_KEY);
+    }
+  } catch { /* unavailable */ }
+  return null;
 }
 
 export function forgetPendingLicense() {

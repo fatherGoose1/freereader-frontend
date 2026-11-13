@@ -35,6 +35,18 @@ test("a license link survives email confirmation in a different tab, without cla
   assert.equal(pendingLicense(), null);
 });
 
+test("expired or legacy pending codes are not resumed", () => {
+  const local = storage();
+  const session = storage();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: local });
+  Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: session });
+  local.setItem("freereader-pending-license-cross-tab", JSON.stringify({ code: "AB12CD34", expires: Date.now() - 1 }));
+  session.setItem("freereader-pending-license", JSON.stringify({ code: "AB12CD34", expires: Date.now() - 1 }));
+  assert.equal(pendingLicense(), null);
+  session.setItem("freereader-pending-license", "AB12CD34");
+  assert.equal(pendingLicense(), null);
+});
+
 test("redemption uses the same-origin proxy with an account bearer token and surfaces used codes", async () => {
   globalThis.fetch = async (url, init) => {
     assert.equal(url, "/api/reader-licenses");

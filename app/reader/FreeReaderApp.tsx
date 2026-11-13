@@ -51,6 +51,7 @@ import { listPhononCatalog, listPhononVoices, type PhononCatalog, type PhononCat
 import { currentSessionAccessToken } from "./authToken";
 import ReaderAccountMenu from "./ReaderAccountMenu";
 import { forgetPendingLicense, pendingLicense, redeemLicense, rememberPendingLicense } from "./licenses";
+import { authReturnPending, isAuthCallbackUrl } from "./authCallback";
 import type { Session } from "@supabase/supabase-js";
 import { takeAuthorReturn } from "../authors/oauthReturn";
 import { assetUrl } from "../authors/model";
@@ -600,8 +601,12 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   // claimed later, after the backend validates a signed-in account token.
   useEffect(() => {
     if (managed) return;
-    const raw = new URL(window.location.href).searchParams.get("redeem");
-    const code = (raw ?? pendingLicense() ?? "").trim().toUpperCase();
+    const url = new URL(window.location.href);
+    const raw = url.searchParams.get("redeem");
+    // Resume a saved code only on a real auth return. Otherwise an abandoned
+    // redemption would reopen on every future reader visit.
+    const resumable = isAuthCallbackUrl(url) || authReturnPending();
+    const code = (raw ?? (resumable ? pendingLicense() : null) ?? "").trim().toUpperCase();
     if (!code) return;
     setRedeemInput(code);
     if (!LICENSE_CODE.test(code)) { setRedeemError("That code is not valid."); setRedeemOpen(true); return; }
