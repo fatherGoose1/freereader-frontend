@@ -910,8 +910,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
     setLoginError("");
     try {
-      if (!redeemCode) sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
-      else rememberPendingLicense(redeemCode);
+      if (goldOfferActive === "gold25") sessionStorage.setItem(GOLD_OFFER_RETURN_KEY, "gold25");
+      if (redeemCode) rememberPendingLicense(redeemCode);
+      else if (goldOfferActive !== "gold25") sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
     } catch {
       setLoginError("Browser storage is unavailable. Please enable it to complete sign-in.");
       return;
@@ -921,9 +922,23 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
     });
     if (error) {
+      if (goldOfferActive === "gold25") try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
       try { sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY); } catch { /* Storage may be unavailable. */ }
       setLoginError("Google sign-in didn't start. Try again.");
       setMessage("Google sign-in didn't start. Try again.");
+    }
+  }
+
+  async function beginAppleOfferSignIn() {
+    const supabase = supabaseClient();
+    if (!supabase) { setLoginError("Apple sign-in is unavailable right now."); return; }
+    try { sessionStorage.setItem(GOLD_OFFER_RETURN_KEY, "gold25"); }
+    catch { setLoginError("Browser storage is unavailable. Please enable it to use your offer."); return; }
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "apple",
+      options: { redirectTo: `${window.location.origin}/reader/audiobooks` } });
+    if (error) {
+      try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
+      setLoginError("Apple sign-in didn't start. Try again.");
     }
   }
 
@@ -1004,6 +1019,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         <p>Sign in to generate up to 1 hour of audio each day.</p>
         {loginError && <p role="alert">{loginError}</p>}
         <button type="button" className={styles.primaryAction} onClick={() => void beginGoogleSignIn()}>Continue with Google</button>
+        {goldOfferActive === "gold25" && <button type="button" onClick={() => void beginAppleOfferSignIn()}>Continue with Apple</button>}
         <div className={styles.emailAuthDivider}>or use email</div>
       </>}
       <EmailAuthForm key={loginRecovery ? "recovery" : "email"} recovery={loginRecovery} />
