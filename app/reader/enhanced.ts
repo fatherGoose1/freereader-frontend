@@ -17,7 +17,7 @@ export function isEnhancedPlan(plan: string | null | undefined): plan is Enhance
   return typeof plan === "string" && ENHANCED_PLAN_IDS.includes(plan);
 }
 
-export const ENHANCED_TRIAL_DAYS = 7;
+export const ENHANCED_TRIAL_DAYS = 3;
 
 // The yearly plan is displayed as its monthly equivalent; the billed amount
 // always comes from the backend's configured Stripe Price.

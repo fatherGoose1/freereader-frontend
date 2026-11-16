@@ -38,6 +38,10 @@ function wav() {
 }
 
 async function signIn(context: BrowserContext) {
+  if (process.env.EDU_ACCESS_PASSWORD) {
+    await context.addCookies([{ name: "freereader-edu-access", url: `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3100"}`,
+      value: createHash("sha256").update(`freereader-edu:${process.env.EDU_ACCESS_PASSWORD}`).digest("hex") }]);
+  }
   await context.addInitScript(({ userId }) => {
     const expires = Math.floor(Date.now() / 1000) + 3600;
     const payload = btoa(JSON.stringify({ sub: userId, exp: expires, aud: "authenticated" })).replace(/=/g, "");
@@ -94,6 +98,15 @@ test("student opens hosted original PDF, listens, saves position, and reloads wi
   await expect(page.locator('article [aria-current="true"]')).toContainText("Students can listen");
   expect(state.consumerRequests).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem("freereaderTelemetryQueue"))).toBeNull();
+});
+
+test("EDU reader font settings use a dyslexia-friendly label", async ({ page, context }) => {
+  await signIn(context);
+  await setup(page);
+  await page.goto(`/edu/assignments/${assignmentId}/reader/${versionId}`);
+  await openTools(page);
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "Dyslexia-friendly font" })).toBeVisible();
 });
 
 test("EDU reader highlights spoken words in original and E-reader views, including cached playback", async ({ page, context }) => {

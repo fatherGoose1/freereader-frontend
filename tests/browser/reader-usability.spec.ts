@@ -285,13 +285,13 @@ test("Gold plans show the configured Stripe amounts before checkout", async ({ p
   const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(dialog).toContainText("$3.25");
   await expect(dialog).toContainText("billed $39 yearly");
-  await expect(dialog).toContainText("7 days free");
+  await expect(dialog).toContainText("3 days free");
   await expect(dialog.locator("li").first()).toHaveText("Unlimited listening");
   await expect(dialog.locator("li small")).toHaveCount(0);
-  await expect(dialog.getByRole("button", { name: "Start 7-day free trial" })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "Start 3-day free trial" })).toBeEnabled();
   await dialog.getByRole("button", { name: "Monthly" }).click();
   await expect(dialog).toContainText("$5/month, billed monthly");
-  await expect(dialog).not.toContainText("7 days free");
+  await expect(dialog).not.toContainText("3 days free");
   await expect(dialog).toContainText("Custom voices");
   await dialog.getByRole("button", { name: "Close" }).click();
   const banner = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
@@ -512,7 +512,7 @@ test("signed-in free accounts without the opt-in see Gold upgrade prompts", asyn
   const notice = page.getByRole("region", { name: "Upgrade to FreeReader Gold" });
   const floatingUpgrade = page.locator('button[class*="upgradeFab"]');
   await expect(page.getByRole("button", { name: "Get FreeReader Gold" })).toBeVisible();
-  await expect(notice).toContainText("7 days");
+  await expect(notice).toContainText("3 days");
   await expect(notice).toBeVisible();
   if (await page.evaluate(() => innerWidth > 800)) await expect(floatingUpgrade).toBeVisible();
 
@@ -521,11 +521,11 @@ test("signed-in free accounts without the opt-in see Gold upgrade prompts", asyn
   const dialog = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("$3.25");
-  await expect(dialog).toContainText("7 days free");
+  await expect(dialog).toContainText("3 days free");
   await expect(dialog).toContainText("billed $39 yearly");
   await dialog.getByRole("button", { name: "Monthly" }).click();
   await expect(dialog).toContainText("$5");
-  await expect(dialog).not.toContainText("7 days free");
+  await expect(dialog).not.toContainText("3 days free");
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
 
@@ -554,7 +554,7 @@ test("signed-in free accounts without the opt-in see Gold upgrade prompts", asyn
   await fontButton.click();
   const fontDialog = page.getByRole("dialog", { name: "Font settings" });
   await expect(fontDialog.getByRole("switch", { name: "Highlight spoken words" })).toBeVisible();
-  await expect(fontDialog.getByRole("switch", { name: "OpenDyslexic font" })).toBeVisible();
+  await expect(fontDialog.getByRole("switch", { name: "Dyslexia-friendly font" })).toBeVisible();
   await expect(fontDialog.getByLabel("Default reading view")).toHaveCount(0);
   await expect(fontDialog).not.toContainText("These choices apply");
   await fontDialog.getByRole("button", { name: "Done" }).click();
@@ -722,7 +722,7 @@ test("switching reading fonts recenters the spoken word promptly without showing
     return word ? Math.abs((word.top + word.bottom - bounds.top - bounds.bottom) / 2) / bounds.height : 1;
   });
   await page.getByRole("button", { name: "Font", exact: true }).click();
-  const toggle = page.getByRole("switch", { name: "OpenDyslexic font" });
+  const toggle = page.getByRole("switch", { name: "Dyslexia-friendly font" });
   const before = await viewport.locator('[aria-current="true"]').evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
   await toggle.check();
   await expect.poll(activeWordPosition, { timeout: 3000 }).toBeLessThan(0.3);
@@ -1078,7 +1078,7 @@ test("guest voice and reading defaults persist across books and visits", async (
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Font", exact: true }).click();
   const font = page.getByRole("dialog", { name: "Font settings" });
-  await font.getByRole("switch", { name: "OpenDyslexic font" }).check();
+  await font.getByRole("switch", { name: "Dyslexia-friendly font" }).check();
   await font.getByRole("switch", { name: "Highlight spoken words" }).uncheck();
   await font.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Increase text size" }).click();
@@ -1091,7 +1091,7 @@ test("guest voice and reading defaults persist across books and visits", async (
   await expect(dialog.getByRole("switch")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Font", exact: true }).click();
-  await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
+  await expect(font.getByRole("switch", { name: "Dyslexia-friendly font" })).toBeChecked();
   await expect(font.getByRole("switch", { name: "Highlight spoken words" })).not.toBeChecked();
   await expect(font).toContainText("22px");
   await font.getByRole("button", { name: "Done" }).click();
@@ -1188,7 +1188,7 @@ test("free accounts import guest defaults and restore them from account metadata
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Font", exact: true }).click();
   const font = page.getByRole("dialog", { name: "Font settings" });
-  await font.getByRole("switch", { name: "OpenDyslexic font" }).check();
+  await font.getByRole("switch", { name: "Dyslexia-friendly font" }).check();
   await font.getByRole("slider", { name: "Line spacing" }).focus();
   await font.getByRole("slider", { name: "Line spacing" }).press("End");
   await font.getByRole("button", { name: "Soft Green" }).click();
@@ -1224,16 +1224,16 @@ test("free accounts import guest defaults and restore them from account metadata
   await expect(dialog.getByRole("button", { name: /Choose voice, currently Wren \(free\)/ })).toBeVisible();
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Font", exact: true }).click();
-  await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
+  await expect(font.getByRole("switch", { name: "Dyslexia-friendly font" })).toBeChecked();
   await expect(page.locator('[class*="eReaderViewport"]')).toHaveCSS("background-color", "rgb(233, 245, 231)");
-  await font.getByRole("switch", { name: "OpenDyslexic font" }).uncheck();
+  await font.getByRole("switch", { name: "Dyslexia-friendly font" }).uncheck();
   await expect.poll(() => saved.length).toBeGreaterThan(1);
   await font.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Account settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Account settings" })).toHaveCount(0);
   await page.getByRole("button", { name: "Font", exact: true }).click();
-  await expect(font.getByRole("switch", { name: "OpenDyslexic font" })).toBeChecked();
+  await expect(font.getByRole("switch", { name: "Dyslexia-friendly font" })).toBeChecked();
 });
 
 test("changing voice during first generation starts the new voice without another Listen click", async ({ page }) => {

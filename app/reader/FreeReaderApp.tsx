@@ -41,7 +41,7 @@ import { synchronizeLibrary } from "./accountSync";
 import ScanDialog from "./ScanDialog";
 import { deleteScan, downloadScanPdf } from "./scanClient";
 import { fetchUsage, linkInstallation, optInToGoldOffer } from "./usage";
-import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
+import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, ENHANCED_TRIAL_DAYS, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
 import { startCheckout, startGoldOfferCheckout, startSignupOfferCheckout } from "./billing";
 import { GOLD_OFFER_RETURN_KEY } from "./goldOffer";
 import GoldDialog from "./GoldDialog";
@@ -951,7 +951,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
         <div className={styles.accountNoticeHeading}><ReaderIcon name="crown" /><strong>Get {ENHANCED_TIER_NAME}</strong></div>
-        <p>Try it free for 7 days with the yearly plan, then it renews automatically.</p>
+        <p>Try it free for {ENHANCED_TRIAL_DAYS} days with the yearly plan, then it renews automatically.</p>
         <ul className={styles.accountNoticeFeatures}>
           {ENHANCED_FEATURES.map((feature) => (
             <li key={feature.title}>
@@ -2240,7 +2240,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           <div className={styles.settingsBackdrop} onMouseDown={() => setPanel(null)}>
           <div className={`${styles.voicePopover} ${styles.fontPopover}`} role="dialog" aria-modal="true" aria-label="Font settings" onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.settingsTitle}><strong>Font Settings</strong><button onClick={() => setPanel(null)}>Done</button></div>
-            <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>OpenDyslexic font</span>
+            <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>Dyslexia-friendly font</span>
               <input type="checkbox" role="switch" checked={openDyslexic} onChange={(event) => changePreferences((current) => ({ ...current, openDyslexic: event.target.checked }))} />
             </label>
             <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>Highlight spoken words</span>

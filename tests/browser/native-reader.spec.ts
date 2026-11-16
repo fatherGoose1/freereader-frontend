@@ -388,7 +388,7 @@ test("OpenDyslexic switches E-reader and Original EPUB text and persists without
   await expect(heading).toHaveCSS("font-family", "Georgia, serif");
   await openControls(page, true);
   await page.getByRole("button", { name: "Font", exact: true }).click();
-  const toggle = page.getByRole("switch", { name: "OpenDyslexic font" });
+  const toggle = page.getByRole("switch", { name: "Dyslexia-friendly font" });
   await expect(toggle).not.toBeChecked();
   await toggle.check();
   await expect(heading).toHaveCSS("font-family", dyslexicFamily);

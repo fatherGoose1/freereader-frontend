@@ -67,7 +67,7 @@ test("free readers see ten selectable (free) voices, feelings, and locked Gold v
   const pricing = page.getByRole("dialog", { name: "Upgrade to FreeReader Gold" });
   await expect(pricing).toBeVisible();
   await expect(pricing).toContainText("$3.25");
-  await expect(pricing.getByRole("button", { name: "Start 7-day free trial" })).toBeEnabled();
+  await expect(pricing.getByRole("button", { name: "Start 3-day free trial" })).toBeEnabled();
   await pricing.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeVisible();
   await free.locator("article").filter({ hasText: "Wren (free)" }).getByRole("button", { name: "Choose Wren (free)" }).click();
