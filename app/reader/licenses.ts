@@ -47,14 +47,39 @@ export function forgetPendingLicense() {
 export type LicenseList = {
   total: number;
   available: number;
+  pool: { quantity: number; renews_at: string; status: string } | null;
   licenses: Array<{ code: string; redeemed: boolean; redeemed_at: string | null; expires_at: string; expired: boolean }>;
 };
+
+export type LicenseQuote = {
+  quantity: number; amount_cents: number; annual_amount_cents: number; renewal_total_cents: number;
+  renews_at: string | null; prorated: boolean;
+};
+
+async function licenseAction<T>(token: string, action: string, quantity?: number): Promise<T> {
+  const response = await fetch(`/api/reader-licenses/${action}`, {
+    method: "POST", cache: "no-store",
+    headers: { Authorization: `Bearer ${token}`, ...(quantity === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(quantity === undefined ? {} : { body: JSON.stringify({ quantity }) }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error === "purchase_pending" ? "A license purchase is still processing. Please check back shortly."
+    : result.error === "admin_billing_unavailable" || response.status === 404
+      ? "Admin license setup is not available on the server yet. Please try again after the billing update is deployed."
+    : result.error === "billing_not_configured" ? "License checkout is temporarily unavailable."
+      : "Could not complete your request. Please try again.");
+  return result as T;
+}
+
+export const registerAdmin = (token: string) => licenseAction<{ administrator_account: boolean }>(token, "register");
+export const quoteLicenses = (token: string, quantity: number) => licenseAction<LicenseQuote>(token, "quote", quantity);
+export const purchaseLicenses = (token: string, quantity: number) => licenseAction<{ url?: string; pending?: boolean }>(token, "checkout", quantity);
 
 export async function listLicenses(token: string): Promise<LicenseList> {
   const response = await fetch("/api/reader-licenses", {
     headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
   });
-  if (!response.ok) throw new Error("Could not load licenses.");
+  if (!response.ok) throw new Error(response.status === 403 ? "forbidden" : "Could not load licenses.");
   return response.json() as Promise<LicenseList>;
 }
 

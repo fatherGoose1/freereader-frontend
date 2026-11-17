@@ -1,6 +1,4 @@
 .page { min-height: 100vh; padding: 40px max(24px, calc((100vw - 1120px) / 2)) 80px; color: #202633; background: #f6f7fb; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-.back { display: inline-flex; margin-bottom: 38px; color: #365bd6; font-size: 13px; font-weight: 600; text-decoration: none; }
-.back:hover { text-decoration: underline; }
 .header { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 25px; }
 .eyebrow { color: #687891; font-size: 10px; font-weight: 700; letter-spacing: .13em; }
 .header h1 { margin: 7px 0 0; color: #202633; font-size: clamp(26px, 3vw, 34px); letter-spacing: -.04em; }
@@ -32,13 +30,43 @@
 .expired { color: #a6312c; background: #fdecea; }
 .copy { padding: 8px 11px; color: #365bd6; background: #f3f6fd; border: 1px solid #d8e2f7; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .copy:hover { background: #e7edfc; }
-.copy:focus-visible, .back:focus-visible, .table a:focus-visible { outline: 2px solid #365bd6; outline-offset: 2px; }
+.copy:focus-visible, .table a:focus-visible { outline: 2px solid #365bd6; outline-offset: 2px; }
 .empty { padding: 32px 22px !important; color: #687891; text-align: center; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.header p, .formPanel p { color: #58657b; font-size: 14px; line-height: 1.5; }
+.formPanel { max-width: 560px; padding: 24px; }
+.formPanel h2 { margin: 0 0 10px; font-size: 19px; }
+.form { display: grid; gap: 15px; margin: 20px 0; }
+.form label, .quantity { display: grid; gap: 7px; color: #35445d; font-size: 13px; font-weight: 600; }
+.form input, .quantity input { width: 100%; padding: 11px; color: #202633; background: #fff; border: 1px solid #cbd5e6; border-radius: 7px; font: inherit; }
+.quantity { margin: 18px 0; max-width: 200px; }
+.primary { padding: 12px 18px; background: #365bd6; color: white; border: 0; border-radius: 7px; font: inherit; font-weight: 650; cursor: pointer; }
+.primary:disabled { opacity: .55; cursor: not-allowed; }
+.divider { margin: 18px 0 10px; }
+.textButton { display: block; margin-top: 22px; padding: 5px 0; color: #365bd6; background: transparent; border: 0; cursor: pointer; font: inherit; font-size: 13px; }
+.estimate { display: grid; gap: 6px; margin: 20px 0; padding: 16px; background: #eaf0ff; border-radius: 8px; font-size: 13px; }
+.estimate strong { color: #284fbf; font-size: 24px; }
+.page > .panel { margin-bottom: 24px; }
+.loginPanel { width: min(520px, 100%); }
+.loginPanel .formPanel { max-width: none; padding: 28px; }
+.loginPanel h2 { margin: 8px 0 12px; font-size: 25px; letter-spacing: -.035em; }
+.loginPanel .formPanel > p { margin-bottom: 20px; font-size: 13px; line-height: 1.65; }
+.googleButton { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 54px; padding: 12px 16px; color: #202633; background: #f9fafc; border: 1px solid #bfc5cf; border-radius: 12px; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+.googleButton svg { width: 24px; height: 24px; flex: none; }
+.googleButton:hover { background: #f0f3f9; }
+.loginPanel .form .primary { width: 100%; min-height: 44px; border-radius: 9px; box-shadow: 0 2px 3px #263b6c12; }
+.loginPanel .form .primary:hover:not(:disabled) { background: #294bbe; }
+.loginPanel .form { gap: 14px; margin: 12px 0 0; }
+.loginPanel .form label { gap: 8px; color: #56637a; font-weight: 500; }
+.loginPanel .form input { min-height: 46px; padding: 12px; background: #f9fafc; border-color: #dfe5ee; border-radius: 8px; font-weight: 400; }
+.loginPanel .divider { margin: 20px 0 0; color: #687891; font-size: 12px; text-align: center; }
+.loginPanel .textButton { margin: 16px auto 0; padding: 4px; text-decoration: underline; }
+.loginPanel :is(button, input):focus-visible { outline: 3px solid #8ba7ff; outline-offset: 3px; }
 @media (max-width: 700px) {
   .page { padding: 26px 16px 64px; }
-  .back { margin-bottom: 28px; }
   .table { min-width: 780px; }
   .table thead th, .table tbody :is(th, td) { padding-inline: 14px; }
   .table td:nth-child(4) { max-width: 250px; }
+  .loginPanel .formPanel { padding: 22px; }
+  .loginPanel h2 { font-size: 22px; }
 }

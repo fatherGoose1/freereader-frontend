@@ -55,6 +55,12 @@ export default function Pricing() {
         </div>
       </section>
 
+      <section className="pricing-faq" aria-labelledby="licenses-heading">
+        <h2 id="licenses-heading">Gold licenses for students and groups</h2>
+        <p>Purchase and share Gold licenses for $10 per license per year. Add more at a prorated rate anytime; they renew together on your original renewal date.</p>
+        <Link className="button" href="/reader/admin?signup=1">Create an admin account</Link>
+      </section>
+
       <section className="pricing-faq" aria-labelledby="pricing-faq-heading">
         <h2 id="pricing-faq-heading">Pricing questions</h2>
 
