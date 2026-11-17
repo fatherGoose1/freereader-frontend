@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fetchPlanPrice, manageSubscription, startCheckout, startGoldOfferCheckout, startSignupOfferCheckout } from "./billing";
+import { fetchPlanPrice, manageSubscription, startCheckout, startGoldOfferCheckout, startSignupOfferCheckout, startMonthlyOfferCheckout } from "./billing";
 
 test("Gold yearly checkout reads the configured Stripe price", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ amount_cents: 3900, currency: "usd", interval: "year" }));
@@ -54,6 +54,14 @@ test("the three-day offer opens its own 25% checkout after authentication", asyn
   const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ url: "https://checkout.stripe.com/c/pay/gold25" }));
   assert.equal(await startSignupOfferCheckout("offer-token"), "https://checkout.stripe.com/c/pay/gold25");
   assert.ok(String(fetch.mock.calls[0].arguments[0]).endsWith("/billing/signup-offer-checkout"));
+  assert.equal(new Headers(fetch.mock.calls[0].arguments[1]?.headers).get("Authorization"), "Bearer offer-token");
+  assert.equal(fetch.mock.calls[0].arguments[1]?.body, undefined);
+});
+
+test("the $1 monthly offer uses its own authenticated checkout without accepting a client coupon", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ url: "https://checkout.stripe.com/c/pay/gold1" }));
+  assert.equal(await startMonthlyOfferCheckout("offer-token"), "https://checkout.stripe.com/c/pay/gold1");
+  assert.ok(String(fetch.mock.calls[0].arguments[0]).endsWith("/billing/monthly-offer-checkout"));
   assert.equal(new Headers(fetch.mock.calls[0].arguments[1]?.headers).get("Authorization"), "Bearer offer-token");
   assert.equal(fetch.mock.calls[0].arguments[1]?.body, undefined);
 });

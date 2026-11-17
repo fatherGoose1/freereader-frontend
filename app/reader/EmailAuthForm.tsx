@@ -6,7 +6,7 @@ import styles from "./reader.module.css";
 
 type Mode = "sign-in" | "sign-up" | "confirm" | "forgot" | "recovery";
 
-export default function EmailAuthForm({ recovery }: { recovery: boolean }) {
+export default function EmailAuthForm({ recovery, offer }: { recovery: boolean; offer?: "gold1" }) {
   const [mode, setMode] = useState<Mode>(recovery ? "recovery" : "sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,10 +32,11 @@ export default function EmailAuthForm({ recovery }: { recovery: boolean }) {
     setError("");
     setMessage("");
     try {
+      const emailRedirectTo = `${window.location.origin}/reader/audiobooks${offer ? `?offer=${offer}` : ""}`;
       if (currentMode === "sign-up") {
         const { data, error: authError } = await client.auth.signUp({
           email: email.trim(), password,
-          options: { emailRedirectTo: `${window.location.origin}/reader/audiobooks` },
+          options: { emailRedirectTo },
         });
         if (authError) throw authError;
         if (data.session) setMessage("Account created. You're signed in.");
@@ -50,7 +51,7 @@ export default function EmailAuthForm({ recovery }: { recovery: boolean }) {
         setMessage("Email confirmed. You're signed in.");
       } else if (currentMode === "forgot") {
         const { error: authError } = await client.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reader/audiobooks`,
+          redirectTo: emailRedirectTo,
         });
         if (authError) throw authError;
         setMessage("If this address has an account, check your email for a password reset link.");

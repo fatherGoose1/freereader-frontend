@@ -42,9 +42,11 @@ import ScanDialog from "./ScanDialog";
 import { deleteScan, downloadScanPdf } from "./scanClient";
 import { fetchUsage, linkInstallation, optInToGoldOffer } from "./usage";
 import { ENHANCED_FEATURES, ENHANCED_PLANS, ENHANCED_TIER_NAME, ENHANCED_TRIAL_DAYS, isEnhancedPlan, type EnhancedInterval } from "./enhanced";
-import { startCheckout, startGoldOfferCheckout, startSignupOfferCheckout } from "./billing";
+import { startCheckout, startGoldOfferCheckout, startSignupOfferCheckout, startMonthlyOfferCheckout } from "./billing";
 import { GOLD_OFFER_RETURN_KEY } from "./goldOffer";
 import GoldDialog from "./GoldDialog";
+import MonthlyOfferBanner from "./MonthlyOfferBanner";
+import { MONTHLY_OFFER_END } from "./monthlyOffer";
 import PhononDialog from "./PhononDialog";
 import VoiceSelectionDialog from "./VoiceSelectionDialog";
 import { listPhononCatalog, listPhononVoices, type PhononCatalog, type PhononCatalogVoice } from "./phonon";
@@ -334,8 +336,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [accountNoticeDismissed, setAccountNoticeDismissed] = useState(false);
+  const [monthlyOfferLive, setMonthlyOfferLive] = useState(true);
   useEffect(() => {
     try { setAccountNoticeDismissed(localStorage.getItem("freereader-library-reminder-dismissed") === "true"); } catch { /* Storage may be restricted. */ }
+  }, []);
+  useEffect(() => {
+    const remaining = MONTHLY_OFFER_END - Date.now();
+    if (remaining <= 0) { setMonthlyOfferLive(false); return; }
+    const timer = window.setTimeout(() => setMonthlyOfferLive(false), remaining);
+    return () => window.clearTimeout(timer);
   }, []);
   const [localRevision, setLocalRevision] = useState(0);
   const [plan, setPlan] = useState<string>("free");
@@ -358,7 +367,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [usageOwner, setUsageOwner] = useState<string | null>(null);
   const [upgradeInterval, setUpgradeInterval] = useState<EnhancedInterval>("yearly");
   const [upgradeError, setUpgradeError] = useState("");
-  const [goldOfferActive, setGoldOfferActive] = useState<"gold50" | "gold25" | null>(null);
+  const [goldOfferActive, setGoldOfferActive] = useState<"gold50" | "gold25" | "gold1" | null>(null);
   const [goldOfferError, setGoldOfferError] = useState("");
   const [goldOfferAttempt, setGoldOfferAttempt] = useState(0);
   const goldOfferStarted = useRef(false);
@@ -621,14 +630,18 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY);
     } catch { /* Storage may be unavailable. */ }
     const offer = returning === "true" ? "gold50" : returning || new URL(window.location.href).searchParams.get("offer");
-    if (!managed && (offer === "gold50" || offer === "gold25")) setGoldOfferActive(offer);
+    if (offer === "gold1" && Date.now() >= MONTHLY_OFFER_END) {
+      setMessage("The $1 first-month offer has ended.");
+      return;
+    }
+    if (!managed && (offer === "gold50" || offer === "gold25" || offer === "gold1")) setGoldOfferActive(offer);
   }, [managed]);
 
   useEffect(() => {
     if (!goldOfferActive || !authReady || managed || goldOfferStarted.current) return;
     goldOfferStarted.current = true;
     if (!session) {
-      if (goldOfferActive === "gold25") {
+      if (goldOfferActive === "gold25" || goldOfferActive === "gold1") {
         // The signup may have used email/password, Google or Apple. Let the
         // reader choose the original identity instead of forcing Google OAuth.
         goldOfferStarted.current = false;
@@ -654,11 +667,15 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
       });
       return;
     }
-    void (goldOfferActive === "gold25" ? startSignupOfferCheckout : startGoldOfferCheckout)(session.access_token)
+    void (goldOfferActive === "gold1" ? startMonthlyOfferCheckout :
+      goldOfferActive === "gold25" ? startSignupOfferCheckout : startGoldOfferCheckout)(session.access_token)
       .then((url) => window.location.assign(url))
-      .catch((error) => setGoldOfferError(error instanceof Error && error.message === "gold_offer_ineligible"
-        ? "This offer is available only to opted-in accounts that have never had Gold."
-        : "We couldn't open your discounted checkout. Please try again."));
+      .catch((error) => setGoldOfferError(error instanceof Error && error.message === "gold_offer_expired"
+        ? "This $1 offer has ended."
+        : error instanceof Error && error.message === "gold_offer_ineligible"
+          ? goldOfferActive === "gold1" ? "This $1 offer is for accounts that have never had a subscription or trial."
+            : "This offer is available only to opted-in accounts that have never had Gold."
+          : "We couldn't open your discounted checkout. Please try again."));
   }, [goldOfferActive, goldOfferAttempt, authReady, managed, session?.access_token]);
 
   function leaveGoldOffer() {
@@ -915,19 +932,19 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
     setLoginError("");
     try {
-      if (goldOfferActive === "gold25") sessionStorage.setItem(GOLD_OFFER_RETURN_KEY, "gold25");
+      if (goldOfferActive === "gold25" || goldOfferActive === "gold1") sessionStorage.setItem(GOLD_OFFER_RETURN_KEY, goldOfferActive);
       if (redeemCode) rememberPendingLicense(redeemCode);
-      else if (goldOfferActive !== "gold25") sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
+      else if (goldOfferActive !== "gold25" && goldOfferActive !== "gold1") sessionStorage.setItem(GOLD_OFFER_PENDING_KEY, String(Date.now()));
     } catch {
       setLoginError("Browser storage is unavailable. Please enable it to complete sign-in.");
       return;
     }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/reader/audiobooks` },
+      options: { redirectTo: `${window.location.origin}/reader/audiobooks${goldOfferActive === "gold1" ? "?offer=gold1" : ""}` },
     });
     if (error) {
-      if (goldOfferActive === "gold25") try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
+      if (goldOfferActive === "gold25" || goldOfferActive === "gold1") try { sessionStorage.removeItem(GOLD_OFFER_RETURN_KEY); } catch { /* Storage may be unavailable. */ }
       try { sessionStorage.removeItem(GOLD_OFFER_PENDING_KEY); } catch { /* Storage may be unavailable. */ }
       setLoginError("Google sign-in didn't start. Try again.");
       setMessage("Google sign-in didn't start. Try again.");
@@ -947,7 +964,10 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     }
   }
 
-  const accountNotice = showUpgradePrompts && !initialBook && !accountNoticeDismissed && (
+  const monthlyOfferBanner = !managed && !initialBook && monthlyOfferLive && !goldOfferActive && !redeemCode && planReady &&
+    (!session || (usageOwner === session.user.id && !enhanced)) &&
+    <MonthlyOfferBanner onClaim={() => window.location.assign("/reader/audiobooks?offer=gold1")} />;
+  const accountNotice = showUpgradePrompts && !monthlyOfferLive && !initialBook && !accountNoticeDismissed && (
     <section className={styles.accountNotice} aria-label={`Upgrade to ${ENHANCED_TIER_NAME}`}>
       <div>
         <div className={styles.accountNoticeHeading}><ReaderIcon name="crown" /><strong>Get {ENHANCED_TIER_NAME}</strong></div>
@@ -1002,9 +1022,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
     </form>
   </div>;
   const goldOfferDialog = goldOfferActive && <div className={styles.modalBackdrop}>
-    <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label={`Your ${goldOfferActive === "gold25" ? "25" : "50"}% off Gold offer`}>
-      <h2>{goldOfferActive === "gold25" ? "25" : "50"}% off FreeReader Gold</h2>
-      <p>Your subscription starts when you complete Stripe checkout and renews at the discounted rate.</p>
+    <div className={`${styles.modal} ${styles.goldModal}`} role="dialog" aria-modal="true" aria-label={goldOfferActive === "gold1" ? "Your $1 first month of Gold" : `Your ${goldOfferActive === "gold25" ? "25" : "50"}% off Gold offer`}>
+      <h2>{goldOfferActive === "gold1" ? "Gold for $1 your first month" : `${goldOfferActive === "gold25" ? "25" : "50"}% off FreeReader Gold`}</h2>
+      <p>{goldOfferActive === "gold1" ? "The first month is $1. Your subscription begins at checkout and renews at the regular monthly rate." : "Your subscription starts when you complete Stripe checkout and renews at the discounted rate."}</p>
       {goldOfferError ? <>
         <p role="alert">{goldOfferError}</p>
         <button className={styles.primaryAction} type="button" onClick={() => {
@@ -1012,7 +1032,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           setGoldOfferError("");
           setGoldOfferAttempt((attempt) => attempt + 1);
         }}>Try again</button>
-      </> : <p role="status">{session ? "Opening your discounted checkout…" : goldOfferActive === "gold25" ? "Sign in with your FreeReader account to claim this offer." : "Signing you in…"}</p>}
+      </> : <p role="status">{session ? "Opening your discounted checkout…" : goldOfferActive === "gold25" || goldOfferActive === "gold1" ? "Sign in with your FreeReader account to claim this offer." : "Signing you in…"}</p>}
       <button className={styles.goldOfferDismiss} type="button" onClick={leaveGoldOffer}>Back to library</button>
     </div>
   </div>;
@@ -1027,7 +1047,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
         {goldOfferActive === "gold25" && <button type="button" onClick={() => void beginAppleOfferSignIn()}>Continue with Apple</button>}
         <div className={styles.emailAuthDivider}>or use email</div>
       </>}
-      <EmailAuthForm key={loginRecovery ? "recovery" : "email"} recovery={loginRecovery} />
+      <EmailAuthForm key={loginRecovery ? "recovery" : "email"} recovery={loginRecovery} offer={goldOfferActive === "gold1" ? "gold1" : undefined} />
     </div>
   </div>;
 
@@ -2112,6 +2132,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
             {accountButton}
           </div>
         </div>
+        {monthlyOfferBanner}
         {accountNotice}
         <div className={`${styles.readerGrid} ${styles.nativeGrid}`} inert={settingsOpen}>
           <aside className={styles.chapterRail}>
@@ -2340,6 +2361,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
           }} />
         </div>
       </header>
+      {monthlyOfferBanner}
       {accountNotice}
       <div className={styles.libraryLayout} inert={!!panel || !!organizingBook || scanOpen}>
         <section className={styles.shelf}>
