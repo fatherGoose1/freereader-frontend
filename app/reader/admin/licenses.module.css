@@ -40,6 +40,7 @@
 .form label, .quantity { display: grid; gap: 7px; color: #35445d; font-size: 13px; font-weight: 600; }
 .form input, .quantity input { width: 100%; padding: 11px; color: #202633; background: #fff; border: 1px solid #cbd5e6; border-radius: 7px; font: inherit; }
 .quantity { margin: 18px 0; max-width: 200px; }
+.quantity input::placeholder { color: #b7bfcd; }
 .primary { padding: 12px 18px; background: #365bd6; color: white; border: 0; border-radius: 7px; font: inherit; font-weight: 650; cursor: pointer; }
 .primary:disabled { opacity: .55; cursor: not-allowed; }
 .divider { margin: 18px 0 10px; }

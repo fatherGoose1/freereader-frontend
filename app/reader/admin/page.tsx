@@ -24,7 +24,7 @@ export default function ReaderAdminPage() {
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(0);
   const [quote, setQuote] = useState<LicenseQuote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [awaitingPurchase, setAwaitingPurchase] = useState(false);
@@ -195,8 +195,8 @@ export default function ReaderAdminPage() {
           <h2>Add Gold licenses</h2><p>$10 per license per year. Share a redemption link with each student.</p>
           {data.pool?.status === "checkout" && <p>A checkout is in progress. You can return to it or change the quantity below.</p>}
           {data.pool?.status === "active" && <p>All licenses renew together on {expiryFormat.format(new Date(data.pool.renews_at))}. Additional licenses are prorated until that date.</p>}
-          <label className={styles.quantity}>Number of new licenses<input type="number" min="1" max="1000" step="1" value={quantity}
-            onChange={(event) => setQuantity(event.target.valueAsNumber)} /></label>
+          <label className={styles.quantity}>Number of new licenses<input type="number" min="1" max="1000" step="1" placeholder="0" value={quantity === 0 ? "" : quantity}
+            onChange={(event) => setQuantity(Number.isInteger(event.target.valueAsNumber) ? event.target.valueAsNumber : 0)} /></label>
           {quote ? <div className={styles.estimate}><span>{quote.prorated ? "Estimated due now (prorated)" : "Due today"}</span><strong>{dollars(quote.amount_cents)}</strong>
             <span>{dollars(quote.renewal_total_cents)} total per year at renewal{quote.renews_at ? ` on ${expiryFormat.format(new Date(quote.renews_at))}` : ""}.</span></div>
             : <p>{quoteError || "Enter a valid quantity to see your total."}</p>}
