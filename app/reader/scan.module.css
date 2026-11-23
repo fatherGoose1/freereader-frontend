@@ -9,3 +9,7 @@
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.pages{display:flex;gap:10px;overflow-x:auto;padding:12px 0}
 .pages>div{min-width:95px;display:grid;gap:5px;font-size:12px}.pages img{width:95px;height:120px;object-fit:cover;border-radius:5px}
 .dialog footer{border-top:1px solid #dee5eb;padding-top:14px}.error{color:#a52222}
+.phoneOption{padding:16px;background:#edf5fc;border:1px solid #c5daed;border-radius:12px;margin-bottom:18px}.phoneOption p{margin:8px 0 12px}
+.qr{width:min(250px,100%);margin:20px auto;background:white;padding:12px;border-radius:8px}.qr svg{display:block;width:100%;height:auto}
+.mobilePage{min-height:100dvh;background:#edf3f8;color:#172335;display:grid;place-items:center;padding:20px}.mobileCard{width:min(520px,100%);background:white;padding:28px;border-radius:18px;line-height:1.6}.mobileCard h1{font-size:26px}.mobileCard button{font:inherit;padding:10px 16px;border:1px solid #b9c8d5;border-radius:8px;cursor:pointer}
+@media(max-width:600px){.backdrop{padding:8px}.dialog{padding:18px;max-height:96dvh}.dialog footer{align-items:flex-start}.dialog header{align-items:flex-start}.dialog button{min-height:44px}.title input{min-width:0;width:100%}.actions button{flex:1 1 auto}.mobilePage{padding:12px}}

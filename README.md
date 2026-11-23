@@ -44,6 +44,34 @@ PDF narration excludes detected running headers, footers, page numbers, footnote
 
 At mobile widths (up to 800px), the header shows only Library and chapter navigation. Playback starts as a compact play/pause and progress bar that can expand to reveal the full controls. A single right-side disclosure reveals the view toggle, text sizing/zoom, upgrade/support actions, and page navigation as small overlays; the PDF has no reserved side gutters. The controls reset to collapsed when opening a book. Desktop keeps its full header, player, and existing tools.
 
+## Scan with your phone
+
+In **Scan Pages → Scan with phone**, a signed-in reader can create a private QR
+code and copyable link. Keep the computer's scanner open: it receives the finished
+scan, saves the original PDF and recognized text, and opens the document. The
+phone needs no sign-in and can capture pages or select multiple photos, review
+cropped/full images, remove pages, and change page order (up to 20 pages).
+Apple's native VisionKit document camera is app-only; the browser uses camera/photo
+inputs and the existing on-device OpenCV edge detection, then the existing backend
+PDF/Tesseract pipeline. If edge detection is unavailable, full-photo upload works.
+
+Pairing links expire after **5 minutes**, can be claimed by only one browser, and
+exchange for a **15-minute** single-document upload capability. The phone cannot
+read the account/library or download the result. Uploads are API-validated on every
+request, including expiry and cancellation; there are no mobile signed Storage
+upload URLs. The secret is in the URL fragment, removed on opening, and kept in
+per-tab session storage only. The mobile route disables consumer analytics and
+referrers; the desktop scanner pauses consumer analytics while open. Cancelling
+the computer handoff revokes the upload capability. Reloading the phone resumes
+pairing, but unsent photos remain in memory and must be selected again.
+
+Deploy `koko-backend-gold` with migration **20261123_0047** before this frontend.
+The backend start script runs migrations automatically. No new environment
+variables or OCR-worker deployment are required; existing OCR/Storage credentials
+and allowed web origins apply. `scan-cleanup` also removes expired handoff records
+after two days. EDU uses the same handoff with school staff authorization and
+membership revalidation on every mobile upload.
+
 ## Account sync
 
 Configure the browser with:

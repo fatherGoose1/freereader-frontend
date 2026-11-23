@@ -4,8 +4,9 @@ import { isEduSurface, registerEduAnalyticsPause } from "./lib/edu-analytics-bou
 // EDU uses its authenticated, schema-isolated telemetry pipeline. Do not attach
 // consumer autocapture/session analytics to school documents or invitation URLs.
 const eduSurface = isEduSurface();
+const mobileScanSurface = () => window.location.pathname === "/scan-mobile";
 
-if (eduSurface) {
+if (eduSurface || mobileScanSurface()) {
   // Explicit EDU events are recorded by app/edu/telemetry.ts.
 } else if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN) {
   if (process.env.NODE_ENV === "development") {
@@ -20,7 +21,7 @@ if (eduSurface) {
     defaults: "2026-01-30",
     capture_exceptions: true,
     debug: process.env.NODE_ENV === "development",
-    before_send: (event) => isEduSurface() ? null : event,
+    before_send: (event) => isEduSurface() || mobileScanSurface() ? null : event,
   });
   registerEduAnalyticsPause(() => {
     const previous = { autocapture: posthog.config.autocapture, capture_pageview: posthog.config.capture_pageview,

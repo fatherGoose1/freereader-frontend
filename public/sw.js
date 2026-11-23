@@ -14,7 +14,10 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
+  const url = new URL(event.request.url);
+  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  // Ephemeral scan pages/status must use the network, never a cached reader fallback.
+  if (url.pathname === "/scan-mobile" || /\/scans\/mobile(?:-sessions|\/)/.test(url.pathname)) return;
   event.respondWith(fetch(event.request).then((response) => {
     if (response.ok) caches.open(CACHE).then((cache) => cache.put(event.request, response.clone()));
     return response;

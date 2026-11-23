@@ -9,6 +9,8 @@ type ScanProgress = { id: string; status: "uploading" | "queued" | "processing" 
   processedPages: number; pages: number; error?: string; originalUrl?: string; readingUrl?: string; document?: DocumentVersion };
 type PreparedScan = { id: string; uploadUrls: string[] };
 type ScanCall = <T>(path: string, init?: RequestInit) => Promise<T>;
+export type ScanSchool = { id: string; userId: string };
+export type ScanResult = { document: DocumentVersion } | { book: LibraryBook; pdf: Blob };
 
 async function consumer<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await currentSessionAccessToken();
@@ -45,7 +47,7 @@ export async function uploadScanPages(pages: Blob[], prepared: PreparedScan, sta
 }
 
 export async function uploadScan(pages: Blob[], title: string, status: (value: string) => void, school?: { id: string; userId: string }):
-  Promise<{ document: DocumentVersion } | { book: LibraryBook; pdf: Blob }> {
+  Promise<ScanResult> {
   const call = <T>(path: string, init?: RequestInit) => school
     ? eduFetch<T>(path.replace(/^\//, ""), school.userId, init)
     : consumer<T>(path, init);
@@ -57,14 +59,20 @@ export async function uploadScan(pages: Blob[], title: string, status: (value: s
   await uploadScanPages(pages, prepared, status, call, Boolean(school));
   status("Building high-resolution PDF and preparing OCR…");
   await call(school ? `scans/${prepared.id}/complete` : `/${prepared.id}/complete`, { method: "POST", body: "{}" });
+  return waitForScan(prepared.id, status, school);
+}
+
+export async function waitForScan(id: string, status: (value: string) => void, school?: ScanSchool, signal?: AbortSignal): Promise<ScanResult> {
+  const call = <T>(path: string) => school ? eduFetch<T>(path, school.userId, { signal }) : consumer<T>(path, { signal });
   for (let attempt = 0; attempt < 360; attempt++) {
-    const result = await call<ScanProgress>(school ? `scans/${prepared.id}` : `/${prepared.id}`);
+    signal?.throwIfAborted();
+    const result = await call<ScanProgress>(school ? `scans/${id}` : `/${id}`);
     if (result.status === "failed") throw new Error(result.error?.replaceAll("_", " ") ?? "Text recognition failed.");
     if (result.status === "ready") {
       if (school && result.document) return { document: result.document };
       if (!result.originalUrl || !result.readingUrl) throw new Error("Scan result is incomplete.");
       status("Saving scanned pages to your library…");
-      const [original, reading] = await Promise.all([fetch(result.originalUrl), fetch(result.readingUrl)]);
+      const [original, reading] = await Promise.all([fetch(result.originalUrl, { signal }), fetch(result.readingUrl, { signal })]);
       if (!original.ok || !reading.ok) throw new Error("Could not download the completed scan.");
       return { book: await decodeCloudDocument(await reading.blob()), pdf: await original.blob() };
     }
@@ -72,6 +80,45 @@ export async function uploadScan(pages: Blob[], title: string, status: (value: s
     await new Promise((resolve) => setTimeout(resolve, 2500));
   }
   throw new Error("Text recognition is taking longer than expected. Please try again later.");
+}
+
+export type MobileScanSession = { id: string; title: string; status: "pending" | "claimed" | "uploading" | "submitted" | "expired" | "cancelled";
+  expiresAt: string; scanId?: string; token?: string };
+
+export async function mobileScanOwnerCall(path: string, school?: ScanSchool, init?: RequestInit): Promise<MobileScanSession> {
+  return school ? eduFetch(`schools/${school.id}/scans/mobile-sessions${path}`, school.userId, init)
+    : consumer(`/mobile-sessions${path}`, init);
+}
+
+export class MobileScanError extends Error {
+  constructor(readonly status: number, code: string) {
+    super(({ mobile_scan_expired: "This scan link has expired or has already been used. Create a new link on your computer.",
+      mobile_scan_invalid_link: "This scan link is invalid. Create a new link on your computer.",
+      mobile_scan_not_found: "This scan session is no longer available. Create a new link on your computer.",
+    } as Record<string, string>)[code] ?? code.replaceAll("_", " "));
+  }
+}
+
+export async function mobileScanDeviceCall<T>(id: string, token: string, path = "", init?: RequestInit): Promise<T> {
+  if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error("Invalid scan link.");
+  const response = await fetch(`${API}/api/v1/freereader/scans/mobile/${id}${path}`, {
+    ...init, headers: { "Content-Type": "application/json", ...init?.headers, Authorization: `Bearer ${token}` },
+    cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", redirect: "error",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new MobileScanError(response.status, payload.error ?? "Scan service is unavailable. Please try again.");
+  return payload as T;
+}
+
+export async function uploadMobileScan(id: string, token: string, pages: Blob[], title: string, status: (value: string) => void) {
+  status("Preparing secure upload…");
+  await mobileScanDeviceCall(id, token, "/prepare", { method: "POST", body: JSON.stringify({ title, pages: pages.length }) });
+  for (let index = 0; index < pages.length; index++) {
+    status(`Uploading page ${index + 1} of ${pages.length}…`);
+    await mobileScanDeviceCall(id, token, `/pages/${index}`, { method: "PUT", body: pages[index], headers: { "Content-Type": "image/jpeg" } });
+  }
+  status("Building your PDF and sending it for text recognition…");
+  await mobileScanDeviceCall(id, token, "/complete", { method: "POST", body: "{}" });
 }
 
 export async function deleteScan(id: string): Promise<void> {

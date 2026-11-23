@@ -75,7 +75,7 @@ export default function SupportWidget() {
     } finally { setSubmitting(false); }
   }
 
-  if (schoolSurface) return null;
+  if (schoolSurface || pathname === "/scan-mobile") return null;
   return <>
     <button ref={launcher} type="button" className={styles.launcher} aria-label="Contact support" aria-expanded={open} aria-controls="support-dialog" onClick={() => { externalTrigger.current = null; setOpen(true); }}>?</button>
     {open && <div className={styles.backdrop} onMouseDown={close}>
