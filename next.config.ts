@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [{
+      source: "/:path*",
+      has: [{ type: "host", value: "freereader.io" }],
+      destination: "https://www.freereader.io/:path*",
+      permanent: true,
+    }];
+  },
   async headers() {
     return [{
       source: "/:path*",
