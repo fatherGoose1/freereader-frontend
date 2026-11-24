@@ -1,4 +1,4 @@
-export const MONTHLY_OFFER_END = Date.parse("2026-11-21T08:00:00Z"); // Friday 11:59 p.m. Pacific.
+export const MONTHLY_OFFER_END = Date.parse("2026-12-05T08:00:00Z"); // December 4, 11:59 p.m. Pacific.
 
 export function offerCountdown(now: number): string {
   const remaining = Math.max(0, Math.ceil((MONTHLY_OFFER_END - now) / 1000));

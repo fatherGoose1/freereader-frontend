@@ -19,6 +19,7 @@ export default function MonthlyOfferBanner({ onClaim }: { onClaim: () => void })
   if (now === null || now >= MONTHLY_OFFER_END) return null;
   return <section className={styles.monthlyOfferBanner} aria-label="$1 first month of FreeReader Gold">
     <div className={styles.monthlyOfferCopy}>
+      <span className={styles.kicker}>Black Friday sale · Ends December 4 at 11:59 p.m. PT</span>
       <h2 className={styles.monthlyOfferHeadline}>Get <span className={styles.monthlyOfferGold} data-open={featuresOpen} onBlur={() => setFeaturesOpen(false)}>
         <button type="button" className={styles.monthlyOfferGoldTrigger} aria-describedby="monthly-offer-features" onClick={() => setFeaturesOpen((open) => !open)}>
           FreeReader Gold
