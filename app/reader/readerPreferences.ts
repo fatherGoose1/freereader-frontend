@@ -14,6 +14,7 @@ export type ReaderPreferences = {
   defaultVoices: Partial<Record<SpeechLanguage, NarratorVoice>>;
   speakingSpeed: number;
   highlightSpokenWords: boolean;
+  wordHighlightingByLanguage?: Partial<Record<SpeechLanguage, boolean>>;
   openDyslexic: boolean;
   textSize: number;
   defaultView: "native" | "ereader";
@@ -33,6 +34,14 @@ export function parseReaderPreferences(value: unknown): ReaderPreferences | null
   const record = value as Partial<ReaderPreferences>;
   if (record.version !== 1 || typeof record.updatedAt !== "string" || !Number.isFinite(Date.parse(record.updatedAt))) return null;
   const defaultVoices: ReaderPreferences["defaultVoices"] = {};
+  const wordHighlightingByLanguage: NonNullable<ReaderPreferences["wordHighlightingByLanguage"]> = {};
+  if (record.wordHighlightingByLanguage && typeof record.wordHighlightingByLanguage === "object") {
+    for (const [language, enabled] of Object.entries(record.wordHighlightingByLanguage)) {
+      if (SPEECH_LANGUAGES.some(([code]) => code === language) && typeof enabled === "boolean") {
+        wordHighlightingByLanguage[language as SpeechLanguage] = enabled;
+      }
+    }
+  }
   if (record.defaultVoices && typeof record.defaultVoices === "object") {
     for (const [language, voice] of Object.entries(record.defaultVoices)) {
       if (SPEECH_LANGUAGES.some(([code]) => code === language) && typeof voice === "string"
@@ -47,6 +56,7 @@ export function parseReaderPreferences(value: unknown): ReaderPreferences | null
     speakingSpeed: typeof record.speakingSpeed === "number" && Number.isFinite(record.speakingSpeed)
       ? Math.round(Math.max(0.5, Math.min(3, record.speakingSpeed)) * 10) / 10 : 1,
     highlightSpokenWords: typeof record.highlightSpokenWords === "boolean" ? record.highlightSpokenWords : true,
+    ...(Object.keys(wordHighlightingByLanguage).length ? { wordHighlightingByLanguage } : {}),
     openDyslexic: typeof record.openDyslexic === "boolean" ? record.openDyslexic : false,
     textSize: typeof record.textSize === "number" && Number.isFinite(record.textSize)
       ? Math.max(16, Math.min(28, 2 * Math.round(record.textSize / 2))) : 20,
@@ -81,4 +91,21 @@ export function saveReaderPreferences(value: ReaderPreferences, ownerId?: string
 
 export function preferredVoiceForBook(book: LibraryBook, preferences: ReaderPreferences, language: SpeechLanguage): NarratorVoice | undefined {
   return preferences.defaultVoices[language] ?? book.suggestedVoice;
+}
+
+/** Speech-language support is broader than word-timing support: even Kokoro currently returns English cues only. */
+export function defaultWordHighlighting(language: SpeechLanguage): boolean {
+  return language === "en";
+}
+
+export function wordHighlightingEnabled(preferences: ReaderPreferences, language: SpeechLanguage): boolean {
+  return preferences.wordHighlightingByLanguage?.[language]
+    ?? (defaultWordHighlighting(language) && preferences.highlightSpokenWords);
+}
+
+export function withWordHighlighting(preferences: ReaderPreferences, language: SpeechLanguage, enabled: boolean): ReaderPreferences {
+  return { ...preferences,
+    // Keep the legacy English flag compatible with older clients.
+    ...(language === "en" ? { highlightSpokenWords: enabled } : {}),
+    wordHighlightingByLanguage: { ...preferences.wordHighlightingByLanguage, [language]: enabled } };
 }

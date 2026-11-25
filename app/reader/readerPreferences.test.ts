@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { DEFAULT_READER_PREFERENCES, parseReaderPreferences, preferredVoiceForBook,
-  readReaderPreferences, saveReaderPreferences } from "./readerPreferences";
+  readReaderPreferences, saveReaderPreferences, defaultWordHighlighting, withWordHighlighting,
+  wordHighlightingEnabled } from "./readerPreferences";
 import type { LibraryBook } from "./types";
 
 afterEach(() => { delete (globalThis as { localStorage?: Storage }).localStorage; });
@@ -61,4 +62,37 @@ test("English light voice selection survives account preference reload", () => {
   const preferences = parseReaderPreferences({ ...DEFAULT_READER_PREFERENCES, updatedAt: new Date().toISOString(),
     defaultVoices: { en: "lite_hadley", fr: "lite_hadley", es: "lite_unknown" } });
   assert.deepEqual(preferences?.defaultVoices, { en: "lite_hadley" });
+});
+
+test("highlighting defaults on for English and off for non-English without word timing support", () => {
+  assert.equal(defaultWordHighlighting("en"), true);
+  for (const language of ["fr", "es", "ja", "ko"] as const) {
+    assert.equal(defaultWordHighlighting(language), false);
+    assert.equal(wordHighlightingEnabled(DEFAULT_READER_PREFERENCES, language), false);
+  }
+  assert.equal(wordHighlightingEnabled(DEFAULT_READER_PREFERENCES, "en"), true);
+  const legacy = { ...DEFAULT_READER_PREFERENCES, highlightSpokenWords: false };
+  assert.equal(wordHighlightingEnabled(legacy, "en"), false);
+});
+
+test("language-specific choices do not change another language's default or explicit preference", () => {
+  const french = withWordHighlighting(DEFAULT_READER_PREFERENCES, "fr", true);
+  assert.equal(wordHighlightingEnabled(french, "fr"), true);
+  assert.equal(wordHighlightingEnabled(french, "en"), true);
+  assert.equal(wordHighlightingEnabled(french, "ko"), false);
+  const englishOff = withWordHighlighting(french, "en", false);
+  assert.equal(englishOff.highlightSpokenWords, false);
+  assert.equal(wordHighlightingEnabled(englishOff, "en"), false);
+  assert.equal(wordHighlightingEnabled(englishOff, "fr"), true);
+  const restored = parseReaderPreferences({ ...englishOff, updatedAt: new Date().toISOString() })!;
+  assert.equal(wordHighlightingEnabled(restored, "en"), false);
+  assert.equal(wordHighlightingEnabled(restored, "fr"), true);
+});
+
+test("shared iOS language overrides accept only supported language codes and booleans", () => {
+  const preferences = parseReaderPreferences({ ...DEFAULT_READER_PREFERENCES, updatedAt: new Date().toISOString(),
+    wordHighlightingByLanguage: { en: false, fr: true, ko: "yes", unknown: true } })!;
+  assert.deepEqual(preferences.wordHighlightingByLanguage, { en: false, fr: true });
+  assert.equal(wordHighlightingEnabled(preferences, "en"), false);
+  assert.equal(wordHighlightingEnabled(preferences, "ko"), false);
 });

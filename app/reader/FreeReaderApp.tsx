@@ -65,7 +65,7 @@ import { matchWordTimings, wordAtTime, type SpokenWord, type TimedSpokenWord, ty
 import ContinuousReader from "./ContinuousReader";
 import { readingColors, READING_BACKGROUNDS, type ReadingBackground } from "./readingAppearance";
 import { ACCOUNT_PREFERENCES_FIELD, DEFAULT_READER_PREFERENCES, parseReaderPreferences,
-  preferredVoiceForBook, readReaderPreferences, saveReaderPreferences, type ReaderPreferences } from "./readerPreferences";
+  preferredVoiceForBook, readReaderPreferences, saveReaderPreferences, withWordHighlighting, wordHighlightingEnabled, type ReaderPreferences } from "./readerPreferences";
 
 const NativeDocumentReader = dynamic(() => import("./NativeDocumentReader"), { ssr: false });
 type ReadingView = "native" | "ereader";
@@ -397,9 +397,9 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [settingsRevision, setSettingsRevision] = useState(0);
   const resumeAfterSettings = useRef<{ bookId: string; index: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [highlightSpokenWords, setHighlightSpokenWords] = useState(true);
   const [openDyslexic, setOpenDyslexic] = useState(false);
   const [preferences, setPreferences] = useState<ReaderPreferences>(DEFAULT_READER_PREFERENCES);
+  const highlightSpokenWords = wordHighlightingEnabled(preferences, selected ? languageForBook(selected) : "en");
   const preferencesRef = useRef(preferences);
   const preferenceOwner = useRef<string | undefined>(undefined);
   const preferenceEdits = useRef(0);
@@ -428,7 +428,6 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   function applyPreferences(value: ReaderPreferences) {
     preferencesRef.current = value;
     setPreferences(value);
-    setHighlightSpokenWords(value.highlightSpokenWords);
     setOpenDyslexic(value.openDyslexic);
     setTextSize(value.textSize);
     if (!managed) {
@@ -2265,7 +2264,7 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
               <input type="checkbox" role="switch" checked={openDyslexic} onChange={(event) => changePreferences((current) => ({ ...current, openDyslexic: event.target.checked }))} />
             </label>
             <label className={`${styles.settingsRow} ${styles.wordHighlightSetting}`}><span>Highlight spoken words</span>
-              <input type="checkbox" role="switch" checked={highlightSpokenWords} onChange={(event) => changePreferences((current) => ({ ...current, highlightSpokenWords: event.target.checked }))} />
+              <input type="checkbox" role="switch" checked={highlightSpokenWords} onChange={(event) => changePreferences((current) => withWordHighlighting(current, narrationLanguage, event.target.checked))} />
             </label>
             <div className={styles.speakingRateSetting}>
               <div><label htmlFor="reader-font-size">Text size</label><output htmlFor="reader-font-size">{textSize}px</output></div>

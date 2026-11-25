@@ -29,7 +29,7 @@ async function prepareReader(page: Page, voice: string, plan = "gold_yearly") {
     localStorage.setItem(`freereader-first-login-gold:${userId}`, "shown");
     localStorage.setItem(`freereader-reader-preferences:v1:${userId}`, JSON.stringify({
       version: 1, updatedAt: new Date().toISOString(), defaultVoices: { en: voice },
-      speakingSpeed: 1, highlightSpokenWords: true, defaultView: "ereader",
+      speakingSpeed: 1, defaultView: "ereader",
     }));
   }, { storageKey: `sb-${new URL(url).hostname.split(".")[0]}-auth-token`, session, userId: user.id, voice });
 }
@@ -92,4 +92,44 @@ test("Phonon audio-only fallback remains playable without word highlights", asyn
   await page.getByRole("button", { name: "Listen", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
   expect(await page.evaluate(() => CSS.highlights.get("freereader-spoken-word")?.size ?? 0)).toBe(0);
+});
+
+test("highlighting settings default by language, remember separate choices, and have no Gold branding", async ({ page }) => {
+  await prepareReader(page, "af_heart");
+  await importPassages(page);
+  const openFont = async () => {
+    await page.getByRole("button", { name: "Font", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Font settings" });
+    const row = settings.locator("label").filter({ hasText: "Highlight spoken words" });
+    const control = row.getByRole("switch");
+    await expect(row).not.toContainText(/Gold|👑|crown/i);
+    await expect(row.locator("svg, img, [role=img]")).toHaveCount(0);
+    return { settings, control };
+  };
+  const selectLanguage = async (language: string) => {
+    await page.getByRole("button", { name: "Voice", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Audio settings" });
+    await settings.getByRole("combobox", { name: "Language" }).selectOption(language);
+    await settings.getByRole("button", { name: "Done", exact: true }).click();
+  };
+  let font = await openFont();
+  await expect(font.control).toBeChecked();
+  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  await selectLanguage("fr"); // Kokoro can speak French, but does not currently return French word cues.
+  font = await openFont();
+  await expect(font.control).not.toBeChecked();
+  await font.control.check();
+  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  await selectLanguage("ko");
+  font = await openFont();
+  await expect(font.control).not.toBeChecked();
+  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  await selectLanguage("en");
+  font = await openFont();
+  await expect(font.control).toBeChecked();
+  await font.control.uncheck();
+  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  await selectLanguage("fr");
+  font = await openFont();
+  await expect(font.control).toBeChecked();
 });
