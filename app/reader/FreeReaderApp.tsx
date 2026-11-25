@@ -27,7 +27,7 @@ import { normalizeForSpeech, TEXT_PIPELINE_REVISION } from "./speechText";
 import { cancelNarration, narrationRoute, synthesize, synthesizeBatch, type NarrationRoute } from "./narration";
 import { SpeechCancelledError, ttsLog } from "./ttsDiagnostics";
 import { usesMobileSpeech } from "./mobileSpeech";
-import { detectSpeechLanguage, SPEECH_LANGUAGES, voiceForLanguage, type SpeechLanguage } from "./speech";
+import { detectSpeechLanguage, supportsWordTimings, SPEECH_LANGUAGES, voiceForLanguage, type SpeechLanguage } from "./speech";
 import { catalogVoiceRef, isCatalogVoice, isKokoroVoice, isLightVoice, isPhononVoice, isSupertonicVoice, LIGHT_VOICES, phononVoiceRef, PUBLIC_PARKER_VOICE, voiceDisplayName, type NarratorVoice } from "./voices";
 import type { GutenbergBook, LibraryBook, LibraryFolder, ParsedBook } from "./types";
 import { flushTelemetry, recordTelemetry as recordConsumerTelemetry, type TelemetryProperties } from "./telemetry";
@@ -399,7 +399,8 @@ export default function FreeReaderApp({ initialBook, managed }: { initialBook?: 
   const [playing, setPlaying] = useState(false);
   const [openDyslexic, setOpenDyslexic] = useState(false);
   const [preferences, setPreferences] = useState<ReaderPreferences>(DEFAULT_READER_PREFERENCES);
-  const highlightSpokenWords = wordHighlightingEnabled(preferences, selected ? languageForBook(selected) : "en");
+  const highlightSpokenWords = wordHighlightingEnabled(preferences, selected ? languageForBook(selected) : "en",
+    selected ? supportsWordTimings(languageForBook(selected), enhanced) : true);
   const preferencesRef = useRef(preferences);
   const preferenceOwner = useRef<string | undefined>(undefined);
   const preferenceEdits = useRef(0);

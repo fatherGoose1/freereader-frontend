@@ -93,14 +93,15 @@ export function preferredVoiceForBook(book: LibraryBook, preferences: ReaderPref
   return preferences.defaultVoices[language] ?? book.suggestedVoice;
 }
 
-/** Speech-language support is broader than word-timing support: even Kokoro currently returns English cues only. */
-export function defaultWordHighlighting(language: SpeechLanguage): boolean {
-  return language === "en";
+/** Word timing support depends on the effective engine, so English alone is not enough. */
+export function defaultWordHighlighting(language: SpeechLanguage, timed = language === "en"): boolean {
+  return timed;
 }
 
-export function wordHighlightingEnabled(preferences: ReaderPreferences, language: SpeechLanguage): boolean {
+export function wordHighlightingEnabled(preferences: ReaderPreferences, language: SpeechLanguage,
+  timed = language === "en"): boolean {
   return preferences.wordHighlightingByLanguage?.[language]
-    ?? (defaultWordHighlighting(language) && preferences.highlightSpokenWords);
+    ?? (defaultWordHighlighting(language, timed) && preferences.highlightSpokenWords);
 }
 
 export function withWordHighlighting(preferences: ReaderPreferences, language: SpeechLanguage, enabled: boolean): ReaderPreferences {

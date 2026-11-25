@@ -45,6 +45,14 @@ export function speechEngineForVoice(voice: NarratorVoice, language: SpeechLangu
   return isSupertonicVoice(voice) ? "supertonic" : speechEngine(language);
 }
 
+// Kokoro returns usable word timings for English plus these languages. Japanese
+// and Chinese need word segmentation the reader does not provide yet.
+export const KOKORO_WORD_TIMING_LANGUAGES: ReadonlySet<string> = new Set(["en", "es", "fr", "hi", "it", "pt"]);
+
+export function supportsWordTimings(language: SpeechLanguage, kokoro: boolean): boolean {
+  return language === "en" || (kokoro && KOKORO_WORD_TIMING_LANGUAGES.has(language));
+}
+
 export function voicesForLanguage(language: SpeechLanguage): readonly (readonly [NarratorVoice, string])[] {
   if (language === "en") return englishVoices();
   const kokoro = kokoroVoicesForLanguage(language);

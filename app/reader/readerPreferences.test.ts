@@ -4,6 +4,7 @@ import { DEFAULT_READER_PREFERENCES, parseReaderPreferences, preferredVoiceForBo
   readReaderPreferences, saveReaderPreferences, defaultWordHighlighting, withWordHighlighting,
   wordHighlightingEnabled } from "./readerPreferences";
 import type { LibraryBook } from "./types";
+import { supportsWordTimings } from "./speech";
 
 afterEach(() => { delete (globalThis as { localStorage?: Storage }).localStorage; });
 
@@ -64,7 +65,7 @@ test("English light voice selection survives account preference reload", () => {
   assert.deepEqual(preferences?.defaultVoices, { en: "lite_hadley" });
 });
 
-test("highlighting defaults on for English and off for non-English without word timing support", () => {
+test("highlighting defaults on for English and off when the effective route has no word timings", () => {
   assert.equal(defaultWordHighlighting("en"), true);
   for (const language of ["fr", "es", "ja", "ko"] as const) {
     assert.equal(defaultWordHighlighting(language), false);
@@ -73,6 +74,17 @@ test("highlighting defaults on for English and off for non-English without word 
   assert.equal(wordHighlightingEnabled(DEFAULT_READER_PREFERENCES, "en"), true);
   const legacy = { ...DEFAULT_READER_PREFERENCES, highlightSpokenWords: false };
   assert.equal(wordHighlightingEnabled(legacy, "en"), false);
+});
+
+test("Kokoro languages with duration cues default on when the effective engine supports timings", () => {
+  for (const language of ["en", "es", "fr", "hi", "it", "pt"] as const) {
+    assert.equal(wordHighlightingEnabled(DEFAULT_READER_PREFERENCES, language,
+      supportsWordTimings(language, true)), true, language);
+  }
+  for (const language of ["ja", "zh", "ko", "de"] as const) {
+    assert.equal(wordHighlightingEnabled(DEFAULT_READER_PREFERENCES, language,
+      supportsWordTimings(language, true)), false, language);
+  }
 });
 
 test("language-specific choices do not change another language's default or explicit preference", () => {

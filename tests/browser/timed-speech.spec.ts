@@ -115,21 +115,48 @@ test("highlighting settings default by language, remember separate choices, and 
   let font = await openFont();
   await expect(font.control).toBeChecked();
   await font.settings.getByRole("button", { name: "Done", exact: true }).click();
-  await selectLanguage("fr"); // Kokoro can speak French, but does not currently return French word cues.
+  await selectLanguage("fr"); // Gold Kokoro French now returns duration-based word cues.
   font = await openFont();
-  await expect(font.control).not.toBeChecked();
-  await font.control.check();
+  await expect(font.control).toBeChecked();
   await font.settings.getByRole("button", { name: "Done", exact: true }).click();
-  await selectLanguage("ko");
-  font = await openFont();
-  await expect(font.control).not.toBeChecked();
-  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
-  await selectLanguage("en");
+  for (const unsupported of ["ja", "ko"]) { // No word segmentation / Supertonic-only.
+    await selectLanguage(unsupported);
+    font = await openFont();
+    await expect(font.control).not.toBeChecked();
+    await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  }
+  await selectLanguage("fr");
   font = await openFont();
   await expect(font.control).toBeChecked();
   await font.control.uncheck();
   await font.settings.getByRole("button", { name: "Done", exact: true }).click();
-  await selectLanguage("fr");
+  await selectLanguage("en");
   font = await openFont();
   await expect(font.control).toBeChecked();
+  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  await selectLanguage("fr");
+  font = await openFont();
+  await expect(font.control).not.toBeChecked();
+});
+
+test("free French narration has no word timings, so highlighting stays off by default", async ({ page }) => {
+  await prepareReader(page, "af_heart", "free");
+  await importPassages(page);
+  const openFont = async () => {
+    await page.getByRole("button", { name: "Font", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Font settings" });
+    return { settings, control: settings.locator("label").filter({ hasText: "Highlight spoken words" }).getByRole("switch") };
+  };
+  const selectLanguage = async (language: string) => {
+    await page.getByRole("button", { name: "Voice", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Audio settings" });
+    await settings.getByRole("combobox", { name: "Language" }).selectOption(language);
+    await settings.getByRole("button", { name: "Done", exact: true }).click();
+  };
+  let font = await openFont();
+  await expect(font.control).toBeChecked(); // English still defaults on.
+  await font.settings.getByRole("button", { name: "Done", exact: true }).click();
+  await selectLanguage("fr");
+  font = await openFont();
+  await expect(font.control).not.toBeChecked(); // Free non-English uses Supertonic.
 });
