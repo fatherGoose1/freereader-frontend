@@ -1,4 +1,3 @@
-import JSZip from "jszip";
 import type { TtsStatus } from "./tts";
 import { normalizeForSpeech, normalizeForSupertonic } from "./speechText";
 import { telemetryContext, type TelemetrySource } from "./telemetry";
@@ -8,7 +7,7 @@ import { clonedVoiceId, isCatalogVoice, isClonedVoice, isKokoroVoiceForLanguage,
 import { findClonedVoice } from "./cloneVoices";
 import { speakPhononCatalog, speakPhononVoice } from "./phonon";
 import type { SpeechResult } from "./mobileSpeech";
-import { parseWordTimings } from "./spokenWord";
+import { decodeSpeechResponse } from "./speechResponse";
 
 type BatchItem = { text: string; isHeading: boolean };
 type SpeechOptions = { language: string; voice: string; steps: number; engine?: "kokoro" | "supertonic" | "paradee_lite"; source?: TelemetrySource; instruct?: string; enhanced?: boolean };
@@ -87,21 +86,7 @@ export class RemoteSpeechClient {
           response = await speakPhononVoice(token, requestedVoice.slice(7), texts, speechSpeed, controller.signal,
             telemetryContext(options?.source));
         }
-        if (items.length === 1) {
-          const blob = await response.blob();
-          if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");
-          status?.("Speech ready", 1);
-          return [speechResult(blob, Number(response.headers.get("X-Audio-Duration")),
-            Number(response.headers.get("X-Generation-Seconds")), generationStartedAt)];
-        }
-        const durations = (response.headers.get("X-Audio-Durations") ?? "").split(",").map(Number);
-        const archive = await JSZip.loadAsync(await response.arrayBuffer());
-        const parts = await Promise.all(items.map(async (_, index) => {
-          const entry = archive.file(`${index}.m4a`);
-          if (!entry) throw new Error("Speech service returned an incomplete batch.");
-          return speechResult(new Blob([await entry.async("blob")], { type: "audio/mp4" }), durations[index],
-            Number(response.headers.get("X-Generation-Seconds")), generationStartedAt);
-        }));
+        const parts = await decodeSpeechResponse(response, items.length, generationStartedAt);
         status?.("Speech ready", 1);
         return parts;
       }
@@ -164,32 +149,9 @@ export class RemoteSpeechClient {
       if (options?.engine === "kokoro" && reportedModel && !reportedModel.toLowerCase().includes("kokoro")) {
         throw new Error("This speech server does not support the selected voice yet. Update the speech service and try again.");
       }
-      const generationSeconds = Number(response.headers.get("X-Generation-Seconds"));
-      const contentType = response.headers.get("Content-Type") ?? "";
-      if (contentType.includes("zip")) {
-        const durations = (response.headers.get("X-Audio-Durations") ?? "").split(",").map(Number);
-        const archive = await JSZip.loadAsync(await response.arrayBuffer());
-        const parts: SpeechResult[] = [];
-        for (let index = 0; index < items.length; index += 1) {
-          const entry = archive.file(`${index}.m4a`);
-          if (!entry) throw new Error("Speech service returned an incomplete batch.");
-          const blob = await entry.async("blob");
-          const result = speechResult(new Blob([blob], { type: "audio/mp4" }), durations[index],
-            generationSeconds, generationStartedAt);
-          const timingFile = archive.file(`${index}.json`);
-          if (timingFile) {
-            try { result.wordTimings = parseWordTimings(JSON.parse(await timingFile.async("text"))); }
-            catch { /* The audio remains usable without word timings. */ }
-          }
-          parts.push(result);
-        }
-        status?.("Speech ready", 1);
-        return parts;
-      }
-      const blob = await response.blob();
-      if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("Speech service returned invalid audio.");
+      const parts = await decodeSpeechResponse(response, items.length, generationStartedAt);
       status?.("Speech ready", 1);
-      return [speechResult(blob, Number(response.headers.get("X-Audio-Duration")), generationSeconds, generationStartedAt)];
+      return parts;
     } catch (error) {
       if (controller.signal.aborted) throw new SpeechCancelledError("Speech was cancelled.");
       throw error;
