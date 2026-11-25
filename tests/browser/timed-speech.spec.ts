@@ -13,7 +13,7 @@ function wav() {
   return audio;
 }
 
-async function prepareGoldReader(page: Page, voice: string) {
+async function prepareReader(page: Page, voice: string, plan = "gold_yearly") {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is required for browser auth simulation");
   const user = { id: "33333333-3333-4333-8333-333333333333", email: "timings@example.com", aud: "authenticated", role: "authenticated",
@@ -22,10 +22,11 @@ async function prepareGoldReader(page: Page, voice: string) {
     expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   await page.route("**/auth/v1/user", (route) => route.fulfill({ json: user }));
   await page.route("**/api/telemetry", (route) => route.fulfill({ status: 202, json: {} }));
-  await page.route("**/api/reader-usage**", (route) => route.fulfill({ json: { plan: "gold_yearly" } }));
+  await page.route("**/api/reader-usage**", (route) => route.fulfill({ json: { plan } }));
   await page.route("**/api/phonon-catalog", (route) => route.fulfill({ json: { voices: [] } }));
   await page.addInitScript(({ storageKey, session, userId, voice }) => {
     localStorage.setItem(storageKey, JSON.stringify(session));
+    localStorage.setItem(`freereader-first-login-gold:${userId}`, "shown");
     localStorage.setItem(`freereader-reader-preferences:v1:${userId}`, JSON.stringify({
       version: 1, updatedAt: new Date().toISOString(), defaultVoices: { en: voice },
       speakingSpeed: 1, highlightSpokenWords: true, defaultView: "ereader",
@@ -43,9 +44,10 @@ async function importPassages(page: Page) {
   if (await expand.isVisible()) await expand.click();
 }
 
-for (const engine of ["supertonic", "phonon"] as const) {
+for (const engine of ["paradee", "kokoro", "supertonic", "phonon"] as const) {
   test(`${engine} automatically highlights unsolicited single and batched timing sidecars`, async ({ page }) => {
-    await prepareGoldReader(page, engine === "phonon" ? "catalog:NbpkqMVS3CJeq2j8" : "M3");
+    const voice = engine === "phonon" ? "catalog:NbpkqMVS3CJeq2j8" : engine === "supertonic" ? "M3" : "af_heart";
+    await prepareReader(page, voice, engine === "paradee" ? "free" : "gold_yearly");
     const requests: Array<{ texts: string[]; word_timings?: boolean }> = [];
     await page.route(engine === "phonon" ? "**/api/phonon-catalog-tts" : "**/api/tts", async (route) => {
       const body = route.request().postDataJSON() as { texts: string[]; word_timings?: boolean };
@@ -63,7 +65,7 @@ for (const engine of ["supertonic", "phonon"] as const) {
     await page.getByRole("button", { name: "Listen", exact: true }).click();
     await expect.poll(() => page.locator("audio").evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true);
     expect(requests[0].texts).toHaveLength(1);
-    expect(requests[0].word_timings).toBeUndefined();
+    if (engine !== "kokoro") expect(requests[0].word_timings).toBeUndefined();
     await page.locator("audio").evaluate((audio: HTMLAudioElement) => { audio.currentTime = 2; });
     await expect.poll(() => page.evaluate(() => Array.from(CSS.highlights.get("freereader-spoken-word") ?? [],
       (range) => range.toString())[0] ?? "")).toBe("little");
@@ -77,7 +79,7 @@ for (const engine of ["supertonic", "phonon"] as const) {
 }
 
 test("Phonon audio-only fallback remains playable without word highlights", async ({ page }) => {
-  await prepareGoldReader(page, "catalog:NbpkqMVS3CJeq2j8");
+  await prepareReader(page, "catalog:NbpkqMVS3CJeq2j8");
   await page.route("**/api/phonon-catalog-tts", async (route) => {
     const { texts } = route.request().postDataJSON() as { texts: string[] };
     if (texts.length === 1) return route.fulfill({ contentType: "audio/wav", body: wav(), headers: { "X-Audio-Duration": "20" } });

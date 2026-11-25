@@ -32,11 +32,13 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage, free = false): Promise<NarrationRoute> {
+    // Refresh untimed English audio once now that every plan receives word cues.
+    const timedModel = (model: string) => language === "en" ? `${model}-words2` : model;
     if (isCatalogVoice(voice) && language === "en") {
-      return { model: "phonon-31m-catalog-v1", voice, provider: "Server", mobile: this.mobile };
+      return { model: timedModel("phonon-31m-catalog-v1"), voice, provider: "Server", mobile: this.mobile };
     }
     if (isPhononVoice(voice) && language === "en") {
-      return { model: "phonon-31m-en", voice, provider: "Server", mobile: this.mobile };
+      return { model: timedModel("phonon-31m-en"), voice, provider: "Server", mobile: this.mobile };
     }
     // Preserve distinct cache keys for each clone model generation.
     if (isClonedVoice(voice)) {
@@ -50,7 +52,7 @@ export class NarrationRouter {
     }
     const selected = voiceForLanguage(voice, language);
     if (free && language === "en" && isLightVoice(selected)) {
-      return { model: "paradee-v2f-lite-en-server-v1", voice: selected, provider: "Server", mobile: this.mobile };
+      return { model: timedModel("paradee-v2f-lite-en-server-v1"), voice: selected, provider: "Server", mobile: this.mobile };
     }
     // A saved light voice must not be sent as a Kokoro ID after upgrading.
     const standard = isLightVoice(selected) && selected !== "af_heart" ? "af_heart" : selected;
@@ -60,7 +62,7 @@ export class NarrationRouter {
     const model = speechEngineForVoice(standard, language) === "kokoro"
       ? "kokoro-82m-fp32-server-v1"
       : "supertonic-3-fp32-server-v1";
-    return { model, voice: standard, provider: "Server", mobile: this.mobile };
+    return { model: timedModel(model), voice: standard, provider: "Server", mobile: this.mobile };
   }
 
   synthesize(text: string, voice: NarratorVoice, steps: number, status: TtsStatus | undefined,

@@ -40,7 +40,7 @@ for (const mobile of [false, true]) {
   test(`${mobile ? "mobile" : "desktop"}: English uses the backend speech service`, async () => {
     const { calls, speakEnglish } = setup(mobile);
     const result = await speakEnglish();
-    assert.equal(result.route.model, "kokoro-82m-fp32-server-v1");
+    assert.equal(result.route.model, "kokoro-82m-fp32-server-v1-words2");
     assert.equal(result.route.provider, "Server");
     assert.deepEqual(calls, ["remote:Hello:en:af_heart:4"]);
   });
@@ -65,15 +65,15 @@ test("all ten light voices keep their own cache keys and engine; paid/non-Englis
   const { router, calls, engines } = setup(false);
   for (const [voice] of LIGHT_VOICES) {
     const route = await router.route(voice, "en", true);
-    assert.equal(route.model, "paradee-v2f-lite-en-server-v1");
+    assert.equal(route.model, "paradee-v2f-lite-en-server-v1-words2");
     assert.equal(route.voice, voice);
   }
-  assert.equal((await router.route("af_bella", "en", true)).model, "kokoro-82m-fp32-server-v1");
+  assert.equal((await router.route("af_bella", "en", true)).model, "kokoro-82m-fp32-server-v1-words2");
   assert.equal((await router.route("af_heart", "fr", true)).model, "kokoro-82m-fp32-server-v1");
-  assert.equal((await router.route("af_heart", "en", false)).model, "kokoro-82m-fp32-server-v1");
+  assert.equal((await router.route("af_heart", "en", false)).model, "kokoro-82m-fp32-server-v1-words2");
   assert.equal((await router.route("lite_wren", "en", false)).voice, "af_heart");
   const result = await router.synthesize("Hello", "lite_wren", 4, undefined, false, 1, "en", undefined, "audiobook", undefined, false, true);
-  assert.equal(result.route.model, "paradee-v2f-lite-en-server-v1");
+  assert.equal(result.route.model, "paradee-v2f-lite-en-server-v1-words2");
   assert.deepEqual(calls, ["remote:Hello:en:lite_wren:4"]);
   assert.deepEqual(engines, ["paradee_lite"]);
 });
@@ -82,7 +82,7 @@ test("English Supertonic selections use their chosen voice and server model", as
   const { router, calls } = setup(false);
   for (const voice of ["F1", "M2"] as const) {
     const result = await router.synthesize("Hello", voice, 12, undefined, false, 1, "en");
-    assert.equal(result.route.model, "supertonic-3-fp32-server-v1");
+    assert.equal(result.route.model, "supertonic-3-fp32-server-v1-words2");
     assert.equal(result.route.voice, voice);
   }
   assert.deepEqual(calls, ["remote:Hello:en:F1:12", "remote:Hello:en:M2:12"]);
@@ -113,7 +113,7 @@ test("a shared Phonon voice uses the English backend route, not the legacy clone
   const { router, calls } = setup(false);
   const voice = "phonon:4d16a52c-40d6-462e-a015-5665798732af";
   const result = await router.synthesize("Hello", voice, 12, undefined, false, 1, "en");
-  assert.equal(result.route.model, "phonon-31m-en");
+  assert.equal(result.route.model, "phonon-31m-en-words2");
   assert.deepEqual(calls, [`remote:Hello:en:${voice}:12`]);
   assert.equal((await router.route(voice, "fr")).model, "kokoro-82m-fp32-server-v1");
 });
@@ -122,7 +122,7 @@ test("a Gold Phonon catalogue voice has its own model and keeps its voice ID", a
   const { router, calls } = setup(false);
   const voice = "catalog:NbpkqMVS3CJeq2j8";
   const result = await router.synthesize("Hello", voice, 12, undefined, false, 1, "en");
-  assert.equal(result.route.model, "phonon-31m-catalog-v1");
+  assert.equal(result.route.model, "phonon-31m-catalog-v1-words2");
   assert.deepEqual(calls, [`remote:Hello:en:${voice}:12`]);
   assert.equal((await router.route(voice, "fr")).voice, "ff_siwis");
 });
