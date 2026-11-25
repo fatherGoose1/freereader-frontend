@@ -1,6 +1,6 @@
 import { MobileSpeechClient, usesMobileSpeech, type SpeechResult } from "./mobileSpeech";
 import { RemoteSpeechClient } from "./remoteSpeech";
-import { speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
+import { KOKORO_WORD_TIMING_LANGUAGES, speechEngineForVoice, voiceForLanguage, type SpeechLanguage } from "./speech";
 import type { TtsStatus } from "./tts";
 import type { NarratorVoice } from "./voices";
 import { clonedVoiceId, isCatalogVoice, isClonedVoice, isKokoroVoice, isLightVoice, isPhononVoice, isQwenVoice, isSupertonicVoice } from "./voices";
@@ -32,8 +32,8 @@ export class NarrationRouter {
   }
 
   async route(voice: NarratorVoice, language: SpeechLanguage, free = false): Promise<NarrationRoute> {
-    // Refresh untimed English audio once now that every plan receives word cues.
-    const timedModel = (model: string) => language === "en" ? `${model}-words2` : model;
+    // Refresh untimed audio once now that these languages receive word cues.
+    const timedModel = (model: string) => KOKORO_WORD_TIMING_LANGUAGES.has(language) ? `${model}-words2` : model;
     if (isCatalogVoice(voice) && language === "en") {
       return { model: timedModel("phonon-31m-catalog-v1"), voice, provider: "Server", mobile: this.mobile };
     }
