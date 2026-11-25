@@ -33,7 +33,7 @@ export class NarrationRouter {
 
   async route(voice: NarratorVoice, language: SpeechLanguage, free = false): Promise<NarrationRoute> {
     // Refresh untimed audio once now that these languages receive word cues.
-    const timedModel = (model: string) => KOKORO_WORD_TIMING_LANGUAGES.has(language) ? `${model}-words2` : model;
+    const timedModel = (model: string) => KOKORO_WORD_TIMING_LANGUAGES.has(language) ? `${model}-words3` : model;
     if (isCatalogVoice(voice) && language === "en") {
       return { model: timedModel("phonon-31m-catalog-v1"), voice, provider: "Server", mobile: this.mobile };
     }
